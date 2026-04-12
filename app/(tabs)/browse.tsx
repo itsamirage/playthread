@@ -144,52 +144,6 @@ export default function BrowseScreen() {
         <Text style={styles.resultsCount}>{filteredGames.length} games</Text>
       </View>
 
-      {cleanQuery.length >= 2 ? (
-        <>
-          <SectionCard title="Creators" eyebrow="People">
-            {creatorsLoading ? (
-              <ActivityIndicator color={theme.colors.accent} />
-            ) : creators.length > 0 ? (
-              <View style={styles.creatorList}>
-                {creators.map((creator) => (
-                  <Pressable
-                    key={creator.id}
-                    onPress={() => router.push(`/user/${creator.id}`)}
-                    style={styles.creatorCard}
-                  >
-                    <Text style={styles.creatorName}>{creator.displayName}</Text>
-                    <Text style={styles.creatorMeta}>@{creator.username}</Text>
-                    {creator.bio ? <Text style={styles.creatorBio}>{creator.bio}</Text> : null}
-                  </Pressable>
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.emptyText}>No creators match that search yet.</Text>
-            )}
-          </SectionCard>
-
-          <SectionCard title="Posts" eyebrow="Threads">
-            {postsLoading ? (
-              <ActivityIndicator color={theme.colors.accent} />
-            ) : postResults.length > 0 ? (
-              <View style={styles.resultsList}>
-                {postResults.map((post) => (
-                  <PostCard
-                    key={post.id}
-                    onAuthorPress={() => router.push(`/user/${post.userId}`)}
-                    onOpenComments={() => router.push(`/post/${post.id}`)}
-                    onPress={() => router.push(`/post/${post.id}`)}
-                    post={post}
-                  />
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.emptyText}>No posts match that search yet.</Text>
-            )}
-          </SectionCard>
-        </>
-      ) : null}
-
       <View style={styles.resultsList}>
         {isLoading ? (
           <View style={styles.loadingState}>
@@ -216,6 +170,52 @@ export default function BrowseScreen() {
           </SectionCard>
         )}
       </View>
+
+      {cleanQuery.length >= 2 ? (
+        <>
+          <SectionCard title="Posts" eyebrow="Threads">
+            {postsLoading ? (
+              <ActivityIndicator color={theme.colors.accent} />
+            ) : postResults.length > 0 ? (
+              <View style={styles.resultsList}>
+                {postResults.map((post) => (
+                  <PostCard
+                    key={post.id}
+                    onAuthorPress={() => router.push(`/user/${post.userId}`)}
+                    onOpenComments={() => router.push(`/post/${post.id}`)}
+                    onPress={() => router.push(`/post/${post.id}`)}
+                    post={post}
+                  />
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.emptyText}>No posts match that search yet.</Text>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Creators" eyebrow="People">
+            {creatorsLoading ? (
+              <ActivityIndicator color={theme.colors.accent} />
+            ) : creators.length > 0 ? (
+              <View style={styles.creatorList}>
+                {creators.map((creator) => (
+                  <Pressable
+                    key={creator.id}
+                    onPress={() => router.push(`/user/${creator.id}`)}
+                    style={styles.creatorCard}
+                  >
+                    <Text style={styles.creatorName}>{creator.displayName}</Text>
+                    <Text style={styles.creatorMeta}>@{creator.username}</Text>
+                    {creator.bio ? <Text style={styles.creatorBio}>{creator.bio}</Text> : null}
+                  </Pressable>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.emptyText}>No creators match that search yet.</Text>
+            )}
+          </SectionCard>
+        </>
+      ) : null}
     </ScrollView>
   );
 }
