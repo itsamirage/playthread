@@ -359,6 +359,30 @@ export async function insertNotification(
     metadata?: Record<string, unknown>;
   },
 ) {
+  const { data: preferencesRow, error: preferencesError } = await adminClient
+    .from("notification_preferences")
+    .select(
+      "push_enabled, post_comment_enabled, coin_gift_received_enabled, moderation_warning_enabled, followed_game_post_enabled, new_follower_enabled",
+    )
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (preferencesError) {
+    console.warn("Could not load notification preferences", preferencesError);
+  }
+
+  const kindPreferenceMap: Record<string, boolean> = {
+    post_comment: preferencesRow?.post_comment_enabled ?? true,
+    coin_gift_received: preferencesRow?.coin_gift_received_enabled ?? true,
+    moderation_warning: preferencesRow?.moderation_warning_enabled ?? true,
+    followed_game_post: preferencesRow?.followed_game_post_enabled ?? true,
+    new_follower: preferencesRow?.new_follower_enabled ?? true,
+  };
+
+  if (kindPreferenceMap[kind] === false) {
+    return;
+  }
+
   const { data, error } = await adminClient
     .from("notifications")
     .insert({
@@ -395,6 +419,10 @@ export async function insertNotification(
     .filter(Boolean);
 
   if (expoPushTokens.length === 0) {
+    return;
+  }
+
+  if (preferencesRow?.push_enabled === false) {
     return;
   }
 

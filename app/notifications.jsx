@@ -7,6 +7,8 @@ import {
   groupNotifications,
   markAllNotificationsRead,
   markNotificationRead,
+  saveNotificationPreferences,
+  useNotificationPreferences,
   useNotifications,
 } from "../lib/notifications";
 import { theme } from "../lib/theme";
@@ -15,6 +17,11 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const { session } = useAuth();
   const { notifications, unreadCount, isLoading, reload } = useNotifications();
+  const {
+    preferences,
+    isLoading: preferencesLoading,
+    reload: reloadPreferences,
+  } = useNotificationPreferences();
   const notificationGroups = groupNotifications(notifications);
 
   const handleNotificationPress = async (notification) => {
@@ -45,6 +52,20 @@ export default function NotificationsScreen() {
 
     await markAllNotificationsRead(session.user.id);
     await reload();
+  };
+
+  const handleTogglePreference = async (key) => {
+    if (!session?.user?.id) {
+      return;
+    }
+
+    const nextPreferences = {
+      ...preferences,
+      [key]: !preferences[key],
+    };
+
+    await saveNotificationPreferences(session.user.id, nextPreferences);
+    await reloadPreferences();
   };
 
   return (
@@ -104,6 +125,39 @@ export default function NotificationsScreen() {
           </View>
         ) : (
           <Text style={styles.emptyText}>Nothing new yet.</Text>
+        )}
+      </SectionCard>
+
+      <SectionCard title="Preferences" eyebrow="Signal control">
+        <Text style={styles.preferenceIntro}>
+          Tune which events reach your inbox. Push uses the same event list plus the master push switch.
+        </Text>
+        {preferencesLoading ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator color={theme.colors.accent} />
+          </View>
+        ) : (
+          <View style={styles.preferenceList}>
+            {[
+              ["pushEnabled", "Allow push notifications"],
+              ["postCommentEnabled", "Replies to your posts/comments"],
+              ["coinGiftReceivedEnabled", "Coin gifts received"],
+              ["moderationWarningEnabled", "Moderation warnings"],
+              ["followedGamePostEnabled", "New posts in followed games"],
+              ["newFollowerEnabled", "New followers"],
+            ].map(([key, label]) => (
+              <Pressable
+                key={key}
+                onPress={() => handleTogglePreference(key)}
+                style={[styles.preferenceRow, preferences[key] ? styles.preferenceRowActive : null]}
+              >
+                <Text style={styles.preferenceLabel}>{label}</Text>
+                <Text style={[styles.preferenceValue, preferences[key] ? styles.preferenceValueActive : null]}>
+                  {preferences[key] ? "On" : "Off"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         )}
       </SectionCard>
     </ScrollView>
@@ -218,5 +272,43 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: theme.fontSizes.md,
     lineHeight: 22,
+  },
+  preferenceIntro: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: 20,
+    marginBottom: theme.spacing.sm,
+  },
+  preferenceList: {
+    gap: theme.spacing.sm,
+  },
+  preferenceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    padding: theme.spacing.md,
+  },
+  preferenceRowActive: {
+    borderColor: theme.colors.accent,
+  },
+  preferenceLabel: {
+    color: theme.colors.textPrimary,
+    flex: 1,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.medium,
+  },
+  preferenceValue: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+    textTransform: "uppercase",
+  },
+  preferenceValueActive: {
+    color: theme.colors.accent,
   },
 });

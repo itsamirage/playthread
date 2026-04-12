@@ -252,3 +252,17 @@ Start by reviewing the new trusted-profile flow and live admin moderation paths,
 - Trigger guard fix applied live:
   - protected profile-field triggers now recognize trusted service-role writes via current request role/current user fallback
 - Home tab no longer falls back to fake preview feed cards when there are no real followed posts
+- New April 12 notification/realtime/media pass:
+  - top-right inbox bell now exists on Home, Browse, All, Profile, and game detail surfaces
+  - `/notifications` now opens modally
+  - unread badge sync now refreshes all mounted bell/profile badge instances immediately after read actions
+  - notification preferences are now stored in `public.notification_preferences`
+  - inbox users can toggle replies, coin gifts, moderation warnings, followed-game posts, new followers, and master push delivery
+  - shared trusted notification delivery now respects those preferences live
+  - realtime reloads now cover feed/game/popular post lists, comment threads, and user follow/activity surfaces
+  - admin flag queue now supports `all / text / image / clip` media filtering
+  - trusted post moderation evidence now records `media_kind` and image attachment URLs for media review context
+- Latest live rollout after that pass:
+  - migration pushed: `202604121000_add_notification_preferences.sql`
+  - redeployed: `trusted-post`, `trusted-comment`, `trusted-coin`, `trusted-profile`, `trusted-follow`
+  - smoke test passed again after rollout

@@ -74,6 +74,7 @@ export default function AdminScreen() {
   const [integrityDraft, setIntegrityDraft] = useState(null);
   const [flagStatusFilter, setFlagStatusFilter] = useState("all");
   const [flagOriginFilter, setFlagOriginFilter] = useState("all");
+  const [flagMediaFilter, setFlagMediaFilter] = useState("all");
   const [flagSearch, setFlagSearch] = useState("");
   const [flagPage, setFlagPage] = useState(1);
   const [integrityTypeFilter, setIntegrityTypeFilter] = useState("all");
@@ -98,8 +99,11 @@ export default function AdminScreen() {
     [flags]
   );
   const filteredFlags = useMemo(
-    () => filterFlags(flags, { status: flagStatusFilter, origin: flagOriginFilter, search: flagSearch }),
-    [flagOriginFilter, flagSearch, flagStatusFilter, flags]
+    () =>
+      filterFlags(flags, { status: flagStatusFilter, origin: flagOriginFilter, search: flagSearch }).filter(
+        (flag) => flagMediaFilter === "all" || flag.mediaKind === flagMediaFilter,
+      ),
+    [flagMediaFilter, flagOriginFilter, flagSearch, flagStatusFilter, flags]
   );
   const pagedFlags = useMemo(() => paginateItems(filteredFlags, flagPage, 8), [filteredFlags, flagPage]);
   const filteredIntegrityEvents = useMemo(
@@ -135,7 +139,7 @@ export default function AdminScreen() {
 
   useEffect(() => {
     setFlagPage(1);
-  }, [flagStatusFilter, flagOriginFilter, flagSearch]);
+  }, [flagStatusFilter, flagOriginFilter, flagMediaFilter, flagSearch]);
 
   useEffect(() => {
     setIntegrityPage(1);
@@ -552,6 +556,20 @@ export default function AdminScreen() {
             </Pressable>
           ))}
         </View>
+        <View style={styles.inlineRow}>
+          {["all", "text", "image", "clip"].map((mediaKind) => (
+            <Pressable
+              key={mediaKind}
+              onPress={() => setFlagMediaFilter(mediaKind)}
+              style={[
+                styles.secondaryButton,
+                flagMediaFilter === mediaKind ? styles.filterChipActive : null,
+              ]}
+            >
+              <Text style={styles.secondaryButtonText}>{mediaKind}</Text>
+            </Pressable>
+          ))}
+        </View>
         {flagsLoading ? (
           <View style={styles.loadingState}>
             <ActivityIndicator color={theme.colors.accent} />
@@ -568,6 +586,7 @@ export default function AdminScreen() {
                   {flag.gameTitle ? `${flag.gameTitle} • ` : ""}{flag.status} • {new Date(flag.createdAt).toLocaleString()}
                 </Text>
                 <Text style={styles.bodyText}>{flag.reason}</Text>
+                <Text style={styles.helperText}>Media {flag.mediaKind}</Text>
                 {flag.excerpt ? <Text style={styles.excerptText}>{flag.excerpt}</Text> : null}
                 <View style={styles.inlineRow}>
                   <Pressable onPress={() => setSelectedFlag(flag)} style={styles.secondaryButton}>
@@ -943,6 +962,7 @@ export default function AdminScreen() {
                 {selectedFlag.origin} • {selectedFlag.status} • {new Date(selectedFlag.createdAt).toLocaleString()}
               </Text>
               <Text style={styles.bodyText}>{selectedFlag.reason}</Text>
+              <Text style={styles.helperText}>Media kind {selectedFlag.mediaKind}</Text>
               {selectedFlag.evidence?.post_type === "clip" ? (
                 <Text style={styles.helperText}>
                   Clip post â€¢ status {selectedFlag.evidence?.video_status ?? "unknown"} â€¢ upload {selectedFlag.evidence?.video_upload_id ?? "n/a"}

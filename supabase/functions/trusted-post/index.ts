@@ -304,6 +304,13 @@ Deno.serve(async (request) => {
         evidence: {
           request_ip_hash: ipHash,
           post_type: postType,
+          media_kind:
+            postType === "clip"
+              ? "clip"
+              : String(body.imageUrl ?? "").trim()
+                ? "image"
+                : "text",
+          image_url: String(body.imageUrl ?? "").trim() || null,
           video_upload_id: videoUploadId,
           video_status: postType === "clip" ? "uploading" : "none",
         },
@@ -365,6 +372,12 @@ Deno.serve(async (request) => {
         metadata_json: {
           game_id: gameId,
           post_type: postType,
+          media_kind:
+            postType === "clip"
+              ? "clip"
+              : String(body.imageUrl ?? "").trim()
+                ? "image"
+                : "text",
           video_upload_id: videoUploadId,
         },
       });
