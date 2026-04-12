@@ -6,7 +6,10 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build:web": "npx expo export --platform web --output-dir .cloudflare-pages && node scripts/prepare-cloudflare-pages.mjs",
+    "test": "node --test lib/__tests__/*.test.mjs",
+    "smoke:deployed": "node scripts/smoke-deployed-functions.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

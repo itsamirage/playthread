@@ -13,8 +13,12 @@ import {
 } from "react-native";
 
 import PostCard from "../../components/PostCard";
+import PostCommentsSheet from "../../components/PostCommentsSheet";
 import PlatformBadge from "../../components/PlatformBadge";
 import SectionCard from "../../components/SectionCard";
+import CoinGiftSheet from "../../components/CoinGiftSheet";
+import { sendCoinGift } from "../../lib/admin";
+import { useAuth } from "../../lib/auth";
 import {
   FOLLOW_STATUS_OPTIONS,
   getFollowStatusLabel,
@@ -22,20 +26,26 @@ import {
   useFollows,
 } from "../../lib/follows";
 import { useGameDetail } from "../../lib/games";
-import { useGamePosts } from "../../lib/posts";
+import { togglePostReaction, useGamePosts } from "../../lib/posts";
 import { getMetacriticColor, theme } from "../../lib/theme";
 
 export default function GameDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { session } = useAuth();
   const { game, isLoading, error, source } = useGameDetail(params.id);
   const { isFollowingGame, getFollowStatus, setFollowStatus, unfollowGame } = useFollows();
-  const { posts, isLoading: postsLoading, error: postsError } = useGamePosts(params.id);
+  const { posts, isLoading: postsLoading, error: postsError, reload: reloadPosts } = useGamePosts(params.id);
   const [isOverviewOpen, setIsOverviewOpen] = useState(false);
   const [showSpoilers, setShowSpoilers] = useState(false);
+  const [reactingPostId, setReactingPostId] = useState(null);
+  const [selectedPostId, setSelectedPostId] = useState(null);
+  const [giftPost, setGiftPost] = useState(null);
+  const [isSendingGift, setIsSendingGift] = useState(false);
 
   const followStatus = getFollowStatus(params.id);
   const isFollowed = isFollowingGame(params.id);
+  const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
 
   useEffect(() => {
     setShowSpoilers(shouldRevealSpoilersForStatus(followStatus));
@@ -81,6 +91,50 @@ export default function GameDetailScreen() {
 
     if (error) {
       Alert.alert("Follow update failed", error.message);
+    }
+  };
+
+  const handleReact = async (postId, reactionType) => {
+    if (!session?.user?.id) {
+      Alert.alert("Sign in required", "You need to sign in before reacting to posts.");
+      return;
+    }
+
+    try {
+      setReactingPostId(postId);
+      await togglePostReaction({
+        userId: session.user.id,
+        postId,
+        reactionType,
+      });
+      await reloadPosts();
+    } catch (nextError) {
+      Alert.alert("Reaction failed", nextError?.message ?? "Could not update that reaction.");
+    } finally {
+      setReactingPostId(null);
+    }
+  };
+
+  const handleSendGift = async ({ amount, note, isAnonymous }) => {
+    if (!session?.user?.id || !giftPost?.userId) {
+      return;
+    }
+
+    try {
+      setIsSendingGift(true);
+      await sendCoinGift({
+        fromUserId: session.user.id,
+        toUserId: giftPost.userId,
+        amount,
+        note,
+        isAnonymous,
+      });
+      setGiftPost(null);
+      Alert.alert("Gift sent", `Sent ${amount} coins to @${giftPost.author}.`);
+    } catch (nextError) {
+      Alert.alert("Gift failed", nextError?.message ?? "Could not send that gift.");
+    } finally {
+      setIsSendingGift(false);
     }
   };
 
@@ -244,6 +298,10 @@ export default function GameDetailScreen() {
               <PostCard
                 key={post.id}
                 concealSpoilers={Boolean(post.spoiler) && !showSpoilers}
+                isReacting={reactingPostId === post.id}
+                onGift={session?.user?.id && session.user.id !== post.userId ? () => setGiftPost(post) : null}
+                onOpenComments={() => setSelectedPostId(post.id)}
+                onReact={(reactionType) => handleReact(post.id, reactionType)}
                 post={post}
               />
             ))}
@@ -298,6 +356,20 @@ export default function GameDetailScreen() {
           </View>
         </View>
       </Modal>
+
+      <PostCommentsSheet
+        onClose={() => setSelectedPostId(null)}
+        onCommentCountChange={reloadPosts}
+        post={selectedPost}
+        visible={Boolean(selectedPost)}
+      />
+      <CoinGiftSheet
+        visible={Boolean(giftPost)}
+        targetLabel={`@${giftPost?.author ?? "player"}`}
+        onClose={() => setGiftPost(null)}
+        onSubmit={handleSendGift}
+        isSubmitting={isSendingGift}
+      />
     </ScrollView>
   );
 }

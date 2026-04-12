@@ -1,0 +1,5 @@
+[functions.igdb-proxy]
+verify_jwt = false
+
+[functions.steam-account]
+verify_jwt = false

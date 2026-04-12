@@ -1,22 +1,79 @@
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useCallback, useMemo } from "react";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 
 import PostCard from "../../components/PostCard";
+import PostCommentsSheet from "../../components/PostCommentsSheet";
 import SectionCard from "../../components/SectionCard";
+import CoinGiftSheet from "../../components/CoinGiftSheet";
+import { sendCoinGift } from "../../lib/admin";
+import { useAuth } from "../../lib/auth";
 import { useFollows } from "../../lib/follows";
+import { describeIntegrityError } from "../../lib/integrity";
 import { buildMockFeed } from "../../lib/mockFeed";
-import { useFeedPosts } from "../../lib/posts";
+import { togglePostReaction, useFeedPosts } from "../../lib/posts";
 import { theme } from "../../lib/theme";
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { session } = useAuth();
   const { followedCount, followedGameIds, followedGames, shouldShowSpoilersByDefault } =
     useFollows();
   const { posts, isLoading, error, reload } = useFeedPosts(followedGameIds);
+  const [reactingPostId, setReactingPostId] = useState(null);
+  const [selectedPostId, setSelectedPostId] = useState(null);
+  const [giftPost, setGiftPost] = useState(null);
+  const [isSendingGift, setIsSendingGift] = useState(false);
   const fallbackPosts = useMemo(() => buildMockFeed(followedGames), [followedGames]);
   const feedPosts = posts.length > 0 ? posts : fallbackPosts;
   const newPostCount = Math.min(feedPosts.length, 4);
+  const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
+
+  const handleReact = async (postId, reactionType) => {
+    if (!session?.user?.id) {
+      Alert.alert("Sign in required", "You need to sign in before reacting to posts.");
+      return;
+    }
+
+    try {
+      setReactingPostId(postId);
+      await togglePostReaction({
+        userId: session.user.id,
+        postId,
+        reactionType,
+      });
+      await reload();
+    } catch (nextError) {
+      const errorCopy = describeIntegrityError(nextError);
+      Alert.alert(errorCopy.title, errorCopy.detail);
+    } finally {
+      setReactingPostId(null);
+    }
+  };
+
+  const handleSendGift = async ({ amount, note, isAnonymous }) => {
+    if (!session?.user?.id || !giftPost?.userId) {
+      return;
+    }
+
+    try {
+      setIsSendingGift(true);
+      await sendCoinGift({
+        fromUserId: session.user.id,
+        toUserId: giftPost.userId,
+        amount,
+        note,
+        isAnonymous,
+      });
+      setGiftPost(null);
+      Alert.alert("Gift sent", `Sent ${amount} coins to @${giftPost.author}.`);
+    } catch (nextError) {
+      const errorCopy = describeIntegrityError(nextError);
+      Alert.alert(errorCopy.title, errorCopy.detail);
+    } finally {
+      setIsSendingGift(false);
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -82,6 +139,10 @@ export default function HomeScreen() {
             <PostCard
               key={post.id}
               concealSpoilers={Boolean(post.spoiler) && !shouldShowSpoilersByDefault(post.gameId)}
+              isReacting={reactingPostId === post.id}
+              onGift={session?.user?.id && session.user.id !== post.userId ? () => setGiftPost(post) : null}
+              onOpenComments={posts.length > 0 ? () => setSelectedPostId(post.id) : null}
+              onReact={posts.length > 0 ? (reactionType) => handleReact(post.id, reactionType) : null}
               post={post}
               onPress={() => router.push(`/game/${post.gameId}`)}
             />
@@ -109,6 +170,20 @@ export default function HomeScreen() {
           </Pressable>
         </SectionCard>
       )}
+
+      <PostCommentsSheet
+        onClose={() => setSelectedPostId(null)}
+        onCommentCountChange={reload}
+        post={selectedPost}
+        visible={Boolean(selectedPost)}
+      />
+      <CoinGiftSheet
+        visible={Boolean(giftPost)}
+        targetLabel={`@${giftPost?.author ?? "player"}`}
+        onClose={() => setGiftPost(null)}
+        onSubmit={handleSendGift}
+        isSubmitting={isSendingGift}
+      />
     </ScrollView>
   );
 }

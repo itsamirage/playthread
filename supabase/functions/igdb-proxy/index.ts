@@ -255,7 +255,6 @@ function searchQuery(searchTerm: string, limit: number) {
     gameFields(),
     `search "${safeSearchTerm}";`,
     "where version_parent = null;",
-    "sort first_release_date desc;",
     `limit ${limit};`,
   ].join(" ");
 }
