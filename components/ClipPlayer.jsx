@@ -6,7 +6,13 @@ import { theme } from "../lib/theme";
 
 export default function ClipPlayer({ playbackId, thumbnailUrl, status }) {
   const source = useMemo(
-    () => (playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : null),
+    () =>
+      playbackId
+        ? {
+            uri: `https://stream.mux.com/${playbackId}.m3u8`,
+            contentType: "hls",
+          }
+        : null,
     [playbackId],
   );
   const player = useVideoPlayer(source, (nextPlayer) => {
@@ -36,7 +42,6 @@ export default function ClipPlayer({ playbackId, thumbnailUrl, status }) {
         contentFit="cover"
         nativeControls
         player={player}
-        posterSource={thumbnailUrl ? { uri: thumbnailUrl } : undefined}
         style={styles.player}
       />
     </Pressable>
