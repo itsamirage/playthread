@@ -26,7 +26,10 @@ Set these in Cloudflare Pages:
 - `EXPO_PUBLIC_SUPABASE_URL`
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
 
-Use the same values currently used in local `.env`.
+Important:
+
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY` must use the project's JWT-based `anon` key, not the newer `sb_publishable_...` key.
+- The authenticated trusted Edge functions (`trusted-profile`, `trusted-admin`, `trusted-coin`) were verified live against the JWT-based `anon` key path.
 
 ## Custom domain
 

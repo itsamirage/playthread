@@ -1,5 +1,5 @@
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 
 import PostCard from "../../components/PostCard";
@@ -10,7 +10,6 @@ import { sendCoinGift } from "../../lib/admin";
 import { useAuth } from "../../lib/auth";
 import { useFollows } from "../../lib/follows";
 import { describeIntegrityError } from "../../lib/integrity";
-import { buildMockFeed } from "../../lib/mockFeed";
 import { togglePostReaction, useFeedPosts } from "../../lib/posts";
 import { theme } from "../../lib/theme";
 
@@ -24,9 +23,8 @@ export default function HomeScreen() {
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [giftPost, setGiftPost] = useState(null);
   const [isSendingGift, setIsSendingGift] = useState(false);
-  const fallbackPosts = useMemo(() => buildMockFeed(followedGames), [followedGames]);
-  const feedPosts = posts.length > 0 ? posts : fallbackPosts;
-  const newPostCount = Math.min(feedPosts.length, 4);
+  const feedPosts = posts;
+  const newPostCount = Math.min(posts.length, 4);
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
 
   const handleReact = async (postId, reactionType) => {
@@ -108,7 +106,7 @@ export default function HomeScreen() {
             <Text style={styles.statLabel}>Games</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{feedPosts.length}</Text>
+            <Text style={styles.statValue}>{posts.length}</Text>
             <Text style={styles.statLabel}>Posts</Text>
           </View>
           <View style={styles.statBox}>
@@ -127,22 +125,14 @@ export default function HomeScreen() {
         </SectionCard>
       ) : feedPosts.length > 0 ? (
         <View style={styles.feedList}>
-          {posts.length === 0 && followedCount > 0 ? (
-            <SectionCard title="Seed content" eyebrow="Preview feed">
-              <Text style={styles.bodyText}>
-                No real posts exist for your followed games yet, so this feed is showing preview cards.
-                Create the first real thread to replace them.
-              </Text>
-            </SectionCard>
-          ) : null}
           {feedPosts.map((post) => (
             <PostCard
               key={post.id}
               concealSpoilers={Boolean(post.spoiler) && !shouldShowSpoilersByDefault(post.gameId)}
               isReacting={reactingPostId === post.id}
               onGift={session?.user?.id && session.user.id !== post.userId ? () => setGiftPost(post) : null}
-              onOpenComments={posts.length > 0 ? () => setSelectedPostId(post.id) : null}
-              onReact={posts.length > 0 ? (reactionType) => handleReact(post.id, reactionType) : null}
+              onOpenComments={() => setSelectedPostId(post.id)}
+              onReact={(reactionType) => handleReact(post.id, reactionType)}
               post={post}
               onPress={() => router.push(`/game/${post.gameId}`)}
             />
@@ -151,8 +141,9 @@ export default function HomeScreen() {
       ) : (
         <SectionCard title="Start your feed" eyebrow="Discover">
           <Text style={styles.bodyText}>
-            Follow a few games in Browse and PlayThread will start filling this
-            feed with reviews, screenshots, clips, and discussion posts.
+            {followedGames.length > 0
+              ? "You are following games, but nobody has posted there yet. Create the first real thread instead of waiting for placeholder content."
+              : "Follow a few games in Browse and PlayThread will start filling this feed with real reviews, screenshots, clips, and discussion posts."}
           </Text>
           {error ? (
             <Text style={styles.warningText}>

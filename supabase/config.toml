@@ -3,3 +3,12 @@ verify_jwt = false
 
 [functions.steam-account]
 verify_jwt = false
+
+[functions.trusted-admin]
+verify_jwt = false
+
+[functions.trusted-profile]
+verify_jwt = false
+
+[functions.trusted-coin]
+verify_jwt = false

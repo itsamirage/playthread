@@ -242,3 +242,13 @@ Recommended next-session prompt:
 Open C:\Users\Alek\PlayThread and continue from NEXT_SESSION_HANDOFF.md.
 Start by reviewing the new trusted-profile flow and live admin moderation paths, then decide how to operationalize scheduled retention/reporting beyond the manual owner prune, and continue with deeper integration-style tests plus a real upload/moderation pipeline for images.
 ```
+- Supabase Edge auth nuance discovered live:
+  - authenticated Edge function calls in this project must use the JWT-based `anon` key, not the newer `sb_publishable_...` key
+  - Cloudflare Pages / local env should keep `EXPO_PUBLIC_SUPABASE_ANON_KEY` on the JWT-based `anon` value
+  - `trusted-admin`, `trusted-profile`, and `trusted-coin` are deployed with `verify_jwt = false` and enforce auth inside the function
+- Live smoke test passed with confirmed moderator smoke account:
+  - `trusted-profile` success
+  - `trusted-admin` success
+- Trigger guard fix applied live:
+  - protected profile-field triggers now recognize trusted service-role writes via current request role/current user fallback
+- Home tab no longer falls back to fake preview feed cards when there are no real followed posts

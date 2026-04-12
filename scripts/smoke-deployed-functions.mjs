@@ -1,3 +1,5 @@
+import { createClient } from "@supabase/supabase-js";
+
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 const SMOKE_EMAIL = process.env.SMOKE_EMAIL;
@@ -11,56 +13,46 @@ function requireEnv(name, value) {
   return value;
 }
 
-async function readJson(response) {
-  const text = await response.text();
-
-  try {
-    return text ? JSON.parse(text) : null;
-  } catch {
-    return { raw: text };
-  }
+function createSmokeClient() {
+  return createClient(
+    requireEnv("EXPO_PUBLIC_SUPABASE_URL", SUPABASE_URL),
+    requireEnv("EXPO_PUBLIC_SUPABASE_ANON_KEY", SUPABASE_ANON_KEY),
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    },
+  );
 }
 
-async function signIn() {
-  const response = await fetch(`${requireEnv("EXPO_PUBLIC_SUPABASE_URL", SUPABASE_URL)}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: {
-      apikey: requireEnv("EXPO_PUBLIC_SUPABASE_ANON_KEY", SUPABASE_ANON_KEY),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      email: requireEnv("SMOKE_EMAIL", SMOKE_EMAIL),
-      password: requireEnv("SMOKE_PASSWORD", SMOKE_PASSWORD),
-    }),
+async function signIn(client) {
+  const { data, error } = await client.auth.signInWithPassword({
+    email: requireEnv("SMOKE_EMAIL", SMOKE_EMAIL),
+    password: requireEnv("SMOKE_PASSWORD", SMOKE_PASSWORD),
   });
 
-  const payload = await readJson(response);
-
-  if (!response.ok || !payload?.access_token) {
-    throw new Error(`Sign-in failed: ${JSON.stringify(payload)}`);
+  if (error || !data.session?.access_token) {
+    throw new Error(`Sign-in failed: ${JSON.stringify(error ?? data)}`);
   }
 
-  return payload.access_token;
+  return data;
 }
 
-async function invokeFunction(functionName, accessToken, body) {
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
+async function invokeFunction(client, functionName, body) {
+  const { data, error } = await client.functions.invoke(functionName, {
+    body,
   });
 
-  const payload = await readJson(response);
-
-  if (!response.ok) {
-    throw new Error(`${functionName} failed: ${JSON.stringify(payload)}`);
+  if (error) {
+    throw new Error(`${functionName} failed: ${error.message}`);
   }
 
-  return payload;
+  if (data?.error) {
+    throw new Error(`${functionName} failed: ${data.error}`);
+  }
+
+  return data;
 }
 
 async function main() {
@@ -69,21 +61,30 @@ async function main() {
   requireEnv("SMOKE_EMAIL", SMOKE_EMAIL);
   requireEnv("SMOKE_PASSWORD", SMOKE_PASSWORD);
 
-  const accessToken = await signIn();
+  const client = createSmokeClient();
+  const signInResult = await signIn(client);
 
-  const profileResult = await invokeFunction("trusted-profile", accessToken, {
+  const profileResult = await invokeFunction(client, "trusted-profile", {
     action: "update_identity",
     displayName: "player1",
     bio: "Smoke check from deployed function harness.",
     avatarUrl: "",
   });
 
-  const reportResult = await invokeFunction("trusted-admin", accessToken, {
-    action: "get_integrity_report",
-    days: 14,
-  });
+  let reportResult = null;
+  let trustedAdminError = null;
+
+  try {
+    reportResult = await invokeFunction(client, "trusted-admin", {
+      action: "get_integrity_report",
+      days: 14,
+    });
+  } catch (error) {
+    trustedAdminError = error instanceof Error ? error.message : String(error);
+  }
 
   console.log(JSON.stringify({
+    signedInUserId: signInResult.user?.id ?? null,
     trustedProfile: {
       success: Boolean(profileResult?.success),
       profileId: profileResult?.profile?.id ?? null,
@@ -91,6 +92,7 @@ async function main() {
     },
     trustedAdmin: {
       success: Boolean(reportResult?.success),
+      error: trustedAdminError,
       days: reportResult?.report?.days ?? null,
       dailySummaryRows: Array.isArray(reportResult?.report?.dailySummary)
         ? reportResult.report.dailySummary.length

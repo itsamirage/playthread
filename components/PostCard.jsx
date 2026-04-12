@@ -100,6 +100,10 @@ export default function PostCard({
 
         <Text style={styles.bodyText}>{post.body}</Text>
 
+        {post.imageUrl ? (
+          <Image source={{ uri: post.imageUrl }} style={styles.postImage} />
+        ) : null}
+
         {post.moderationState === "warning" ? (
           <View style={styles.warningBanner}>
             <Text style={styles.warningBannerTitle}>Content warning</Text>
@@ -322,6 +326,12 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontSize: theme.fontSizes.md,
     lineHeight: 22,
+  },
+  postImage: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(255,255,255,0.03)",
   },
   warningBanner: {
     gap: theme.spacing.xs,

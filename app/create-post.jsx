@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -19,6 +20,7 @@ import SectionCard from "../components/SectionCard";
 import { useAuth } from "../lib/auth";
 import { useFollows } from "../lib/follows";
 import { describeIntegrityError } from "../lib/integrity";
+import { pickPostImage } from "../lib/postMedia";
 import { createPost } from "../lib/posts";
 import { theme } from "../lib/theme";
 
@@ -62,6 +64,7 @@ export default function CreatePostScreen() {
   const [rating, setRating] = useState("8");
   const [isSpoiler, setIsSpoiler] = useState(false);
   const [spoilerTag, setSpoilerTag] = useState("");
+  const [selectedImage, setSelectedImage] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -145,6 +148,7 @@ export default function CreatePostScreen() {
         rating: postType === "review" ? Number(rating) : null,
         spoiler: isSpoiler,
         spoilerTag,
+        imageAsset: selectedImage,
       });
 
       if (error) {
@@ -163,6 +167,21 @@ export default function CreatePostScreen() {
       router.replace("/(tabs)");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const asset = await pickPostImage();
+
+      if (asset) {
+        setSelectedImage(asset);
+      }
+    } catch (error) {
+      Alert.alert(
+        "Image not added",
+        error instanceof Error ? error.message : "Could not pick that image.",
+      );
     }
   };
 
@@ -322,6 +341,48 @@ export default function CreatePostScreen() {
                 Reviews use a single Respect reaction so disagreement does not bury honest opinions.
               </Text>
             ) : null}
+          </SectionCard>
+
+          <SectionCard title="Image" eyebrow="Optional media">
+            <Text style={styles.helperText}>
+              Attach a JPG, PNG, WebP, or GIF up to 5 MB. This first pass supports image uploads only.
+            </Text>
+            {selectedImage?.uri ? (
+              <View style={styles.imageCard}>
+                <Image source={{ uri: selectedImage.uri }} style={styles.imagePreview} />
+                <View style={styles.imageActions}>
+                  <Pressable
+                    onPress={handlePickImage}
+                    style={({ pressed }) => [
+                      styles.mediaButton,
+                      pressed ? styles.buttonPressed : null,
+                    ]}
+                  >
+                    <Text style={styles.mediaButtonText}>Replace image</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setSelectedImage(null)}
+                    style={({ pressed }) => [
+                      styles.mediaButton,
+                      styles.mediaButtonDanger,
+                      pressed ? styles.buttonPressed : null,
+                    ]}
+                  >
+                    <Text style={styles.mediaButtonDangerText}>Remove image</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <Pressable
+                onPress={handlePickImage}
+                style={({ pressed }) => [
+                  styles.mediaButton,
+                  pressed ? styles.buttonPressed : null,
+                ]}
+              >
+                <Text style={styles.mediaButtonText}>Choose image</Text>
+              </Pressable>
+            )}
           </SectionCard>
 
           <SectionCard title="Spoilers" eyebrow="Visibility">
@@ -489,6 +550,42 @@ const styles = StyleSheet.create({
   },
   dismissKeyboardButtonText: {
     color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  imageCard: {
+    gap: theme.spacing.md,
+  },
+  imagePreview: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  imageActions: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  mediaButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(0,229,255,0.12)",
+    borderColor: "rgba(0,229,255,0.32)",
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+  },
+  mediaButtonDanger: {
+    backgroundColor: "rgba(255,138,138,0.12)",
+    borderColor: "rgba(255,138,138,0.32)",
+  },
+  mediaButtonText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  mediaButtonDangerText: {
+    color: "#ff8a8a",
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.bold,
   },

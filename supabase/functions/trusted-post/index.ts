@@ -36,6 +36,7 @@ type RequestBody = {
   type?: string;
   title?: string | null;
   body?: string;
+  imageUrl?: string | null;
   rating?: number | null;
   spoiler?: boolean;
   spoilerTag?: string | null;
@@ -98,6 +99,7 @@ Deno.serve(async (request) => {
         reaction_mode: reactionMode,
         title: String(body.title ?? "").trim() || null,
         body: textBody,
+        image_url: String(body.imageUrl ?? "").trim() || null,
         spoiler: Boolean(body.spoiler),
         spoiler_tag: body.spoiler ? String(body.spoilerTag ?? "").trim() || null : null,
         rating: body.rating != null ? Number(body.rating) / 2 : null,
