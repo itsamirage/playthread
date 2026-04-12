@@ -92,6 +92,15 @@ type IntegrityCheckInput = {
   metadata?: Record<string, unknown>;
 };
 
+type NotificationPreferencesRow = {
+  push_enabled?: boolean | null;
+  post_comment_enabled?: boolean | null;
+  coin_gift_received_enabled?: boolean | null;
+  moderation_warning_enabled?: boolean | null;
+  followed_game_post_enabled?: boolean | null;
+  new_follower_enabled?: boolean | null;
+};
+
 const DEFAULT_INTEGRITY_LOOKBACK_DAYS = 7;
 const DEFAULT_MAX_DISTINCT_ACCOUNTS_PER_IP = 5;
 const DEFAULT_MAX_DISTINCT_POSITIVE_ACCOUNTS_PER_POST = 3;
@@ -371,15 +380,7 @@ export async function insertNotification(
     console.warn("Could not load notification preferences", preferencesError);
   }
 
-  const kindPreferenceMap: Record<string, boolean> = {
-    post_comment: preferencesRow?.post_comment_enabled ?? true,
-    coin_gift_received: preferencesRow?.coin_gift_received_enabled ?? true,
-    moderation_warning: preferencesRow?.moderation_warning_enabled ?? true,
-    followed_game_post: preferencesRow?.followed_game_post_enabled ?? true,
-    new_follower: preferencesRow?.new_follower_enabled ?? true,
-  };
-
-  if (kindPreferenceMap[kind] === false) {
+  if (!shouldStoreNotification(preferencesRow, kind)) {
     return;
   }
 
@@ -422,7 +423,7 @@ export async function insertNotification(
     return;
   }
 
-  if (preferencesRow?.push_enabled === false) {
+  if (!shouldSendPushNotification(preferencesRow, kind)) {
     return;
   }
 
@@ -474,6 +475,28 @@ export async function insertNotification(
         .eq("id", tokenRow.id);
     }
   }
+}
+
+export function shouldStoreNotification(
+  preferencesRow: NotificationPreferencesRow | null | undefined,
+  kind: "post_comment" | "coin_gift_received" | "moderation_warning" | "followed_game_post" | "new_follower",
+) {
+  const kindPreferenceMap: Record<string, boolean> = {
+    post_comment: preferencesRow?.post_comment_enabled ?? true,
+    coin_gift_received: preferencesRow?.coin_gift_received_enabled ?? true,
+    moderation_warning: preferencesRow?.moderation_warning_enabled ?? true,
+    followed_game_post: preferencesRow?.followed_game_post_enabled ?? true,
+    new_follower: preferencesRow?.new_follower_enabled ?? true,
+  };
+
+  return kindPreferenceMap[kind] !== false;
+}
+
+export function shouldSendPushNotification(
+  preferencesRow: NotificationPreferencesRow | null | undefined,
+  kind: "post_comment" | "coin_gift_received" | "moderation_warning" | "followed_game_post" | "new_follower",
+) {
+  return (preferencesRow?.push_enabled ?? true) && shouldStoreNotification(preferencesRow, kind);
 }
 
 function getDistinctUserCount(rows: Array<{ user_id: string | null }>, currentUserId: string) {
