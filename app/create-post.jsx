@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import SectionCard from "../components/SectionCard";
 import { useAuth } from "../lib/auth";
 import { useFollows } from "../lib/follows";
+import { useGameDetail } from "../lib/games";
 import { describeIntegrityError } from "../lib/integrity";
 import { pickPostImage } from "../lib/postMedia";
 import { createPost } from "../lib/posts";
@@ -55,6 +56,7 @@ export default function CreatePostScreen() {
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef(null);
   const initialGameId = Number(params.gameId);
+  const { game: routeGame } = useGameDetail(initialGameId);
   const [selectedGameId, setSelectedGameId] = useState(
     !Number.isNaN(initialGameId) && initialGameId > 0 ? initialGameId : followedGames[0]?.id ?? null
   );
@@ -112,9 +114,35 @@ export default function CreatePostScreen() {
     footerHeight + footerPaddingBottom + theme.spacing.xl + (Platform.OS === "android" ? keyboardHeight : 0);
 
   const selectedGame = useMemo(
-    () => followedGames.find((game) => game.id === selectedGameId) ?? null,
-    [followedGames, selectedGameId]
+    () => {
+      const followedGame = followedGames.find((game) => game.id === selectedGameId);
+
+      if (followedGame) {
+        return followedGame;
+      }
+
+      if (routeGame?.id === selectedGameId) {
+        return routeGame;
+      }
+
+      return null;
+    },
+    [followedGames, routeGame, selectedGameId]
   );
+
+  const selectableGames = useMemo(() => {
+    const byId = new Map();
+
+    if (routeGame?.id) {
+      byId.set(routeGame.id, routeGame);
+    }
+
+    for (const game of followedGames) {
+      byId.set(game.id, game);
+    }
+
+    return [...byId.values()];
+  }, [followedGames, routeGame]);
 
   const handleSubmit = async () => {
     Keyboard.dismiss();
@@ -215,9 +243,9 @@ export default function CreatePostScreen() {
           </View>
 
           <SectionCard title="Game" eyebrow="Choose a title">
-            {followedGames.length > 0 ? (
+            {selectableGames.length > 0 ? (
               <View style={styles.chipWrap}>
-                {followedGames.map((game) => {
+                {selectableGames.map((game) => {
                   const isActive = game.id === selectedGameId;
 
                   return (
@@ -235,7 +263,9 @@ export default function CreatePostScreen() {
               </View>
             ) : (
               <Text style={styles.helperText}>
-                Follow a game first in Browse before creating a post.
+                {routeGame
+                  ? `This post will be attached to ${routeGame.title}.`
+                  : "Open a game page or follow a game first before creating a post."}
               </Text>
             )}
           </SectionCard>
@@ -421,12 +451,12 @@ export default function CreatePostScreen() {
           </Pressable>
 
           <Pressable
-            disabled={isSubmitting || followedGames.length === 0}
+            disabled={isSubmitting || !selectedGame}
             onPress={handleSubmit}
             style={({ pressed }) => [
               styles.primaryButton,
               pressed ? styles.buttonPressed : null,
-              isSubmitting || followedGames.length === 0 ? styles.buttonDisabled : null,
+              isSubmitting || !selectedGame ? styles.buttonDisabled : null,
             ]}
           >
             {isSubmitting ? (
