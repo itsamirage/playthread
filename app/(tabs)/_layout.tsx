@@ -85,6 +85,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="shield" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="game/[id]"
+        options={{
+          href: null,
+          headerShown: false,
+        }}
+      />
     </Tabs>
   );
 }

@@ -12,22 +12,23 @@ import {
   View,
 } from "react-native";
 
-import PostCard from "../../components/PostCard";
-import PostCommentsSheet from "../../components/PostCommentsSheet";
-import PlatformBadge from "../../components/PlatformBadge";
-import SectionCard from "../../components/SectionCard";
-import CoinGiftSheet from "../../components/CoinGiftSheet";
-import { sendCoinGift } from "../../lib/admin";
-import { useAuth } from "../../lib/auth";
+import PostCard from "../components/PostCard";
+import PostCommentsSheet from "../components/PostCommentsSheet";
+import PlatformBadge from "../components/PlatformBadge";
+import SectionCard from "../components/SectionCard";
+import CoinGiftSheet from "../components/CoinGiftSheet";
+import { sendCoinGift } from "../lib/admin";
+import { useAuth } from "../lib/auth";
 import {
   FOLLOW_STATUS_OPTIONS,
   getFollowStatusLabel,
   shouldRevealSpoilersForStatus,
   useFollows,
-} from "../../lib/follows";
-import { useGameDetail } from "../../lib/games";
-import { togglePostReaction, useGamePosts } from "../../lib/posts";
-import { getMetacriticColor, theme } from "../../lib/theme";
+} from "../lib/follows";
+import { GAME_RATING_OPTIONS, saveGameRating, useGameRating } from "../lib/gameRatings";
+import { useGameDetail } from "../lib/games";
+import { togglePostReaction, useGamePosts } from "../lib/posts";
+import { getMetacriticColor, theme } from "../lib/theme";
 
 export default function GameDetailScreen() {
   const router = useRouter();
@@ -36,16 +37,25 @@ export default function GameDetailScreen() {
   const { game, isLoading, error, source } = useGameDetail(params.id);
   const { isFollowingGame, getFollowStatus, setFollowStatus, unfollowGame } = useFollows();
   const { posts, isLoading: postsLoading, error: postsError, reload: reloadPosts } = useGamePosts(params.id);
+  const {
+    myRating,
+    averageRating,
+    ratingsCount,
+    isLoading: ratingsLoading,
+    reload: reloadRatings,
+  } = useGameRating(params.id);
   const [isOverviewOpen, setIsOverviewOpen] = useState(false);
   const [showSpoilers, setShowSpoilers] = useState(false);
   const [reactingPostId, setReactingPostId] = useState(null);
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [giftPost, setGiftPost] = useState(null);
   const [isSendingGift, setIsSendingGift] = useState(false);
+  const [isSavingRating, setIsSavingRating] = useState(false);
 
   const followStatus = getFollowStatus(params.id);
   const isFollowed = isFollowingGame(params.id);
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
+  const displayedCommunityRating = averageRating ?? game?.starRating ?? null;
 
   useEffect(() => {
     setShowSpoilers(shouldRevealSpoilersForStatus(followStatus));
@@ -71,26 +81,26 @@ export default function GameDetailScreen() {
           This detail page could not find a game for ID {String(params.id)}.
         </Text>
 
-        <Pressable onPress={() => router.back()} style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>Go back</Text>
+        <Pressable onPress={() => router.push("/(tabs)")} style={styles.primaryButton}>
+          <Text style={styles.primaryButtonText}>Go home</Text>
         </Pressable>
       </ScrollView>
     );
   }
 
   const handleSelectStatus = async (status) => {
-    const { error } = await setFollowStatus(game, status);
+    const { error: followError } = await setFollowStatus(game, status);
 
-    if (error) {
-      Alert.alert("Follow update failed", error.message);
+    if (followError) {
+      Alert.alert("Follow update failed", followError.message);
     }
   };
 
   const handleUnfollow = async () => {
-    const { error } = await unfollowGame(game);
+    const { error: followError } = await unfollowGame(game);
 
-    if (error) {
-      Alert.alert("Follow update failed", error.message);
+    if (followError) {
+      Alert.alert("Follow update failed", followError.message);
     }
   };
 
@@ -135,6 +145,27 @@ export default function GameDetailScreen() {
       Alert.alert("Gift failed", nextError?.message ?? "Could not send that gift.");
     } finally {
       setIsSendingGift(false);
+    }
+  };
+
+  const handleSaveRating = async (rating) => {
+    if (!session?.user?.id) {
+      Alert.alert("Sign in required", "You need to sign in before rating a game.");
+      return;
+    }
+
+    try {
+      setIsSavingRating(true);
+      await saveGameRating({
+        gameId: game.id,
+        userId: session.user.id,
+        rating,
+      });
+      await reloadRatings();
+    } catch (nextError) {
+      Alert.alert("Rating failed", nextError?.message ?? "Could not save your rating.");
+    } finally {
+      setIsSavingRating(false);
     }
   };
 
@@ -201,13 +232,15 @@ export default function GameDetailScreen() {
         </View>
 
         <View style={styles.darkStatCard}>
-          <Text style={styles.darkStatLabel}>User</Text>
-          <Text style={styles.darkStatValue}>{game.starRating}</Text>
+          <Text style={styles.darkStatLabel}>Users</Text>
+          <Text style={styles.darkStatValue}>
+            {displayedCommunityRating ? displayedCommunityRating.toFixed(1) : "--"}
+          </Text>
         </View>
 
         <View style={styles.darkStatCard}>
-          <Text style={styles.darkStatLabel}>Members</Text>
-          <Text style={styles.darkStatValue}>{game.members}</Text>
+          <Text style={styles.darkStatLabel}>Ratings</Text>
+          <Text style={styles.darkStatValue}>{ratingsCount || game.members}</Text>
         </View>
       </View>
 
@@ -231,6 +264,39 @@ export default function GameDetailScreen() {
           <Text style={styles.primaryButtonText}>Create post</Text>
         </Pressable>
       </View>
+
+      <SectionCard title="Your rating" eyebrow="Rate this game">
+        <Text style={styles.bodyText}>
+          {myRating
+            ? `Your rating: ${myRating.toFixed(1)}/10.`
+            : "Rate this game without writing a review post."}{" "}
+          Community rating is {displayedCommunityRating ? `${displayedCommunityRating.toFixed(1)}/10` : "not available yet"}.
+        </Text>
+        {ratingsLoading ? (
+          <View style={styles.loadingStateInline}>
+            <ActivityIndicator color={theme.colors.accent} />
+          </View>
+        ) : (
+          <View style={styles.ratingWrap}>
+            {GAME_RATING_OPTIONS.map((option) => {
+              const isActive = Number(option) === myRating;
+
+              return (
+                <Pressable
+                  key={option}
+                  disabled={isSavingRating}
+                  onPress={() => handleSaveRating(option)}
+                  style={[styles.ratingChip, isActive ? styles.ratingChipActive : null]}
+                >
+                  <Text style={[styles.ratingChipText, isActive ? styles.ratingChipTextActive : null]}>
+                    {option}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+      </SectionCard>
 
       <SectionCard title="Your status" eyebrow="Following">
         <Text style={styles.bodyText}>
@@ -542,6 +608,10 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     paddingTop: theme.spacing.xxl,
   },
+  loadingStateInline: {
+    paddingVertical: theme.spacing.md,
+    alignItems: "center",
+  },
   buttonPressed: {
     opacity: 0.92,
   },
@@ -619,6 +689,33 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.bold,
+  },
+  ratingWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  ratingChip: {
+    minWidth: 54,
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+  },
+  ratingChipActive: {
+    backgroundColor: theme.colors.accent,
+    borderColor: theme.colors.accent,
+  },
+  ratingChipText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  ratingChipTextActive: {
+    color: theme.colors.background,
   },
   modalBackdrop: {
     flex: 1,
