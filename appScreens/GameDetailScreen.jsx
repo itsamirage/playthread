@@ -54,6 +54,7 @@ export default function GameDetailScreen() {
 
   const followStatus = getFollowStatus(params.id);
   const isFollowed = isFollowingGame(params.id);
+  const isInBacklog = followStatus === "have_not_played";
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
   const displayedCommunityRating = averageRating ?? game?.starRating ?? null;
 
@@ -102,6 +103,17 @@ export default function GameDetailScreen() {
     if (followError) {
       Alert.alert("Follow update failed", followError.message);
     }
+  };
+
+  const handleAddToBacklog = async () => {
+    const { error: followError } = await setFollowStatus(game, "have_not_played");
+
+    if (followError) {
+      Alert.alert("Backlog update failed", followError.message);
+      return;
+    }
+
+    Alert.alert("Added to backlog", `${game.title} is now in your backlog.`);
   };
 
   const handleReact = async (postId, reactionType) => {
@@ -264,6 +276,19 @@ export default function GameDetailScreen() {
           <Text style={styles.primaryButtonText}>Create post</Text>
         </Pressable>
       </View>
+
+      <Pressable
+        onPress={handleAddToBacklog}
+        style={({ pressed }) => [
+          styles.backlogButton,
+          isInBacklog ? styles.backlogButtonActive : null,
+          pressed ? styles.buttonPressed : null,
+        ]}
+      >
+        <Text style={[styles.backlogButtonText, isInBacklog ? styles.backlogButtonTextActive : null]}>
+          {isInBacklog ? "In your backlog" : "Add to backlog"}
+        </Text>
+      </Pressable>
 
       <SectionCard title="Your rating" eyebrow="Rate this game">
         <Text style={styles.bodyText}>
@@ -591,6 +616,27 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontSize: theme.fontSizes.md,
     fontWeight: theme.fontWeights.bold,
+  },
+  backlogButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+  },
+  backlogButtonActive: {
+    backgroundColor: "rgba(0,229,255,0.12)",
+    borderColor: theme.colors.accent,
+  },
+  backlogButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  backlogButtonTextActive: {
+    color: theme.colors.accent,
   },
   bodyText: {
     color: theme.colors.textPrimary,
