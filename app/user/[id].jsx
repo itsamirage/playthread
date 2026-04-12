@@ -79,6 +79,14 @@ export default function PublicProfileScreen() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
+        <View style={styles.heroActions}>
+          <Pressable onPress={() => router.back()} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Back</Text>
+          </Pressable>
+          <Pressable onPress={() => router.push("/(tabs)/browse")} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Browse</Text>
+          </Pressable>
+        </View>
         <View style={styles.avatarWrap}>
           {profile.avatarUrl ? (
             <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
@@ -159,6 +167,26 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     paddingTop: theme.spacing.xl,
     alignItems: "center",
+  },
+  heroActions: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    alignSelf: "stretch",
+    justifyContent: "center",
+  },
+  secondaryButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+  },
+  secondaryButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
   },
   avatarWrap: {
     marginBottom: theme.spacing.sm,

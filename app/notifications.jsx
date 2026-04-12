@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import SectionCard from "../components/SectionCard";
 import { useAuth } from "../lib/auth";
 import {
+  groupNotifications,
   markAllNotificationsRead,
   markNotificationRead,
   useNotifications,
@@ -14,6 +15,7 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const { session } = useAuth();
   const { notifications, unreadCount, isLoading, reload } = useNotifications();
+  const notificationGroups = groupNotifications(notifications);
 
   const handleNotificationPress = async (notification) => {
     if (!notification.isRead) {
@@ -28,6 +30,11 @@ export default function NotificationsScreen() {
 
     if (notification.entityType === "profile" && notification.entityId) {
       router.push(`/user/${notification.entityId}`);
+      return;
+    }
+
+    if (notification.metadata?.gameId) {
+      router.push(`/game/${notification.metadata.gameId}`);
     }
   };
 
@@ -48,6 +55,14 @@ export default function NotificationsScreen() {
         <Text style={styles.subtitle}>
           Replies, gifts, moderation warnings, and new posts from games you follow.
         </Text>
+        <View style={styles.heroActions}>
+          <Pressable onPress={() => router.back()} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Back</Text>
+          </Pressable>
+          <Pressable onPress={() => router.push("/(tabs)/profile")} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Profile</Text>
+          </Pressable>
+        </View>
       </View>
 
       <SectionCard title="Inbox" eyebrow={`${unreadCount} unread`}>
@@ -62,19 +77,29 @@ export default function NotificationsScreen() {
           </View>
         ) : notifications.length > 0 ? (
           <View style={styles.list}>
-            {notifications.map((notification) => (
-              <Pressable
-                key={notification.id}
-                onPress={() => handleNotificationPress(notification)}
-                style={[styles.notificationCard, !notification.isRead ? styles.notificationUnread : null]}
-              >
-                <Text style={styles.notificationTitle}>{notification.title}</Text>
-                {notification.body ? <Text style={styles.notificationBody}>{notification.body}</Text> : null}
-                <Text style={styles.notificationMeta}>
-                  {notification.actor ? `@${notification.actor} • ` : ""}
-                  {new Date(notification.createdAt).toLocaleString()}
-                </Text>
-              </Pressable>
+            {notificationGroups.map((group) => (
+              <View key={group.dayLabel} style={styles.group}>
+                <Text style={styles.groupTitle}>{group.dayLabel}</Text>
+                <View style={styles.groupList}>
+                  {group.items.map((notification) => (
+                    <Pressable
+                      key={notification.id}
+                      onPress={() => handleNotificationPress(notification)}
+                      style={[styles.notificationCard, !notification.isRead ? styles.notificationUnread : null]}
+                    >
+                      <Text style={styles.notificationTitle}>{notification.title}</Text>
+                      {notification.body ? <Text style={styles.notificationBody}>{notification.body}</Text> : null}
+                      <Text style={styles.notificationMeta}>
+                        {notification.actor ? `@${notification.actor} | ` : ""}
+                        {new Date(notification.createdAt).toLocaleTimeString([], {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
             ))}
           </View>
         ) : (
@@ -115,6 +140,25 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.md,
     lineHeight: 22,
   },
+  heroActions: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+  },
+  secondaryButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+  },
+  secondaryButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
   markReadButton: {
     alignSelf: "flex-start",
     marginBottom: theme.spacing.sm,
@@ -129,6 +173,19 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.lg,
   },
   list: {
+    gap: theme.spacing.md,
+  },
+  group: {
+    gap: theme.spacing.sm,
+  },
+  groupTitle: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  groupList: {
     gap: theme.spacing.md,
   },
   notificationCard: {

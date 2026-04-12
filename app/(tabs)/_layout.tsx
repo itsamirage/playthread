@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { isStaffRole } from '@/lib/admin';
 import { useFollows } from '@/lib/follows';
 import { useCurrentProfile } from '@/lib/profile';
+import { useNotifications } from '@/lib/notifications';
 import { theme } from '@/lib/theme';
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
@@ -21,6 +22,7 @@ export default function TabLayout() {
   const { isLoading, session } = useAuth();
   const { isLoading: followsLoading } = useFollows();
   const { profile, isLoading: profileLoading } = useCurrentProfile();
+  const { unreadCount } = useNotifications(20);
 
   if (isLoading || followsLoading || profileLoading) {
     return (
@@ -74,6 +76,7 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
+          tabBarBadge: unreadCount > 0 ? (unreadCount > 9 ? '9+' : String(unreadCount)) : undefined,
           tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
         }}
       />

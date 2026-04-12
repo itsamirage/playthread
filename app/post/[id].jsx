@@ -41,6 +41,14 @@ export default function PostDetailScreen() {
         <Text style={styles.eyebrow}>PlayThread</Text>
         <Text style={styles.title}>Post thread</Text>
         <Text style={styles.subtitle}>A shareable thread view with the full conversation attached.</Text>
+        <View style={styles.heroActions}>
+          <Pressable onPress={() => router.back()} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Back</Text>
+          </Pressable>
+          <Pressable onPress={() => router.push(`/game/${post.gameId}`)} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Game</Text>
+          </Pressable>
+        </View>
       </View>
 
       <PostCard
@@ -95,6 +103,25 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: theme.fontSizes.md,
     lineHeight: 22,
+  },
+  heroActions: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+  },
+  secondaryButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+  },
+  secondaryButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
   },
   bodyText: {
     color: theme.colors.textPrimary,
