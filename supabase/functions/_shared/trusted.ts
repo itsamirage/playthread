@@ -332,6 +332,49 @@ export async function createModerationFlag(
   }
 }
 
+export async function insertNotification(
+  adminClient: SupabaseClient,
+  {
+    userId,
+    actorUserId = null,
+    kind,
+    title,
+    body = null,
+    entityType = null,
+    entityId = null,
+    metadata = {},
+  }: {
+    userId: string;
+    actorUserId?: string | null;
+    kind:
+      | "post_comment"
+      | "coin_gift_received"
+      | "moderation_warning"
+      | "followed_game_post"
+      | "new_follower";
+    title: string;
+    body?: string | null;
+    entityType?: string | null;
+    entityId?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  const { error } = await adminClient.from("notifications").insert({
+    user_id: userId,
+    actor_user_id: actorUserId,
+    kind,
+    title,
+    body,
+    entity_type: entityType,
+    entity_id: entityId,
+    metadata_json: metadata,
+  });
+
+  if (error) {
+    console.warn("Could not create notification", error);
+  }
+}
+
 function getDistinctUserCount(rows: Array<{ user_id: string | null }>, currentUserId: string) {
   const uniqueUserIds = new Set(
     rows

@@ -7,6 +7,7 @@ import {
   getAdminClient,
   getAuthenticatedUser,
   getRequestIpHash,
+  insertNotification,
   jsonResponse,
   readJsonBody,
   recordIntegrityEvent,
@@ -148,6 +149,37 @@ Deno.serve(async (request) => {
         gameTitle: postRow.game_title ?? null,
         evidence: {
           request_ip_hash: ipHash,
+        },
+      });
+
+      await insertNotification(adminClient, {
+        userId: user.id,
+        actorUserId: user.id,
+        kind: "moderation_warning",
+        title: "Your comment was flagged for review",
+        body: moderation.reason,
+        entityType: "comment",
+        entityId: comment.id,
+        metadata: {
+          labels: moderation.labels,
+          postId,
+        },
+      });
+    }
+
+    if (postRow.user_id && postRow.user_id !== user.id) {
+      await insertNotification(adminClient, {
+        userId: postRow.user_id,
+        actorUserId: user.id,
+        kind: "post_comment",
+        title: "New reply on your post",
+        body: textBody.slice(0, 160),
+        entityType: "post",
+        entityId: postId,
+        metadata: {
+          commentId: comment.id,
+          gameId: postRow.igdb_game_id ?? null,
+          gameTitle: postRow.game_title ?? null,
         },
       });
     }

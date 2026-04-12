@@ -90,6 +90,7 @@ Deno.serve(async (request) => {
           video_asset_id: assetId,
           video_playback_id: playbackId,
           video_status: playbackId ? "processing" : "uploading",
+          video_thumbnail_url: playbackId ? buildMuxThumbnailUrl(playbackId) : null,
         })
         .eq("video_upload_token", uploadToken);
 

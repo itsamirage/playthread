@@ -59,8 +59,11 @@ function RootLayoutNav() {
             <Stack.Screen name="catalog" options={{ headerShown: false }} />
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
             <Stack.Screen name="create-post" options={{ headerShown: false, presentation: 'modal' }} />
+            <Stack.Screen name="notifications" options={{ headerShown: false }} />
+            <Stack.Screen name="post/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="steam-link" options={{ headerShown: false }} />
             <Stack.Screen name="steam-privacy" options={{ headerShown: false }} />
+            <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: 'modal' }} />

@@ -33,9 +33,13 @@ const reactionLabelsByMode = {
 export default function PostCard({
   post,
   onPress,
+  onAuthorPress,
   onReact,
   onOpenComments,
   onGift,
+  onEdit,
+  onDelete,
+  isDeleting = false,
   isReacting = false,
   concealSpoilers = false,
 }) {
@@ -68,10 +72,12 @@ export default function PostCard({
             </View>
           ) : null}
         </View>
-        <Text style={styles.metaText}>
-          <Text style={[styles.authorNameText, { color: authorNameColor }]}>@{post.author}</Text>
-          <Text> | {post.age}</Text>
-        </Text>
+        <Pressable disabled={!onAuthorPress} onPress={() => onAuthorPress?.(post.userId)}>
+          <Text style={styles.metaText}>
+            <Text style={[styles.authorNameText, { color: authorNameColor }]}>@{post.author}</Text>
+            <Text> | {post.age}</Text>
+          </Text>
+        </Pressable>
       </View>
       {authorTitle.key !== "none" ? (
         <View style={[styles.titleBadge, authorTitle.style === "gold" ? styles.titleBadgeGold : null]}>
@@ -111,6 +117,47 @@ export default function PostCard({
             status={post.videoStatus}
             thumbnailUrl={post.videoThumbnailUrl}
           />
+        ) : null}
+        {post.type === "clip" ? (
+          <Text style={styles.clipMetaText}>
+            {post.videoStatus === "ready"
+              ? "Streaming-only clip. Downloads are disabled for now."
+              : post.videoStatus === "errored"
+                ? "This clip failed to process."
+                : "Mux is still preparing this clip for streaming."}
+          </Text>
+        ) : null}
+        {onEdit || onDelete ? (
+          <View style={styles.ownerActionRow}>
+            {onEdit ? (
+              <Pressable
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  onEdit?.(post);
+                }}
+                style={({ pressed }) => [styles.ownerActionButton, pressed ? styles.cardPressed : null]}
+              >
+                <Text style={styles.ownerActionButtonText}>Edit clip</Text>
+              </Pressable>
+            ) : null}
+            {onDelete ? (
+              <Pressable
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  onDelete?.(post);
+                }}
+                style={({ pressed }) => [
+                  styles.ownerActionButton,
+                  styles.ownerActionButtonDanger,
+                  pressed ? styles.cardPressed : null,
+                ]}
+              >
+                <Text style={styles.ownerActionButtonDangerText}>
+                  {isDeleting ? "Deleting..." : "Delete clip"}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
 
         {post.moderationState === "warning" ? (
@@ -341,6 +388,40 @@ const styles = StyleSheet.create({
     aspectRatio: 16 / 9,
     borderRadius: theme.radius.md,
     backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  clipMetaText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: 20,
+  },
+  ownerActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  ownerActionButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  ownerActionButtonDanger: {
+    backgroundColor: "rgba(255,138,138,0.12)",
+    borderColor: "rgba(255,138,138,0.32)",
+  },
+  ownerActionButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  ownerActionButtonDangerText: {
+    color: "#ff8a8a",
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
   },
   warningBanner: {
     gap: theme.spacing.xs,

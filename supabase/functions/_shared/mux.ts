@@ -79,6 +79,12 @@ export async function getMuxDirectUpload(uploadId: string) {
   return payload?.data ?? null;
 }
 
+export async function deleteMuxAsset(assetId: string) {
+  await muxRequest(`/assets/${assetId}`, {
+    method: "DELETE",
+  });
+}
+
 export function buildMuxPlaybackUrl(playbackId: string) {
   return `https://stream.mux.com/${playbackId}.m3u8`;
 }

@@ -27,7 +27,7 @@ import {
 } from "../lib/follows";
 import { GAME_RATING_OPTIONS, saveGameRating, useGameRating } from "../lib/gameRatings";
 import { useGameDetail } from "../lib/games";
-import { togglePostReaction, useGamePosts } from "../lib/posts";
+import { deletePost, togglePostReaction, useGamePosts } from "../lib/posts";
 import { getMetacriticColor, theme } from "../lib/theme";
 
 export default function GameDetailScreen() {
@@ -51,6 +51,7 @@ export default function GameDetailScreen() {
   const [giftPost, setGiftPost] = useState(null);
   const [isSendingGift, setIsSendingGift] = useState(false);
   const [isSavingRating, setIsSavingRating] = useState(false);
+  const [deletingPostId, setDeletingPostId] = useState(null);
 
   const followStatus = getFollowStatus(params.id);
   const isFollowed = isFollowingGame(params.id);
@@ -179,6 +180,35 @@ export default function GameDetailScreen() {
     } finally {
       setIsSavingRating(false);
     }
+  };
+
+  const handleEditPost = (post) => {
+    router.push({ pathname: "/create-post", params: { gameId: String(post.gameId), postId: post.id } });
+  };
+
+  const handleDeletePost = (post) => {
+    Alert.alert(
+      "Delete clip",
+      "This will remove the clip post from the game thread.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setDeletingPostId(post.id);
+              await deletePost({ postId: post.id });
+              await reloadPosts();
+            } catch (nextError) {
+              Alert.alert("Delete failed", nextError?.message ?? "Could not delete that clip.");
+            } finally {
+              setDeletingPostId(null);
+            }
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -389,11 +419,16 @@ export default function GameDetailScreen() {
               <PostCard
                 key={post.id}
                 concealSpoilers={Boolean(post.spoiler) && !showSpoilers}
+                isDeleting={deletingPostId === post.id}
                 isReacting={reactingPostId === post.id}
+                onAuthorPress={() => router.push(`/user/${post.userId}`)}
+                onDelete={session?.user?.id === post.userId && post.type === "clip" ? () => handleDeletePost(post) : null}
+                onEdit={session?.user?.id === post.userId && post.type === "clip" ? () => handleEditPost(post) : null}
                 onGift={session?.user?.id && session.user.id !== post.userId ? () => setGiftPost(post) : null}
                 onOpenComments={() => setSelectedPostId(post.id)}
                 onReact={(reactionType) => handleReact(post.id, reactionType)}
                 post={post}
+                onPress={() => router.push(`/post/${post.id}`)}
               />
             ))}
           </View>

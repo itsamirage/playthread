@@ -4,6 +4,7 @@ import {
   getAdminClient,
   getAuthenticatedUser,
   getRequestIpHash,
+  insertNotification,
   jsonResponse,
   readJsonBody,
   requireProfile,
@@ -52,6 +53,28 @@ Deno.serve(async (request) => {
       },
       requestIpHash: await getRequestIpHash(request),
     });
+
+    if (
+      result.moderation?.profile?.moderationState === "warning" ||
+      result.moderation?.avatar?.moderationState === "warning"
+    ) {
+      await insertNotification(adminClient, {
+        userId: user.id,
+        actorUserId: user.id,
+        kind: "moderation_warning",
+        title: "Your profile update was flagged for review",
+        body:
+          result.moderation?.profile?.reason ??
+          result.moderation?.avatar?.reason ??
+          "A profile field needs review.",
+        entityType: "profile",
+        entityId: user.id,
+        metadata: {
+          textLabels: result.moderation?.profile?.labels ?? [],
+          avatarLabels: result.moderation?.avatar?.labels ?? [],
+        },
+      });
+    }
 
     return jsonResponse({
       success: true,

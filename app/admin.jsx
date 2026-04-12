@@ -943,6 +943,11 @@ export default function AdminScreen() {
                 {selectedFlag.origin} • {selectedFlag.status} • {new Date(selectedFlag.createdAt).toLocaleString()}
               </Text>
               <Text style={styles.bodyText}>{selectedFlag.reason}</Text>
+              {selectedFlag.evidence?.post_type === "clip" ? (
+                <Text style={styles.helperText}>
+                  Clip post â€¢ status {selectedFlag.evidence?.video_status ?? "unknown"} â€¢ upload {selectedFlag.evidence?.video_upload_id ?? "n/a"}
+                </Text>
+              ) : null}
               <Text style={styles.excerptText}>{JSON.stringify(selectedFlag.evidence)}</Text>
               <View style={styles.inlineRow}>
                 <Pressable onPress={() => handleShowAuthorContext(selectedFlag.author)} style={styles.secondaryButton}>

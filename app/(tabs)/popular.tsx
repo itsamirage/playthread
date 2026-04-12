@@ -10,7 +10,7 @@ import { MODERATION_PERIOD_OPTIONS } from "../../lib/admin";
 import { sendCoinGift } from "../../lib/admin";
 import { useAuth } from "../../lib/auth";
 import { describeIntegrityError } from "../../lib/integrity";
-import { togglePostReaction, usePopularPosts } from "../../lib/posts";
+import { deletePost, togglePostReaction, usePopularPosts } from "../../lib/posts";
 import { theme } from "../../lib/theme";
 
 function getPopularSummary(post) {
@@ -34,6 +34,7 @@ export default function AllScreen() {
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [giftPost, setGiftPost] = useState(null);
   const [isSendingGift, setIsSendingGift] = useState(false);
+  const [deletingPostId, setDeletingPostId] = useState(null);
   const topPosts = useMemo(() => posts.slice(0, 8), [posts]);
   const leadPost = topPosts[0] ?? null;
   const nextPosts = topPosts.slice(1, 4);
@@ -83,6 +84,32 @@ export default function AllScreen() {
     } finally {
       setIsSendingGift(false);
     }
+  };
+
+  const handleEditPost = (post) => {
+    router.push({ pathname: "/create-post", params: { gameId: String(post.gameId), postId: post.id } });
+  };
+
+  const handleDeletePost = (post) => {
+    Alert.alert("Delete clip", "This will remove the clip post from PlayThread.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setDeletingPostId(post.id);
+            await deletePost({ postId: post.id });
+            await reload();
+          } catch (nextError) {
+            const errorCopy = describeIntegrityError(nextError);
+            Alert.alert(errorCopy.title, errorCopy.detail);
+          } finally {
+            setDeletingPostId(null);
+          }
+        },
+      },
+    ]);
   };
 
   useFocusEffect(
@@ -157,10 +184,14 @@ export default function AllScreen() {
           {leadPost ? (
             <View style={styles.feedList}>
               <PostCard
+                isDeleting={deletingPostId === leadPost.id}
                 isReacting={reactingPostId === leadPost.id}
+                onAuthorPress={() => router.push(`/user/${leadPost.userId}`)}
+                onDelete={session?.user?.id === leadPost.userId && leadPost.type === "clip" ? () => handleDeletePost(leadPost) : null}
+                onEdit={session?.user?.id === leadPost.userId && leadPost.type === "clip" ? () => handleEditPost(leadPost) : null}
                 onGift={session?.user?.id && session.user.id !== leadPost.userId ? () => setGiftPost(leadPost) : null}
                 onOpenComments={() => setSelectedPostId(leadPost.id)}
-                onPress={() => router.push(`/game/${leadPost.gameId}`)}
+                onPress={() => router.push(`/post/${leadPost.id}`)}
                 onReact={(reactionType) => handleReact(leadPost.id, reactionType)}
                 post={leadPost}
               />
@@ -173,10 +204,14 @@ export default function AllScreen() {
                 {nextPosts.map((post) => (
                   <PostCard
                     key={post.id}
+                    isDeleting={deletingPostId === post.id}
                     isReacting={reactingPostId === post.id}
+                    onAuthorPress={() => router.push(`/user/${post.userId}`)}
+                    onDelete={session?.user?.id === post.userId && post.type === "clip" ? () => handleDeletePost(post) : null}
+                    onEdit={session?.user?.id === post.userId && post.type === "clip" ? () => handleEditPost(post) : null}
                     onGift={session?.user?.id && session.user.id !== post.userId ? () => setGiftPost(post) : null}
                     onOpenComments={() => setSelectedPostId(post.id)}
-                    onPress={() => router.push(`/game/${post.gameId}`)}
+                    onPress={() => router.push(`/post/${post.id}`)}
                     onReact={(reactionType) => handleReact(post.id, reactionType)}
                     post={post}
                   />

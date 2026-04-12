@@ -7,6 +7,7 @@ import {
   getAuthenticatedUser,
   getAvailableCoins,
   getRequestIpHash,
+  insertNotification,
   jsonResponse,
   readJsonBody,
   recordIntegrityEvent,
@@ -125,6 +126,20 @@ Deno.serve(async (request) => {
           },
         });
       }
+
+      await insertNotification(adminClient, {
+        userId: toUserId,
+        actorUserId: user.id,
+        kind: "coin_gift_received",
+        title: "You received coins",
+        body: `${amount} coins${note ? ` • ${note}` : ""}`,
+        entityType: "coin_gift",
+        entityId: giftId,
+        metadata: {
+          amount,
+          isAnonymous: Boolean(body.isAnonymous),
+        },
+      });
 
       return jsonResponse({ success: true });
     }

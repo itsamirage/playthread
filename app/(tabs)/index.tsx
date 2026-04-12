@@ -10,7 +10,7 @@ import { sendCoinGift } from "../../lib/admin";
 import { useAuth } from "../../lib/auth";
 import { useFollows } from "../../lib/follows";
 import { describeIntegrityError } from "../../lib/integrity";
-import { togglePostReaction, useFeedPosts } from "../../lib/posts";
+import { deletePost, togglePostReaction, useFeedPosts } from "../../lib/posts";
 import { theme } from "../../lib/theme";
 
 export default function HomeScreen() {
@@ -23,6 +23,7 @@ export default function HomeScreen() {
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [giftPost, setGiftPost] = useState(null);
   const [isSendingGift, setIsSendingGift] = useState(false);
+  const [deletingPostId, setDeletingPostId] = useState(null);
   const feedPosts = posts;
   const newPostCount = Math.min(posts.length, 4);
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
@@ -71,6 +72,32 @@ export default function HomeScreen() {
     } finally {
       setIsSendingGift(false);
     }
+  };
+
+  const handleEditPost = (post) => {
+    router.push({ pathname: "/create-post", params: { gameId: String(post.gameId), postId: post.id } });
+  };
+
+  const handleDeletePost = (post) => {
+    Alert.alert("Delete clip", "This will remove the clip post from your feed.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setDeletingPostId(post.id);
+            await deletePost({ postId: post.id });
+            await reload();
+          } catch (nextError) {
+            const errorCopy = describeIntegrityError(nextError);
+            Alert.alert(errorCopy.title, errorCopy.detail);
+          } finally {
+            setDeletingPostId(null);
+          }
+        },
+      },
+    ]);
   };
 
   useFocusEffect(
@@ -129,12 +156,16 @@ export default function HomeScreen() {
             <PostCard
               key={post.id}
               concealSpoilers={Boolean(post.spoiler) && !shouldShowSpoilersByDefault(post.gameId)}
+              isDeleting={deletingPostId === post.id}
               isReacting={reactingPostId === post.id}
+              onAuthorPress={() => router.push(`/user/${post.userId}`)}
+              onDelete={session?.user?.id === post.userId && post.type === "clip" ? () => handleDeletePost(post) : null}
+              onEdit={session?.user?.id === post.userId && post.type === "clip" ? () => handleEditPost(post) : null}
               onGift={session?.user?.id && session.user.id !== post.userId ? () => setGiftPost(post) : null}
               onOpenComments={() => setSelectedPostId(post.id)}
               onReact={(reactionType) => handleReact(post.id, reactionType)}
               post={post}
-              onPress={() => router.push(`/game/${post.gameId}`)}
+              onPress={() => router.push(`/post/${post.id}`)}
             />
           ))}
         </View>

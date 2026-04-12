@@ -39,6 +39,7 @@ import {
 } from "../../lib/platformAccounts";
 import { useAuth } from "../../lib/auth";
 import { saveProfileIdentity, saveProfileTitle, useCurrentProfile } from "../../lib/profile";
+import { useNotifications } from "../../lib/notifications";
 import {
   saveProfileShowcase,
   useProfileShowcase,
@@ -235,6 +236,7 @@ export default function ProfileScreen() {
   const heroBannerColors =
     BANNER_STYLES[profile?.selected_banner_style ?? "ember"] ?? BANNER_STYLES.ember;
   const canOpenAdmin = isStaffRole(profile?.account_role);
+  const { unreadCount } = useNotifications(12);
   const selectedTitle = getProfileTitleOption(profile?.selected_title_key ?? "none");
   const steamAccount = accountsByProvider.get("steam");
   const verifiedSteamLink = steamAccount?.metadata?.link_method === "openid";
@@ -1403,6 +1405,17 @@ export default function ProfileScreen() {
       </SectionCard>
 
       <SectionCard title="Account actions" eyebrow="Settings">
+        <Pressable
+          onPress={() => router.push("/notifications")}
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            pressed ? styles.buttonPressed : null,
+          ]}
+        >
+          <Text style={styles.secondaryButtonText}>
+            Open notifications{unreadCount > 0 ? ` (${unreadCount})` : ""}
+          </Text>
+        </Pressable>
         {canOpenAdmin ? (
           <Pressable
             onPress={() => router.push("/admin")}

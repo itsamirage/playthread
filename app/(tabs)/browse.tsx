@@ -12,10 +12,13 @@ import {
 import { useRouter } from "expo-router";
 
 import GameCard from "../../components/GameCard";
+import PostCard from "../../components/PostCard";
 import SectionCard from "../../components/SectionCard";
 import { useFollows } from "../../lib/follows";
 import { useBrowseGames } from "../../lib/games";
+import { usePostSearch } from "../../lib/posts";
 import { theme } from "../../lib/theme";
+import { useCreatorSearch } from "../../lib/userSocial";
 
 export default function BrowseScreen() {
   const router = useRouter();
@@ -27,6 +30,8 @@ export default function BrowseScreen() {
     query,
     selectedGenre,
   });
+  const { results: creators, isLoading: creatorsLoading } = useCreatorSearch(query);
+  const { posts: postResults, isLoading: postsLoading } = usePostSearch(query);
   const cleanQuery = query.trim().toLowerCase();
   const hasActiveFilters = cleanQuery.length > 0 || selectedGenre !== "All";
 
@@ -138,6 +143,52 @@ export default function BrowseScreen() {
         </View>
         <Text style={styles.resultsCount}>{filteredGames.length} games</Text>
       </View>
+
+      {cleanQuery.length >= 2 ? (
+        <>
+          <SectionCard title="Creators" eyebrow="People">
+            {creatorsLoading ? (
+              <ActivityIndicator color={theme.colors.accent} />
+            ) : creators.length > 0 ? (
+              <View style={styles.creatorList}>
+                {creators.map((creator) => (
+                  <Pressable
+                    key={creator.id}
+                    onPress={() => router.push(`/user/${creator.id}`)}
+                    style={styles.creatorCard}
+                  >
+                    <Text style={styles.creatorName}>{creator.displayName}</Text>
+                    <Text style={styles.creatorMeta}>@{creator.username}</Text>
+                    {creator.bio ? <Text style={styles.creatorBio}>{creator.bio}</Text> : null}
+                  </Pressable>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.emptyText}>No creators match that search yet.</Text>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Posts" eyebrow="Threads">
+            {postsLoading ? (
+              <ActivityIndicator color={theme.colors.accent} />
+            ) : postResults.length > 0 ? (
+              <View style={styles.resultsList}>
+                {postResults.map((post) => (
+                  <PostCard
+                    key={post.id}
+                    onAuthorPress={() => router.push(`/user/${post.userId}`)}
+                    onOpenComments={() => router.push(`/post/${post.id}`)}
+                    onPress={() => router.push(`/post/${post.id}`)}
+                    post={post}
+                  />
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.emptyText}>No posts match that search yet.</Text>
+            )}
+          </SectionCard>
+        </>
+      ) : null}
 
       <View style={styles.resultsList}>
         {isLoading ? (
@@ -285,6 +336,31 @@ const styles = StyleSheet.create({
   },
   resultsList: {
     gap: theme.spacing.md,
+  },
+  creatorList: {
+    gap: theme.spacing.md,
+  },
+  creatorCard: {
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    padding: theme.spacing.md,
+  },
+  creatorName: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.md,
+    fontWeight: theme.fontWeights.bold,
+  },
+  creatorMeta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.sm,
+  },
+  creatorBio: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: 20,
   },
   loadingState: {
     alignItems: "center",

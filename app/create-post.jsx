@@ -23,7 +23,7 @@ import { useFollows } from "../lib/follows";
 import { useGameDetail } from "../lib/games";
 import { describeIntegrityError } from "../lib/integrity";
 import { pickPostImage } from "../lib/postMedia";
-import { createPost } from "../lib/posts";
+import { createPost, updatePost, useEditablePost } from "../lib/posts";
 import { theme } from "../lib/theme";
 
 const postTypes = ["discussion", "review", "guide", "tip", "clip"];
@@ -57,7 +57,12 @@ export default function CreatePostScreen() {
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef(null);
   const initialGameId = Number(params.gameId);
+  const editPostId = typeof params.postId === "string" ? params.postId : null;
   const { game: routeGame } = useGameDetail(initialGameId);
+  const { post: editablePost, isLoading: editablePostLoading } = useEditablePost(
+    editPostId,
+    Boolean(editPostId),
+  );
   const [selectedGameId, setSelectedGameId] = useState(
     !Number.isNaN(initialGameId) && initialGameId > 0 ? initialGameId : followedGames[0]?.id ?? null
   );
@@ -73,6 +78,8 @@ export default function CreatePostScreen() {
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [footerHeight, setFooterHeight] = useState(0);
+  const [hasLoadedEditValues, setHasLoadedEditValues] = useState(false);
+  const isEditing = Boolean(editPostId);
 
   useEffect(() => {
     if (!Number.isNaN(initialGameId) && initialGameId > 0) {
@@ -84,6 +91,20 @@ export default function CreatePostScreen() {
       setSelectedGameId(followedGames[0].id);
     }
   }, [followedGames, initialGameId, selectedGameId]);
+
+  useEffect(() => {
+    if (!isEditing || !editablePost || hasLoadedEditValues) {
+      return;
+    }
+
+    setSelectedGameId(editablePost.gameId);
+    setPostType(editablePost.type);
+    setTitle(editablePost.title === "Untitled post" ? "" : editablePost.title);
+    setBody(editablePost.body ?? "");
+    setIsSpoiler(Boolean(editablePost.spoiler));
+    setSpoilerTag(editablePost.spoilerTag ?? "");
+    setHasLoadedEditValues(true);
+  }, [editablePost, hasLoadedEditValues, isEditing]);
 
   useEffect(() => {
     const handleShow = (event) => {
@@ -167,20 +188,28 @@ export default function CreatePostScreen() {
     try {
       setIsSubmitting(true);
 
-      const { error, moderation } = await createPost({
-        userId: session.user.id,
-        gameId: selectedGame.id,
-        gameTitle: selectedGame.title,
-        gameCoverUrl: selectedGame.coverUrl,
-        type: postType,
-        title,
-        body,
-        rating: postType === "review" ? Number(rating) : null,
-        spoiler: isSpoiler,
-        spoilerTag,
-        imageAsset: selectedImage,
-        clipAsset: selectedClip,
-      });
+      const { error, moderation } = isEditing
+        ? await updatePost({
+            postId: editPostId,
+            title,
+            body,
+            spoiler: isSpoiler,
+            spoilerTag,
+          })
+        : await createPost({
+            userId: session.user.id,
+            gameId: selectedGame.id,
+            gameTitle: selectedGame.title,
+            gameCoverUrl: selectedGame.coverUrl,
+            type: postType,
+            title,
+            body,
+            rating: postType === "review" ? Number(rating) : null,
+            spoiler: isSpoiler,
+            spoilerTag,
+            imageAsset: selectedImage,
+            clipAsset: selectedClip,
+          });
 
       if (error) {
         const errorCopy = describeIntegrityError(error);
@@ -195,7 +224,7 @@ export default function CreatePostScreen() {
         );
       }
 
-      router.replace("/(tabs)");
+      router.replace(`/game/${selectedGame.id}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -233,6 +262,15 @@ export default function CreatePostScreen() {
     }
   };
 
+  if (isEditing && editablePostLoading && !hasLoadedEditValues) {
+    return (
+      <View style={[styles.screen, styles.loadingCenter]}>
+        <ActivityIndicator color={theme.colors.accent} />
+        <Text style={styles.helperText}>Loading clip details...</Text>
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -253,17 +291,23 @@ export default function CreatePostScreen() {
             },
           ]}
           scrollIndicatorInsets={{ bottom: scrollBottomPadding }}
-        >
-          <View style={styles.hero}>
-            <Text style={styles.eyebrow}>PlayThread</Text>
-            <Text style={styles.title}>Create post</Text>
-            <Text style={styles.subtitle}>
-              Start the first real thread for one of the games you follow.
-            </Text>
-          </View>
+          >
+            <View style={styles.hero}>
+              <Text style={styles.eyebrow}>PlayThread</Text>
+              <Text style={styles.title}>{isEditing ? "Edit clip" : "Create post"}</Text>
+              <Text style={styles.subtitle}>
+                {isEditing
+                  ? "Update your clip caption and spoiler settings."
+                  : "Start the first real thread for one of the games you follow."}
+              </Text>
+            </View>
 
           <SectionCard title="Game" eyebrow="Choose a title">
-            {selectableGames.length > 0 ? (
+            {isEditing ? (
+              <Text style={styles.helperText}>
+                This clip stays attached to {selectedGame?.title ?? editablePost?.gameTitle ?? "its current game"}.
+              </Text>
+            ) : selectableGames.length > 0 ? (
               <View style={styles.chipWrap}>
                 {selectableGames.map((game) => {
                   const isActive = game.id === selectedGameId;
@@ -297,9 +341,14 @@ export default function CreatePostScreen() {
 
                 return (
                   <Pressable
+                    disabled={isEditing}
                     key={type}
                     onPress={() => setPostType(type)}
-                    style={[styles.typeButton, isActive ? styles.typeButtonActive : null]}
+                    style={[
+                      styles.typeButton,
+                      isActive ? styles.typeButtonActive : null,
+                      isEditing ? styles.typeButtonDisabled : null,
+                    ]}
                   >
                     <Text
                       style={[styles.typeButtonText, isActive ? styles.typeButtonTextActive : null]}
@@ -402,11 +451,24 @@ export default function CreatePostScreen() {
 
           <SectionCard title={postType === "clip" ? "Clip" : "Image"} eyebrow="Optional media">
             <Text style={styles.helperText}>
-              {postType === "clip"
+              {isEditing
+                ? "Clip media replacement is disabled for now. Edit the caption or delete and re-upload if you need a different video."
+                : postType === "clip"
                 ? "Attach a video clip up to 200 MB. Mux will process it after upload, so playback may appear a moment later."
                 : "Attach a JPG, PNG, WebP, or GIF up to 5 MB."}
             </Text>
-            {postType === "clip" ? (
+            {isEditing && postType === "clip" ? (
+              <View style={styles.clipPreviewCard}>
+                <Text style={styles.clipPreviewTitle}>{editablePost?.title || "Current clip"}</Text>
+                <Text style={styles.helperText}>
+                  {editablePost?.videoStatus === "ready"
+                    ? "Current clip is ready to stream."
+                    : editablePost?.videoStatus === "errored"
+                      ? "This clip failed to process."
+                      : "Current clip is still processing."}
+                </Text>
+              </View>
+            ) : postType === "clip" ? (
               selectedClip?.uri ? (
                 <View style={styles.imageCard}>
                   <View style={styles.clipPreviewCard}>
@@ -439,6 +501,7 @@ export default function CreatePostScreen() {
                 </View>
               ) : (
                 <Pressable
+                  disabled={isEditing}
                   onPress={handlePickClip}
                   style={({ pressed }) => [
                     styles.mediaButton,
@@ -533,7 +596,7 @@ export default function CreatePostScreen() {
             {isSubmitting ? (
               <ActivityIndicator color={theme.colors.background} />
             ) : (
-              <Text style={styles.primaryButtonText}>Publish post</Text>
+              <Text style={styles.primaryButtonText}>{isEditing ? "Save changes" : "Publish post"}</Text>
             )}
           </Pressable>
         </View>
@@ -620,6 +683,9 @@ const styles = StyleSheet.create({
   typeButtonActive: {
     backgroundColor: theme.colors.accent,
     borderColor: theme.colors.accent,
+  },
+  typeButtonDisabled: {
+    opacity: 0.7,
   },
   typeButtonText: {
     color: theme.colors.textPrimary,
@@ -778,5 +844,11 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6,
+  },
+  loadingCenter: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.layout.screenPadding,
   },
 });

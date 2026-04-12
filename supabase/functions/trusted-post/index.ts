@@ -7,11 +7,13 @@ import {
   getAdminClient,
   getAuthenticatedUser,
   getRequestIpHash,
+  insertNotification,
   jsonResponse,
   readJsonBody,
   recordIntegrityEvent,
   requireProfile,
 } from "../_shared/trusted.ts";
+import { deleteMuxAsset } from "../_shared/mux.ts";
 
 const REACTION_MODE_BY_POST_TYPE: Record<string, string> = {
   guide: "utility",
@@ -30,6 +32,8 @@ const DEFAULT_REACTION_BY_MODE: Record<string, string> = {
 };
 
 type RequestBody = {
+  action?: "create" | "update" | "delete";
+  postId?: string;
   gameId?: number;
   gameTitle?: string;
   gameCoverUrl?: string | null;
@@ -43,6 +47,10 @@ type RequestBody = {
   spoiler?: boolean;
   spoilerTag?: string | null;
 };
+
+function canManagePost(postUserId: string | null, actorUserId: string, accountRole: string | null) {
+  return postUserId === actorUserId || ["admin", "owner"].includes(accountRole ?? "");
+}
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -60,6 +68,143 @@ Deno.serve(async (request) => {
     assertActiveProfile(profile);
 
     const body = await readJsonBody<RequestBody>(request);
+    const action = String(body.action ?? "create").trim();
+
+    if (action === "delete") {
+      const postId = String(body.postId ?? "").trim();
+
+      if (!postId) {
+        throw new Error("Post id is required.");
+      }
+
+      const { data: postRow, error: postError } = await adminClient
+        .from("posts")
+        .select("id, user_id, type, video_asset_id, igdb_game_id, game_title")
+        .eq("id", postId)
+        .maybeSingle();
+
+      if (postError) {
+        throw new Error(postError.message);
+      }
+
+      if (!postRow) {
+        throw new Error("That post no longer exists.");
+      }
+
+      if (!canManagePost(postRow.user_id, user.id, profile.account_role)) {
+        throw new Error("You cannot delete that post.");
+      }
+
+      const { error: deleteError } = await adminClient.from("posts").delete().eq("id", postId);
+
+      if (deleteError) {
+        throw new Error(deleteError.message);
+      }
+
+      if (postRow.type === "clip" && postRow.video_asset_id) {
+        try {
+          await deleteMuxAsset(postRow.video_asset_id);
+        } catch (muxError) {
+          console.warn("Could not delete Mux asset for removed post", muxError);
+        }
+      }
+
+      return jsonResponse({ success: true, deletedPostId: postId });
+    }
+
+    if (action === "update") {
+      const postId = String(body.postId ?? "").trim();
+      const nextTitle = String(body.title ?? "").trim() || null;
+      const nextBody = String(body.body ?? "").trim();
+      const nextSpoiler = Boolean(body.spoiler);
+      const nextSpoilerTag = nextSpoiler ? String(body.spoilerTag ?? "").trim() || null : null;
+
+      if (!postId) {
+        throw new Error("Post id is required.");
+      }
+
+      const { data: postRow, error: postError } = await adminClient
+        .from("posts")
+        .select("id, user_id, type, igdb_game_id, game_title")
+        .eq("id", postId)
+        .maybeSingle();
+
+      if (postError) {
+        throw new Error(postError.message);
+      }
+
+      if (!postRow) {
+        throw new Error("That post no longer exists.");
+      }
+
+      if (!canManagePost(postRow.user_id, user.id, profile.account_role)) {
+        throw new Error("You cannot edit that post.");
+      }
+
+      if (!nextBody && postRow.type !== "clip") {
+        throw new Error("Post body is required.");
+      }
+
+      const moderation = evaluateModerationText(`${nextTitle ?? ""}\n${nextBody}`);
+      const updatePayload = {
+        title: nextTitle,
+        body: nextBody,
+        spoiler: nextSpoiler,
+        spoiler_tag: nextSpoilerTag,
+        moderation_state: moderation.moderationState,
+        moderation_labels: moderation.labels,
+      };
+
+      const { error: updateError } = await adminClient
+        .from("posts")
+        .update(updatePayload)
+        .eq("id", postId);
+
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+
+      if (moderation.moderationState === "warning" && moderation.category && moderation.reason) {
+        const ipHash = await getRequestIpHash(request);
+
+        await createModerationFlag(adminClient, {
+          contentType: "post",
+          contentId: postId,
+          userId: postRow.user_id,
+          category: moderation.category,
+          labels: moderation.labels,
+          reason: moderation.reason,
+          contentExcerpt: `${nextTitle ?? ""} ${nextBody}`.trim(),
+          igdbGameId: postRow.igdb_game_id ?? null,
+          gameTitle: postRow.game_title ?? null,
+          evidence: {
+            request_ip_hash: ipHash,
+            post_type: postRow.type,
+          },
+        });
+
+        await insertNotification(adminClient, {
+          userId: postRow.user_id,
+          actorUserId: user.id,
+          kind: "moderation_warning",
+          title: "Your post was flagged for review",
+          body: moderation.reason,
+          entityType: "post",
+          entityId: postId,
+          metadata: {
+            labels: moderation.labels,
+            postType: postRow.type,
+          },
+        });
+      }
+
+      return jsonResponse({
+        success: true,
+        postId,
+        moderation,
+      });
+    }
+
     const postType = String(body.type ?? "").trim();
     const textBody = String(body.body ?? "").trim();
     const videoUploadId = String(body.videoUploadId ?? "").trim() || null;
@@ -158,8 +303,56 @@ Deno.serve(async (request) => {
         gameTitle,
         evidence: {
           request_ip_hash: ipHash,
+          post_type: postType,
+          video_upload_id: videoUploadId,
+          video_status: postType === "clip" ? "uploading" : "none",
         },
       });
+
+      await insertNotification(adminClient, {
+        userId: user.id,
+        actorUserId: user.id,
+        kind: "moderation_warning",
+        title: "Your post was flagged for review",
+        body: moderation.reason,
+        entityType: "post",
+        entityId: post.id,
+        metadata: {
+          labels: moderation.labels,
+          postType,
+        },
+      });
+    }
+
+    const { data: followerRows, error: followerError } = await adminClient
+      .from("follows")
+      .select("user_id")
+      .eq("igdb_game_id", gameId);
+
+    if (!followerError) {
+      const recipients = [...new Set((followerRows ?? []).map((row) => row.user_id).filter(Boolean))]
+        .filter((recipientId) => recipientId !== user.id);
+
+      if (recipients.length > 0) {
+        await Promise.all(
+          recipients.map((recipientId) =>
+            insertNotification(adminClient, {
+              userId: recipientId,
+              actorUserId: user.id,
+              kind: "followed_game_post",
+              title: `${gameTitle} has a new post`,
+              body: String(body.title ?? "").trim() || `${profile.username ?? "A player"} posted in a game you follow.`,
+              entityType: "post",
+              entityId: post.id,
+              metadata: {
+                gameId,
+                gameTitle,
+                postType,
+              },
+            }),
+          ),
+        );
+      }
     }
 
     if (requestIpHash) {
