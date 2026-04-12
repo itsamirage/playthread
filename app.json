@@ -31,10 +31,18 @@
     },
     "plugins": [
       "expo-router",
-      "expo-video"
+      "expo-video",
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "abdbb665-1d8f-4924-9174-863608ab17b5"
+      }
+    },
+    "owner": "itsamirage"
   }
 }

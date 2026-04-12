@@ -359,19 +359,92 @@ export async function insertNotification(
     metadata?: Record<string, unknown>;
   },
 ) {
-  const { error } = await adminClient.from("notifications").insert({
-    user_id: userId,
-    actor_user_id: actorUserId,
-    kind,
-    title,
-    body,
-    entity_type: entityType,
-    entity_id: entityId,
-    metadata_json: metadata,
-  });
+  const { data, error } = await adminClient
+    .from("notifications")
+    .insert({
+      user_id: userId,
+      actor_user_id: actorUserId,
+      kind,
+      title,
+      body,
+      entity_type: entityType,
+      entity_id: entityId,
+      metadata_json: metadata,
+    })
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     console.warn("Could not create notification", error);
+    return;
+  }
+
+  const { data: tokenRows, error: tokenError } = await adminClient
+    .from("user_push_tokens")
+    .select("id, expo_push_token")
+    .eq("user_id", userId)
+    .eq("is_active", true);
+
+  if (tokenError) {
+    console.warn("Could not load push tokens", tokenError);
+    return;
+  }
+
+  const expoPushTokens = (tokenRows ?? [])
+    .map((row) => String(row.expo_push_token ?? "").trim())
+    .filter(Boolean);
+
+  if (expoPushTokens.length === 0) {
+    return;
+  }
+
+  const response = await fetch("https://exp.host/--/api/v2/push/send", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(
+      expoPushTokens.map((token) => ({
+        to: token,
+        sound: "default",
+        title,
+        body: body ?? undefined,
+        data: {
+          notificationId: data?.id ?? null,
+          entityType,
+          entityId,
+          kind,
+          ...metadata,
+        },
+      })),
+    ),
+  });
+
+  if (!response.ok) {
+    console.warn("Could not send Expo push notifications", await response.text());
+    return;
+  }
+
+  const payload = await response.json().catch(() => null);
+  const pushResults = Array.isArray(payload?.data) ? payload.data : [];
+
+  for (let index = 0; index < pushResults.length; index += 1) {
+    const result = pushResults[index];
+    const tokenRow = tokenRows?.[index];
+
+    if (!tokenRow) {
+      continue;
+    }
+
+    if (result?.status === "error" && result?.details?.error === "DeviceNotRegistered") {
+      await adminClient
+        .from("user_push_tokens")
+        .update({
+          is_active: false,
+        })
+        .eq("id", tokenRow.id);
+    }
   }
 }
 

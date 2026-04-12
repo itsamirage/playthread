@@ -6,6 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
+import NotificationRuntimeBridge from '@/components/NotificationRuntimeBridge';
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '@/lib/auth';
 import { FollowsProvider } from '@/lib/follows';
@@ -53,6 +54,7 @@ function RootLayoutNav() {
   return (
     <AuthProvider>
       <FollowsProvider>
+        <NotificationRuntimeBridge />
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
           <Stack>
             <Stack.Screen name="index" options={{ headerShown: false }} />

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Alert,
@@ -15,15 +15,19 @@ import { loginUser } from "../../lib/auth";
 import { theme } from "../../lib/theme";
 
 export default function LoginScreen() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const handleLogin = async () => {
     const cleanEmail = email.trim().toLowerCase();
+    setErrorMessage("");
 
     if (!cleanEmail || !password) {
       Alert.alert("Missing info", "Enter your email and password.");
+      setErrorMessage("Enter your email and password.");
       return;
     }
 
@@ -37,10 +41,14 @@ export default function LoginScreen() {
 
       if (error) {
         Alert.alert("Login failed", error.message);
+        setErrorMessage(error.message);
         return;
       }
+
+      router.replace("/");
     } catch (error) {
       Alert.alert("Error", "Something went wrong while logging in.");
+      setErrorMessage(error instanceof Error ? error.message : "Something went wrong while logging in.");
     } finally {
       setLoading(false);
     }
@@ -98,6 +106,8 @@ export default function LoginScreen() {
               <Text style={styles.buttonText}>Log in</Text>
             )}
           </Pressable>
+
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
           <Text style={styles.footerText}>
             Need an account?{" "}
@@ -184,6 +194,12 @@ const styles = StyleSheet.create({
   footerText: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSizes.sm,
+    textAlign: "center",
+  },
+  errorText: {
+    color: "#ff7b7b",
+    fontSize: theme.fontSizes.sm,
+    lineHeight: 20,
     textAlign: "center",
   },
   footerLink: {

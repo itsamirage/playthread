@@ -27,3 +27,6 @@ verify_jwt = false
 
 [functions.mux-webhook]
 verify_jwt = false
+
+[functions.trusted-follow]
+verify_jwt = false
