@@ -1,6 +1,7 @@
 import { BlurView } from "expo-blur";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
+import ClipPlayer from "./ClipPlayer";
 import { formatModerationWarning } from "../lib/moderation";
 import { getProfileNameColor } from "../lib/profileAppearance";
 import { getProfileTitleOption } from "../lib/titles";
@@ -102,6 +103,14 @@ export default function PostCard({
 
         {post.imageUrl ? (
           <Image source={{ uri: post.imageUrl }} style={styles.postImage} />
+        ) : null}
+
+        {post.type === "clip" ? (
+          <ClipPlayer
+            playbackId={post.videoPlaybackId}
+            status={post.videoStatus}
+            thumbnailUrl={post.videoThumbnailUrl}
+          />
         ) : null}
 
         {post.moderationState === "warning" ? (

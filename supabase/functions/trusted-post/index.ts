@@ -37,6 +37,8 @@ type RequestBody = {
   title?: string | null;
   body?: string;
   imageUrl?: string | null;
+  videoUploadId?: string | null;
+  videoUploadToken?: string | null;
   rating?: number | null;
   spoiler?: boolean;
   spoilerTag?: string | null;
@@ -60,6 +62,8 @@ Deno.serve(async (request) => {
     const body = await readJsonBody<RequestBody>(request);
     const postType = String(body.type ?? "").trim();
     const textBody = String(body.body ?? "").trim();
+    const videoUploadId = String(body.videoUploadId ?? "").trim() || null;
+    const videoUploadToken = String(body.videoUploadToken ?? "").trim() || null;
     const gameId = Number(body.gameId);
     const gameTitle = String(body.gameTitle ?? "").trim();
 
@@ -71,8 +75,12 @@ Deno.serve(async (request) => {
       throw new Error("Game title is required.");
     }
 
-    if (!textBody) {
+    if (!textBody && postType !== "clip") {
       throw new Error("Post body is required.");
+    }
+
+    if (postType === "clip" && !videoUploadId && !videoUploadToken) {
+      throw new Error("Clip posts require an uploaded video.");
     }
 
     const reactionMode = REACTION_MODE_BY_POST_TYPE[postType] ?? "sentiment";
@@ -100,6 +108,10 @@ Deno.serve(async (request) => {
         title: String(body.title ?? "").trim() || null,
         body: textBody,
         image_url: String(body.imageUrl ?? "").trim() || null,
+        video_provider: postType === "clip" ? "mux" : null,
+        video_upload_id: postType === "clip" ? videoUploadId : null,
+        video_upload_token: postType === "clip" ? videoUploadToken : null,
+        video_status: postType === "clip" ? "uploading" : "none",
         spoiler: Boolean(body.spoiler),
         spoiler_tag: body.spoiler ? String(body.spoilerTag ?? "").trim() || null : null,
         rating: body.rating != null ? Number(body.rating) / 2 : null,
@@ -160,6 +172,7 @@ Deno.serve(async (request) => {
         metadata_json: {
           game_id: gameId,
           post_type: postType,
+          video_upload_id: videoUploadId,
         },
       });
     }

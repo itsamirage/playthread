@@ -12,3 +12,9 @@ verify_jwt = false
 
 [functions.trusted-coin]
 verify_jwt = false
+
+[functions.mux-video]
+verify_jwt = false
+
+[functions.mux-webhook]
+verify_jwt = false

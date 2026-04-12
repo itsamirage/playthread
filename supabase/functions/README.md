@@ -26,3 +26,20 @@ Notes:
 - Redirect allowlisting supports exact URLs and `*` wildcards.
 - Default development-safe redirects remain allowed for `playthread://*`, `exp://*`, `exps://*`, and localhost loopback URLs.
 - In production, prefer explicit hosted redirect URLs instead of relying only on wildcard defaults.
+
+Deploy the Mux clip-upload functions with the Supabase CLI:
+
+1. Create a Mux account and generate a token ID + token secret with video write access.
+2. Set function secrets:
+   `supabase secrets set MUX_TOKEN_ID=your-token-id MUX_TOKEN_SECRET=your-token-secret MUX_WEBHOOK_TOKEN=your-random-webhook-token`
+3. Deploy the functions:
+   `supabase functions deploy mux-video`
+   `supabase functions deploy mux-webhook`
+4. In Mux webhooks, add this endpoint:
+   `https://zippqumynxivnhhmvblc.supabase.co/functions/v1/mux-webhook?token=your-random-webhook-token`
+5. Subscribe the webhook to:
+   - `video.asset.created`
+   - `video.asset.ready`
+   - `video.asset.errored`
+
+The app calls `mux-video` through an authenticated edge-function request, uploads the raw clip directly to Mux using the returned upload URL, and waits for the webhook to attach playback metadata to the related `clip` post.

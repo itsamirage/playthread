@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import SectionCard from "../components/SectionCard";
 import { useAuth } from "../lib/auth";
+import { pickClipVideo } from "../lib/clipMedia";
 import { useFollows } from "../lib/follows";
 import { useGameDetail } from "../lib/games";
 import { describeIntegrityError } from "../lib/integrity";
@@ -25,7 +26,7 @@ import { pickPostImage } from "../lib/postMedia";
 import { createPost } from "../lib/posts";
 import { theme } from "../lib/theme";
 
-const postTypes = ["discussion", "review", "guide", "tip"];
+const postTypes = ["discussion", "review", "guide", "tip", "clip"];
 const ratingOptions = [
   "1",
   "1.5",
@@ -67,6 +68,7 @@ export default function CreatePostScreen() {
   const [isSpoiler, setIsSpoiler] = useState(false);
   const [spoilerTag, setSpoilerTag] = useState("");
   const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedClip, setSelectedClip] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -157,7 +159,7 @@ export default function CreatePostScreen() {
       return;
     }
 
-    if (!body.trim()) {
+    if (!body.trim() && postType !== "clip") {
       Alert.alert("Write something", "Add some text before posting.");
       return;
     }
@@ -177,6 +179,7 @@ export default function CreatePostScreen() {
         spoiler: isSpoiler,
         spoilerTag,
         imageAsset: selectedImage,
+        clipAsset: selectedClip,
       });
 
       if (error) {
@@ -204,11 +207,28 @@ export default function CreatePostScreen() {
 
       if (asset) {
         setSelectedImage(asset);
+        setSelectedClip(null);
       }
     } catch (error) {
       Alert.alert(
         "Image not added",
         error instanceof Error ? error.message : "Could not pick that image.",
+      );
+    }
+  };
+
+  const handlePickClip = async () => {
+    try {
+      const asset = await pickClipVideo();
+
+      if (asset) {
+        setSelectedClip(asset);
+        setSelectedImage(null);
+      }
+    } catch (error) {
+      Alert.alert(
+        "Clip not added",
+        error instanceof Error ? error.message : "Could not pick that clip.",
       );
     }
   };
@@ -290,7 +310,9 @@ export default function CreatePostScreen() {
                           ? "Review"
                           : type === "guide"
                             ? "Guide"
-                            : "Tip"}
+                            : type === "tip"
+                              ? "Tip"
+                              : "Clip"}
                     </Text>
                   </Pressable>
                 );
@@ -371,13 +393,62 @@ export default function CreatePostScreen() {
                 Reviews use a single Respect reaction so disagreement does not bury honest opinions.
               </Text>
             ) : null}
+            {postType === "clip" ? (
+              <Text style={styles.helperText}>
+                Clip captions are optional. Upload a video and add context if you want it.
+              </Text>
+            ) : null}
           </SectionCard>
 
-          <SectionCard title="Image" eyebrow="Optional media">
+          <SectionCard title={postType === "clip" ? "Clip" : "Image"} eyebrow="Optional media">
             <Text style={styles.helperText}>
-              Attach a JPG, PNG, WebP, or GIF up to 5 MB. This first pass supports image uploads only.
+              {postType === "clip"
+                ? "Attach a video clip up to 200 MB. Mux will process it after upload, so playback may appear a moment later."
+                : "Attach a JPG, PNG, WebP, or GIF up to 5 MB."}
             </Text>
-            {selectedImage?.uri ? (
+            {postType === "clip" ? (
+              selectedClip?.uri ? (
+                <View style={styles.imageCard}>
+                  <View style={styles.clipPreviewCard}>
+                    <Text style={styles.clipPreviewTitle}>{selectedClip.fileName ?? "Selected clip"}</Text>
+                    <Text style={styles.helperText}>
+                      {selectedClip.duration ? `Duration: ${Math.max(1, Math.round(selectedClip.duration / 1000))} sec` : "Ready to upload"}
+                    </Text>
+                  </View>
+                  <View style={styles.imageActions}>
+                    <Pressable
+                      onPress={handlePickClip}
+                      style={({ pressed }) => [
+                        styles.mediaButton,
+                        pressed ? styles.buttonPressed : null,
+                      ]}
+                    >
+                      <Text style={styles.mediaButtonText}>Replace clip</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setSelectedClip(null)}
+                      style={({ pressed }) => [
+                        styles.mediaButton,
+                        styles.mediaButtonDanger,
+                        pressed ? styles.buttonPressed : null,
+                      ]}
+                    >
+                      <Text style={styles.mediaButtonDangerText}>Remove clip</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={handlePickClip}
+                  style={({ pressed }) => [
+                    styles.mediaButton,
+                    pressed ? styles.buttonPressed : null,
+                  ]}
+                >
+                  <Text style={styles.mediaButtonText}>Choose clip</Text>
+                </Pressable>
+              )
+            ) : selectedImage?.uri ? (
               <View style={styles.imageCard}>
                 <Image source={{ uri: selectedImage.uri }} style={styles.imagePreview} />
                 <View style={styles.imageActions}>
@@ -595,6 +666,19 @@ const styles = StyleSheet.create({
   imageActions: {
     flexDirection: "row",
     gap: theme.spacing.sm,
+  },
+  clipPreviewCard: {
+    gap: theme.spacing.xs,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    padding: theme.spacing.md,
+  },
+  clipPreviewTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.md,
+    fontWeight: theme.fontWeights.bold,
   },
   mediaButton: {
     alignSelf: "flex-start",
