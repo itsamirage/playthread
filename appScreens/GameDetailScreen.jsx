@@ -17,6 +17,7 @@ import PostCommentsSheet from "../components/PostCommentsSheet";
 import PlatformBadge from "../components/PlatformBadge";
 import SectionCard from "../components/SectionCard";
 import CoinGiftSheet from "../components/CoinGiftSheet";
+import NotificationInboxButton from "../components/NotificationInboxButton";
 import { sendCoinGift } from "../lib/admin";
 import { useAuth } from "../lib/auth";
 import {
@@ -213,6 +214,10 @@ export default function GameDetailScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <View style={styles.topBar}>
+        <View style={styles.topBarSpacer} />
+        <NotificationInboxButton />
+      </View>
       <View style={styles.heroCard}>
         {game.coverUrl ? (
           <Image source={{ uri: game.coverUrl }} style={styles.coverImage} />
@@ -510,6 +515,15 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
   },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: theme.spacing.xl,
+  },
+  topBarSpacer: {
+    flex: 1,
+  },
   heroCard: {
     flexDirection: "row",
     gap: theme.spacing.lg,
@@ -518,7 +532,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     borderWidth: theme.borders.width,
     padding: theme.spacing.lg,
-    marginTop: theme.spacing.xl,
   },
   cover: {
     width: 84,

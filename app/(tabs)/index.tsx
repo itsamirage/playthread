@@ -6,6 +6,7 @@ import PostCard from "../../components/PostCard";
 import PostCommentsSheet from "../../components/PostCommentsSheet";
 import SectionCard from "../../components/SectionCard";
 import CoinGiftSheet from "../../components/CoinGiftSheet";
+import NotificationInboxButton from "../../components/NotificationInboxButton";
 import { sendCoinGift } from "../../lib/admin";
 import { useAuth } from "../../lib/auth";
 import { useFollows } from "../../lib/follows";
@@ -109,12 +110,17 @@ export default function HomeScreen() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
-        <Text style={styles.eyebrow}>PlayThread</Text>
-        <Text style={styles.title}>Home</Text>
-        <Text style={styles.subtitle}>
-          Posts from the games you follow will land here first, with reviews,
-          screenshots, clips, and discussion threads.
-        </Text>
+        <View style={styles.heroTopRow}>
+          <View style={styles.heroTextBlock}>
+            <Text style={styles.eyebrow}>PlayThread</Text>
+            <Text style={styles.title}>Home</Text>
+            <Text style={styles.subtitle}>
+              Posts from the games you follow will land here first, with reviews,
+              screenshots, clips, and discussion threads.
+            </Text>
+          </View>
+          <NotificationInboxButton />
+        </View>
         <Pressable
           onPress={() => router.push("/create-post")}
           style={({ pressed }) => [
@@ -222,6 +228,16 @@ const styles = StyleSheet.create({
   hero: {
     gap: theme.spacing.sm,
     paddingTop: theme.spacing.xl,
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+  },
+  heroTextBlock: {
+    flex: 1,
+    gap: theme.spacing.xs,
   },
   heroButton: {
     alignSelf: "flex-start",

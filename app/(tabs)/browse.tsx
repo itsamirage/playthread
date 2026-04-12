@@ -12,6 +12,7 @@ import {
 import { useRouter } from "expo-router";
 
 import GameCard from "../../components/GameCard";
+import NotificationInboxButton from "../../components/NotificationInboxButton";
 import PostCard from "../../components/PostCard";
 import SectionCard from "../../components/SectionCard";
 import { useFollows } from "../../lib/follows";
@@ -59,12 +60,17 @@ export default function BrowseScreen() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
-        <Text style={styles.eyebrow}>PlayThread</Text>
-        <Text style={styles.title}>Browse games</Text>
-        <Text style={styles.subtitle}>
-          Search now hits live IGDB results, and follow buttons save to your
-          Supabase follows table.
-        </Text>
+        <View style={styles.heroTopRow}>
+          <View style={styles.heroTextBlock}>
+            <Text style={styles.eyebrow}>PlayThread</Text>
+            <Text style={styles.title}>Browse games</Text>
+            <Text style={styles.subtitle}>
+              Search now hits live IGDB results, and follow buttons save to your
+              Supabase follows table.
+            </Text>
+          </View>
+          <NotificationInboxButton />
+        </View>
       </View>
 
       <SectionCard title="Search" eyebrow="Discover">
@@ -232,6 +238,16 @@ const styles = StyleSheet.create({
   hero: {
     gap: theme.spacing.sm,
     paddingTop: theme.spacing.xl,
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+  },
+  heroTextBlock: {
+    flex: 1,
+    gap: theme.spacing.xs,
   },
   eyebrow: {
     color: theme.colors.accent,

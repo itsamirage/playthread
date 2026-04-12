@@ -6,6 +6,7 @@ import PostCard from "../../components/PostCard";
 import PostCommentsSheet from "../../components/PostCommentsSheet";
 import SectionCard from "../../components/SectionCard";
 import CoinGiftSheet from "../../components/CoinGiftSheet";
+import NotificationInboxButton from "../../components/NotificationInboxButton";
 import { MODERATION_PERIOD_OPTIONS } from "../../lib/admin";
 import { sendCoinGift } from "../../lib/admin";
 import { useAuth } from "../../lib/auth";
@@ -121,11 +122,16 @@ export default function AllScreen() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
-        <Text style={styles.eyebrow}>PlayThread</Text>
-        <Text style={styles.title}>All</Text>
-        <Text style={styles.subtitle}>
-          Top posts across every game, with time filters and a small-community boost so smaller fandoms still get exposure.
-        </Text>
+        <View style={styles.heroTopRow}>
+          <View style={styles.heroTextBlock}>
+            <Text style={styles.eyebrow}>PlayThread</Text>
+            <Text style={styles.title}>All</Text>
+            <Text style={styles.subtitle}>
+              Top posts across every game, with time filters and a small-community boost so smaller fandoms still get exposure.
+            </Text>
+          </View>
+          <NotificationInboxButton />
+        </View>
       </View>
 
       <SectionCard title="Ranking window" eyebrow="All games">
@@ -260,6 +266,16 @@ const styles = StyleSheet.create({
   hero: {
     gap: theme.spacing.sm,
     paddingTop: theme.spacing.xl,
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+  },
+  heroTextBlock: {
+    flex: 1,
+    gap: theme.spacing.xs,
   },
   eyebrow: {
     color: theme.colors.accent,

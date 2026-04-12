@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 
+import NotificationInboxButton from "../../components/NotificationInboxButton";
 import SectionCard from "../../components/SectionCard";
 import {
   formatAccountAge,
@@ -39,7 +40,6 @@ import {
 } from "../../lib/platformAccounts";
 import { useAuth } from "../../lib/auth";
 import { saveProfileIdentity, saveProfileTitle, useCurrentProfile } from "../../lib/profile";
-import { useNotifications } from "../../lib/notifications";
 import {
   saveProfileShowcase,
   useProfileShowcase,
@@ -236,7 +236,6 @@ export default function ProfileScreen() {
   const heroBannerColors =
     BANNER_STYLES[profile?.selected_banner_style ?? "ember"] ?? BANNER_STYLES.ember;
   const canOpenAdmin = isStaffRole(profile?.account_role);
-  const { unreadCount } = useNotifications(12);
   const selectedTitle = getProfileTitleOption(profile?.selected_title_key ?? "none");
   const steamAccount = accountsByProvider.get("steam");
   const verifiedSteamLink = steamAccount?.metadata?.link_method === "openid";
@@ -642,6 +641,10 @@ export default function ProfileScreen() {
           },
         ]}
       >
+        <View style={styles.heroTopRow}>
+          <View style={styles.heroTopSpacer} />
+          <NotificationInboxButton />
+        </View>
         <View style={styles.avatar}>
           {profile?.avatar_url ? (
             <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
@@ -1405,17 +1408,6 @@ export default function ProfileScreen() {
       </SectionCard>
 
       <SectionCard title="Account actions" eyebrow="Settings">
-        <Pressable
-          onPress={() => router.push("/notifications")}
-          style={({ pressed }) => [
-            styles.secondaryButton,
-            pressed ? styles.buttonPressed : null,
-          ]}
-        >
-          <Text style={styles.secondaryButtonText}>
-            Open notifications{unreadCount > 0 ? ` (${unreadCount})` : ""}
-          </Text>
-        </Pressable>
         {canOpenAdmin ? (
           <Pressable
             onPress={() => router.push("/admin")}
@@ -1524,6 +1516,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.xl,
     paddingBottom: theme.spacing.lg,
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+  heroTopSpacer: {
+    flex: 1,
   },
   avatar: {
     width: 72,
