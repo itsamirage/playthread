@@ -16,6 +16,12 @@ verify_jwt = false
 [functions.trusted-post]
 verify_jwt = false
 
+[functions.trusted-comment]
+verify_jwt = false
+
+[functions.trusted-comment-reaction]
+verify_jwt = false
+
 [functions.mux-video]
 verify_jwt = false
 
