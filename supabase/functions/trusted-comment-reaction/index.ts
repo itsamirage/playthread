@@ -15,6 +15,22 @@ type RequestBody = {
   reactionType?: string;
 };
 
+async function getCommentReactionCounts(adminClient: ReturnType<typeof getAdminClient>, commentId: string) {
+  const { count, error } = await adminClient
+    .from("comment_reactions")
+    .select("id", { count: "exact", head: true })
+    .eq("comment_id", commentId)
+    .eq("reaction_type", "like");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    like: count ?? 0,
+  };
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -74,7 +90,10 @@ Deno.serve(async (request) => {
         throw new Error(error.message);
       }
 
-      return jsonResponse({ viewerReaction: null });
+      return jsonResponse({
+        viewerReaction: null,
+        reactionCounts: await getCommentReactionCounts(adminClient, commentId),
+      });
     }
 
     const { requestIpHash } = await enforceIntegrityCheck({
@@ -101,7 +120,10 @@ Deno.serve(async (request) => {
         throw new Error(error.message);
       }
 
-      return jsonResponse({ viewerReaction: reactionType });
+      return jsonResponse({
+        viewerReaction: reactionType,
+        reactionCounts: await getCommentReactionCounts(adminClient, commentId),
+      });
     }
 
     const { error } = await adminClient.from("comment_reactions").insert({
@@ -129,7 +151,10 @@ Deno.serve(async (request) => {
       });
     }
 
-    return jsonResponse({ viewerReaction: reactionType });
+    return jsonResponse({
+      viewerReaction: reactionType,
+      reactionCounts: await getCommentReactionCounts(adminClient, commentId),
+    });
   } catch (error) {
     return jsonResponse(
       { error: error instanceof Error ? error.message : "Unknown function error." },

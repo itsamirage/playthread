@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -39,7 +39,14 @@ export default function PostCommentsThread({
   const [reactingCommentId, setReactingCommentId] = useState(null);
   const [giftingComment, setGiftingComment] = useState(null);
   const [isSendingGift, setIsSendingGift] = useState(false);
+  const [displayComments, setDisplayComments] = useState([]);
   const commentCount = post?.comments ?? comments.length;
+
+  useEffect(() => {
+    setDisplayComments(comments);
+  }, [comments]);
+
+  const visibleComments = useMemo(() => displayComments, [displayComments]);
 
   useEffect(() => {
     if (!post?.id) {
@@ -123,10 +130,34 @@ export default function PostCommentsThread({
 
     try {
       setReactingCommentId(commentId);
-      await toggleCommentReaction({
+      const result = await toggleCommentReaction({
         userId: session.user.id,
         commentId,
       });
+      setDisplayComments((currentComments) =>
+        currentComments.map((comment) => {
+          if (comment.id !== commentId) {
+            return comment;
+          }
+
+          const nextViewerReaction = result?.viewerReaction ?? null;
+          const currentLikeCount = comment.reactionCounts?.like ?? 0;
+          const nextLikeCount =
+            result?.reactionCounts?.like ??
+            (nextViewerReaction === "like"
+              ? currentLikeCount + (comment.viewerReaction === "like" ? 0 : 1)
+              : Math.max(0, currentLikeCount - (comment.viewerReaction === "like" ? 1 : 0)));
+
+          return {
+            ...comment,
+            viewerReaction: nextViewerReaction,
+            reactionCounts: {
+              ...comment.reactionCounts,
+              like: nextLikeCount,
+            },
+          };
+        }),
+      );
       await reload();
     } catch (nextError) {
       const errorCopy = describeIntegrityError(nextError);
@@ -178,8 +209,8 @@ export default function PostCommentsThread({
               <ActivityIndicator color={theme.colors.accent} />
               <Text style={styles.helperText}>Loading comments...</Text>
             </View>
-          ) : comments.length > 0 ? (
-            comments.map((comment) => {
+          ) : visibleComments.length > 0 ? (
+            visibleComments.map((comment) => {
               const authorTitle = getProfileTitleOption(comment.authorTitleKey);
               const authorNameColor = getProfileNameColor(comment.authorNameColor);
 
