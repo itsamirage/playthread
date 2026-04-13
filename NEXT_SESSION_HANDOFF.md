@@ -266,3 +266,38 @@ Start by reviewing the new trusted-profile flow and live admin moderation paths,
   - migration pushed: `202604121000_add_notification_preferences.sql`
   - redeployed: `trusted-post`, `trusted-comment`, `trusted-coin`, `trusted-profile`, `trusted-follow`
   - smoke test passed again after rollout
+- Latest April 12 push-quality / media-review pass:
+  - local app/UI changes added notification noise controls, noisy-event aggregation, and stronger media drill-down review
+  - new migration added locally: `202604121130_add_notification_noise_controls.sql`
+  - new notification preferences:
+    - `activity_noise_control_enabled`
+    - `activity_push_cooldown_minutes`
+  - shared trusted notification delivery now:
+    - suppresses exact duplicate notifications
+    - aggregates repeated `followed_game_post` events by game
+    - aggregates repeated `new_follower` events
+    - rate-limits push sends for followed-game / follower activity by the configured cooldown
+  - admin drill-down now shows media previews when available and adds direct open-post / open-profile / open-game actions
+  - local validation passed:
+    - `npm test`
+    - web export
+  - trusted function code redeployed live:
+    - `trusted-post`, `trusted-comment`, `trusted-coin`, `trusted-profile`, `trusted-follow`
+  - remote DB migration push failed again because of Supabase temp-role auth circuit breaker:
+    - `FATAL: Circuit breaker open: Too many authentication errors`
+  - consequence:
+    - live Edge functions are updated
+    - live database is still missing the two new `notification_preferences` columns until the migration is applied
+  - manual SQL fallback for Supabase SQL Editor if needed:
+```sql
+alter table public.notification_preferences
+add column if not exists activity_noise_control_enabled boolean not null default true,
+add column if not exists activity_push_cooldown_minutes integer not null default 30;
+
+alter table public.notification_preferences
+drop constraint if exists notification_preferences_activity_push_cooldown_minutes_valid;
+
+alter table public.notification_preferences
+add constraint notification_preferences_activity_push_cooldown_minutes_valid
+check (activity_push_cooldown_minutes between 0 and 240);
+```

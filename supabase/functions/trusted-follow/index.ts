@@ -73,6 +73,7 @@ Deno.serve(async (request) => {
         entityId: user.id,
         metadata: {
           followerUserId: user.id,
+          followerName: actorName,
         },
       });
 

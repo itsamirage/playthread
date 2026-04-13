@@ -14,7 +14,15 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "bundleIdentifier": "app.playthread.mobile",
+      "buildNumber": "1",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSUserNotificationsUsageDescription": "PlayThread sends notifications for replies, followers, gifts, moderation warnings, and posts from games you follow.",
+        "NSPhotoLibraryUsageDescription": "PlayThread uses your photo library so you can attach screenshots and clips to posts and update your profile media.",
+        "NSPhotoLibraryAddUsageDescription": "PlayThread may save exported media or temporary assets needed to share screenshots and clips.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -32,7 +40,20 @@
     "plugins": [
       "expo-router",
       "expo-video",
-      "expo-notifications"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/adaptive-icon.png",
+          "color": "#0B1017",
+          "defaultChannel": "default"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "PlayThread uses your photo library so you can attach screenshots and clips to posts and update your profile media."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

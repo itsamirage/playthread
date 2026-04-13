@@ -99,6 +99,8 @@ type NotificationPreferencesRow = {
   moderation_warning_enabled?: boolean | null;
   followed_game_post_enabled?: boolean | null;
   new_follower_enabled?: boolean | null;
+  activity_noise_control_enabled?: boolean | null;
+  activity_push_cooldown_minutes?: number | null;
 };
 
 const DEFAULT_INTEGRITY_LOOKBACK_DAYS = 7;
@@ -371,7 +373,7 @@ export async function insertNotification(
   const { data: preferencesRow, error: preferencesError } = await adminClient
     .from("notification_preferences")
     .select(
-      "push_enabled, post_comment_enabled, coin_gift_received_enabled, moderation_warning_enabled, followed_game_post_enabled, new_follower_enabled",
+      "push_enabled, post_comment_enabled, coin_gift_received_enabled, moderation_warning_enabled, followed_game_post_enabled, new_follower_enabled, activity_noise_control_enabled, activity_push_cooldown_minutes",
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -384,24 +386,157 @@ export async function insertNotification(
     return;
   }
 
-  const { data, error } = await adminClient
-    .from("notifications")
-    .insert({
-      user_id: userId,
-      actor_user_id: actorUserId,
-      kind,
-      title,
-      body,
-      entity_type: entityType,
-      entity_id: entityId,
-      metadata_json: metadata,
-    })
-    .select("id")
-    .maybeSingle();
+  const pushCooldownMinutes = getNotificationPushCooldownMinutes(preferencesRow, kind);
+  const pushCooldownCutoff =
+    pushCooldownMinutes > 0
+      ? new Date(Date.now() - pushCooldownMinutes * 60 * 1000).toISOString()
+      : null;
+  const aggregateWindowMinutes =
+    kind === "followed_game_post" || kind === "new_follower" ? 360 : 0;
+  const aggregateCutoff =
+    aggregateWindowMinutes > 0
+      ? new Date(Date.now() - aggregateWindowMinutes * 60 * 1000).toISOString()
+      : null;
+  const duplicateCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  let finalTitle = title;
+  let finalBody = body;
+  let finalEntityType = entityType;
+  let finalEntityId = entityId;
+  let finalMetadata = metadata;
 
-  if (error) {
-    console.warn("Could not create notification", error);
+  let shouldSendPush = shouldSendPushNotification(preferencesRow, kind);
+
+  if (pushCooldownCutoff) {
+    const { data: recentPushRows, error: recentPushError } = await adminClient
+      .from("notifications")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("kind", kind)
+      .gte("created_at", pushCooldownCutoff)
+      .limit(1);
+
+    if (recentPushError) {
+      console.warn("Could not load recent notifications for push cooldown", recentPushError);
+    } else if ((recentPushRows ?? []).length > 0) {
+      shouldSendPush = false;
+    }
+  }
+
+  let duplicateQuery = adminClient
+    .from("notifications")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("kind", kind)
+    .eq("title", title)
+    .gte("created_at", duplicateCutoff)
+    .limit(1);
+
+  duplicateQuery =
+    actorUserId == null ? duplicateQuery.is("actor_user_id", null) : duplicateQuery.eq("actor_user_id", actorUserId);
+  duplicateQuery =
+    entityType == null ? duplicateQuery.is("entity_type", null) : duplicateQuery.eq("entity_type", entityType);
+  duplicateQuery =
+    entityId == null ? duplicateQuery.is("entity_id", null) : duplicateQuery.eq("entity_id", entityId);
+  duplicateQuery = body == null ? duplicateQuery.is("body", null) : duplicateQuery.eq("body", body);
+
+  const { data: duplicateRows, error: duplicateError } = await duplicateQuery;
+
+  if (duplicateError) {
+    console.warn("Could not check duplicate notifications", duplicateError);
+  } else if ((duplicateRows ?? []).length > 0) {
     return;
+  }
+
+  let notificationRow:
+    | {
+        id: string;
+        created_at?: string | null;
+      }
+    | null = null;
+
+  if (aggregateCutoff) {
+    let aggregateQuery = adminClient
+      .from("notifications")
+      .select("id, entity_id, metadata_json")
+      .eq("user_id", userId)
+      .eq("kind", kind)
+      .eq("is_read", false)
+      .gte("created_at", aggregateCutoff)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (kind === "followed_game_post" && metadata?.gameId != null) {
+      aggregateQuery = aggregateQuery.contains("metadata_json", { gameId: metadata.gameId });
+    }
+
+    const { data: aggregateRows, error: aggregateError } = await aggregateQuery;
+
+    if (aggregateError) {
+      console.warn("Could not check aggregated notifications", aggregateError);
+    } else if ((aggregateRows ?? []).length > 0) {
+      const aggregatePlan = buildAggregatedNotificationUpdate(aggregateRows[0], {
+        kind,
+        title,
+        body,
+        entityType,
+        entityId,
+        metadata,
+      });
+
+      if (aggregatePlan) {
+        finalTitle = aggregatePlan.title;
+        finalBody = aggregatePlan.body;
+        finalEntityType = aggregatePlan.entityType;
+        finalEntityId = aggregatePlan.entityId;
+        finalMetadata = aggregatePlan.metadata;
+
+        const { data: updatedRow, error: updateError } = await adminClient
+          .from("notifications")
+          .update({
+            title: finalTitle,
+            body: finalBody,
+            entity_type: finalEntityType,
+            entity_id: finalEntityId,
+            metadata_json: finalMetadata,
+            is_read: false,
+            read_at: null,
+            created_at: new Date().toISOString(),
+          })
+          .eq("id", aggregateRows[0].id)
+          .select("id, created_at")
+          .maybeSingle();
+
+        if (updateError) {
+          console.warn("Could not aggregate notification", updateError);
+        } else {
+          notificationRow = updatedRow;
+        }
+      }
+    }
+  }
+
+  if (!notificationRow) {
+    const { data, error } = await adminClient
+      .from("notifications")
+      .insert({
+        user_id: userId,
+        actor_user_id: actorUserId,
+        kind,
+        title: finalTitle,
+        body: finalBody,
+        entity_type: finalEntityType,
+        entity_id: finalEntityId,
+        metadata_json: finalMetadata,
+      })
+      .select("id, created_at")
+      .maybeSingle();
+
+    if (error) {
+      console.warn("Could not create notification", error);
+      return;
+    }
+
+    notificationRow = data;
   }
 
   const { data: tokenRows, error: tokenError } = await adminClient
@@ -437,14 +572,14 @@ export async function insertNotification(
       expoPushTokens.map((token) => ({
         to: token,
         sound: "default",
-        title,
-        body: body ?? undefined,
+        title: finalTitle,
+        body: finalBody ?? undefined,
         data: {
-          notificationId: data?.id ?? null,
-          entityType,
-          entityId,
+          notificationId: notificationRow?.id ?? null,
+          entityType: finalEntityType,
+          entityId: finalEntityId,
           kind,
-          ...metadata,
+          ...finalMetadata,
         },
       })),
     ),
@@ -497,6 +632,92 @@ export function shouldSendPushNotification(
   kind: "post_comment" | "coin_gift_received" | "moderation_warning" | "followed_game_post" | "new_follower",
 ) {
   return (preferencesRow?.push_enabled ?? true) && shouldStoreNotification(preferencesRow, kind);
+}
+
+export function getNotificationPushCooldownMinutes(
+  preferencesRow: NotificationPreferencesRow | null | undefined,
+  kind: "post_comment" | "coin_gift_received" | "moderation_warning" | "followed_game_post" | "new_follower",
+) {
+  const noiseControlEnabled = preferencesRow?.activity_noise_control_enabled ?? true;
+  const cooldownMinutes = Math.max(
+    0,
+    Math.min(240, Number(preferencesRow?.activity_push_cooldown_minutes ?? 30) || 0),
+  );
+
+  if (!noiseControlEnabled) {
+    return 0;
+  }
+
+  return kind === "followed_game_post" || kind === "new_follower" ? cooldownMinutes : 0;
+}
+
+export function buildAggregatedNotificationUpdate(
+  existingRow: { entity_id?: string | null; metadata_json?: Record<string, unknown> | null } | null | undefined,
+  notification: {
+    kind: "post_comment" | "coin_gift_received" | "moderation_warning" | "followed_game_post" | "new_follower";
+    title: string;
+    body?: string | null;
+    entityType?: string | null;
+    entityId?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  if (!existingRow) {
+    return null;
+  }
+
+  const existingMetadata = existingRow.metadata_json ?? {};
+
+  if (notification.kind === "followed_game_post") {
+    const aggregatedCount = Math.max(1, Number(existingMetadata.aggregatedCount ?? 1)) + 1;
+    const gameTitle = String(notification.metadata?.gameTitle ?? existingMetadata.gameTitle ?? "A followed game");
+    const actorName = String(notification.metadata?.actorName ?? "A player");
+
+    return {
+      title: `${gameTitle} has ${aggregatedCount} new posts`,
+      body:
+        aggregatedCount > 2
+          ? `${actorName} and ${aggregatedCount - 1} others posted in a game you follow.`
+          : `${actorName} posted in a game you follow.`,
+      entityType: "game",
+      entityId: String(notification.metadata?.gameId ?? existingMetadata.gameId ?? notification.entityId ?? ""),
+      metadata: {
+        ...existingMetadata,
+        ...notification.metadata,
+        aggregatedCount,
+        latestPostId: notification.entityId ?? existingMetadata.latestPostId ?? null,
+      },
+    };
+  }
+
+  if (notification.kind === "new_follower") {
+    const priorNames = Array.isArray(existingMetadata.recentFollowerNames)
+      ? existingMetadata.recentFollowerNames.filter(Boolean).map((value) => String(value))
+      : [];
+    const nextName = String(notification.metadata?.followerName ?? "A player");
+    const recentFollowerNames = [...new Set([nextName, ...priorNames])].slice(0, 3);
+    const aggregatedCount = Math.max(1, Number(existingMetadata.aggregatedCount ?? 1)) + 1;
+    const trailingCount = Math.max(0, aggregatedCount - recentFollowerNames.length);
+    const namePreview = recentFollowerNames.join(", ");
+
+    return {
+      title: aggregatedCount > 1 ? "You have new followers" : notification.title,
+      body:
+        trailingCount > 0
+          ? `${namePreview} and ${trailingCount} others followed your profile.`
+          : `${namePreview} followed your profile.`,
+      entityType: "profile",
+      entityId: notification.entityId ?? existingRow.entity_id ?? null,
+      metadata: {
+        ...existingMetadata,
+        ...notification.metadata,
+        aggregatedCount,
+        recentFollowerNames,
+      },
+    };
+  }
+
+  return null;
 }
 
 function getDistinctUserCount(rows: Array<{ user_id: string | null }>, currentUserId: string) {

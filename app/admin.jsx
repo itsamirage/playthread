@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -963,10 +964,16 @@ export default function AdminScreen() {
               </Text>
               <Text style={styles.bodyText}>{selectedFlag.reason}</Text>
               <Text style={styles.helperText}>Media kind {selectedFlag.mediaKind}</Text>
+              {selectedFlag.mediaUrl ? (
+                <Image source={{ uri: selectedFlag.mediaUrl }} style={styles.flagPreviewImage} />
+              ) : null}
               {selectedFlag.evidence?.post_type === "clip" ? (
                 <Text style={styles.helperText}>
                   Clip post â€¢ status {selectedFlag.evidence?.video_status ?? "unknown"} â€¢ upload {selectedFlag.evidence?.video_upload_id ?? "n/a"}
                 </Text>
+              ) : null}
+              {selectedFlag.mediaStatus ? (
+                <Text style={styles.helperText}>Media status {selectedFlag.mediaStatus}</Text>
               ) : null}
               <Text style={styles.excerptText}>{JSON.stringify(selectedFlag.evidence)}</Text>
               <View style={styles.inlineRow}>
@@ -979,6 +986,21 @@ export default function AdminScreen() {
                     style={styles.secondaryButton}
                   >
                     <Text style={styles.secondaryButtonText}>Find matching network</Text>
+                  </Pressable>
+                ) : null}
+                {selectedFlag.contentType === "post" && selectedFlag.contentId ? (
+                  <Pressable onPress={() => router.push(`/post/${selectedFlag.contentId}`)} style={styles.secondaryButton}>
+                    <Text style={styles.secondaryButtonText}>Open post</Text>
+                  </Pressable>
+                ) : null}
+                {selectedFlag.userId ? (
+                  <Pressable onPress={() => router.push(`/user/${selectedFlag.userId}`)} style={styles.secondaryButton}>
+                    <Text style={styles.secondaryButtonText}>Open profile</Text>
+                  </Pressable>
+                ) : null}
+                {selectedFlag.gameId ? (
+                  <Pressable onPress={() => router.push(`/game/${selectedFlag.gameId}`)} style={styles.secondaryButton}>
+                    <Text style={styles.secondaryButtonText}>Open game</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -1200,6 +1222,12 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: theme.fontSizes.sm,
     lineHeight: 20,
+  },
+  flagPreviewImage: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(255,255,255,0.03)",
   },
   inlineRow: {
     flexDirection: "row",

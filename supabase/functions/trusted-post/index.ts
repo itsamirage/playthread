@@ -355,6 +355,7 @@ Deno.serve(async (request) => {
                 gameId,
                 gameTitle,
                 postType,
+                actorName: profile.username ?? "player",
               },
             }),
           ),

@@ -8,6 +8,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build:web": "npx expo export --platform web --output-dir .cloudflare-pages && node scripts/prepare-cloudflare-pages.mjs",
+    "build:ios:preview": "npx eas build --platform ios --profile preview",
+    "build:ios:production": "npx eas build --platform ios --profile production",
+    "submit:ios": "npx eas submit --platform ios --profile production",
     "test": "node --test lib/__tests__/*.test.mjs",
     "smoke:deployed": "node scripts/smoke-deployed-functions.mjs"
   },

@@ -68,6 +68,18 @@ export default function NotificationsScreen() {
     await reloadPreferences();
   };
 
+  const handleSetCooldownMinutes = async (minutes) => {
+    if (!session?.user?.id) {
+      return;
+    }
+
+    await saveNotificationPreferences(session.user.id, {
+      ...preferences,
+      activityPushCooldownMinutes: minutes,
+    });
+    await reloadPreferences();
+  };
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
@@ -145,6 +157,7 @@ export default function NotificationsScreen() {
               ["moderationWarningEnabled", "Moderation warnings"],
               ["followedGamePostEnabled", "New posts in followed games"],
               ["newFollowerEnabled", "New followers"],
+              ["activityNoiseControlEnabled", "Reduce noisy activity pushes"],
             ].map(([key, label]) => (
               <Pressable
                 key={key}
@@ -157,6 +170,37 @@ export default function NotificationsScreen() {
                 </Text>
               </Pressable>
             ))}
+            {preferences.activityNoiseControlEnabled ? (
+              <View style={styles.cooldownWrap}>
+                <Text style={styles.cooldownLabel}>Activity push cooldown</Text>
+                <View style={styles.cooldownOptions}>
+                  {[0, 15, 30, 60].map((minutes) => (
+                    <Pressable
+                      key={minutes}
+                      onPress={() => handleSetCooldownMinutes(minutes)}
+                      style={[
+                        styles.cooldownChip,
+                        preferences.activityPushCooldownMinutes === minutes ? styles.cooldownChipActive : null,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.cooldownChipText,
+                          preferences.activityPushCooldownMinutes === minutes
+                            ? styles.cooldownChipTextActive
+                            : null,
+                        ]}
+                      >
+                        {minutes === 0 ? "Instant" : `${minutes} min`}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Text style={styles.cooldownHint}>
+                  Noise control applies to new followers and followed-game posts.
+                </Text>
+              </View>
+            ) : null}
           </View>
         )}
       </SectionCard>
@@ -310,5 +354,44 @@ const styles = StyleSheet.create({
   },
   preferenceValueActive: {
     color: theme.colors.accent,
+  },
+  cooldownWrap: {
+    gap: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+  },
+  cooldownLabel: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  cooldownOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  cooldownChip: {
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  cooldownChipActive: {
+    borderColor: theme.colors.accent,
+    backgroundColor: "rgba(0,229,255,0.1)",
+  },
+  cooldownChipText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+  },
+  cooldownChipTextActive: {
+    color: theme.colors.accent,
+  },
+  cooldownHint: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
+    lineHeight: 18,
   },
 });
