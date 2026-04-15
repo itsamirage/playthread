@@ -14,6 +14,7 @@ import {
 import { useRouter } from "expo-router";
 
 import NotificationInboxButton from "../../components/NotificationInboxButton";
+import PostCard from "../../components/PostCard";
 import SectionCard from "../../components/SectionCard";
 import {
   formatAccountAge,
@@ -47,7 +48,7 @@ import {
   useSteamShowcaseCatalog,
 } from "../../lib/profileShowcase";
 import { getProfileNameColor } from "../../lib/profileAppearance";
-import { useMyReviewCount, useMyReviewsByGame, useUserFollows } from "../../lib/userSocial";
+import { useMyReviewCount, useMyReviewsByGame, useUserActivity, useUserFollows } from "../../lib/userSocial";
 import { getProfileTitleOption, PROFILE_TITLE_OPTIONS } from "../../lib/titles";
 import { useTabReselectScroll } from "../../lib/tabReselect";
 import { theme } from "../../lib/theme";
@@ -207,6 +208,14 @@ export default function ProfileScreen() {
   const { friendCount, incomingRequestUserIds } = useUserFollows(session?.user?.id);
   const { reviewCount, avgRating, reload: reloadReviews } = useMyReviewCount(session?.user?.id);
   const { reviewsByGameId } = useMyReviewsByGame(session?.user?.id);
+  const {
+    posts: myPosts,
+    isLoading: myPostsLoading,
+    isLoadingMore: myPostsLoadingMore,
+    hasMore: myPostsHasMore,
+    reload: reloadMyPosts,
+    loadMore: loadMoreMyPosts,
+  } = useUserActivity(session?.user?.id, { limit: 10 });
   const { profile, reload: reloadProfile } = useCurrentProfile();
   const { accountsByProvider, isLoading: accountsLoading, reloadAccounts } = useConnectedAccounts();
   const {
@@ -318,6 +327,7 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
       void reloadShowcase?.();
       void reloadCatalog?.();
       void reloadReviews?.();
+      void reloadMyPosts?.();
     },
   });
 
@@ -1437,6 +1447,45 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
         )}
       </SectionCard>
 
+      <SectionCard title="Recent activity" eyebrow="Your posts">
+        {myPostsLoading ? (
+          <ActivityIndicator color={theme.colors.accent} />
+        ) : myPosts.length > 0 ? (
+          <View style={styles.feedList}>
+            {myPosts.map((post) => (
+              <PostCard
+                key={post.id}
+                onAuthorPress={() => {}}
+                onOpenComments={() => router.push(`/post/${post.id}`)}
+                onPress={() => router.push(`/post/${post.id}`)}
+                post={post}
+              />
+            ))}
+            {myPostsHasMore ? (
+              <Pressable
+                disabled={myPostsLoadingMore}
+                onPress={loadMoreMyPosts}
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  myPostsLoadingMore ? styles.buttonDisabled : null,
+                  pressed && !myPostsLoadingMore ? styles.buttonPressed : null,
+                ]}
+              >
+                {myPostsLoadingMore ? (
+                  <ActivityIndicator color={theme.colors.accent} size="small" />
+                ) : (
+                  <Text style={styles.secondaryButtonText}>Load more</Text>
+                )}
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
+          <Text style={styles.bodyText}>
+            You have not posted anything yet. Share a review or discussion from a game page.
+          </Text>
+        )}
+      </SectionCard>
+
       <SectionCard title="Account actions" eyebrow="Settings">
         {canOpenAdmin ? (
           <Pressable
@@ -1683,6 +1732,9 @@ const styles = StyleSheet.create({
     color: theme.colors.accent,
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.medium,
+  },
+  feedList: {
+    gap: theme.spacing.md,
   },
   bodyText: {
     color: theme.colors.textPrimary,

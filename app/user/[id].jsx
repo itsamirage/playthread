@@ -26,9 +26,17 @@ export default function PublicProfileScreen() {
   const { session } = useAuth();
   const userId = typeof id === "string" ? id : null;
   const { profile, isLoading, error, reload } = usePublicProfile(userId);
-  const { posts, isLoading: activityLoading, reload: reloadActivity } = useUserActivity(userId);
+  const {
+    posts,
+    isLoading: activityLoading,
+    isLoadingMore: activityLoadingMore,
+    hasMore: activityHasMore,
+    reload: reloadActivity,
+    loadMore: loadMoreActivity,
+  } = useUserActivity(userId);
   const { friendCount, friends, getFriendshipStatus, reload: reloadFollows } = useUserFollows(userId);
   const [isSavingFollow, setIsSavingFollow] = useState(false);
+  const [optimisticStatus, setOptimisticStatus] = useState(null);
 
   if (isLoading) {
     return (
@@ -54,17 +62,21 @@ export default function PublicProfileScreen() {
   const title = getProfileTitleOption(profile.selectedTitleKey);
   const nameColor = getProfileNameColor(profile.selectedNameColor);
   const friendshipStatus = getFriendshipStatus(profile.id);
+  const displayStatus = optimisticStatus ?? friendshipStatus;
 
   const handleFollowToggle = async () => {
     if (!canFollow) {
       return;
     }
 
+    const previousStatus = friendshipStatus;
     try {
       setIsSavingFollow(true);
-      if (friendshipStatus === "incoming") {
+      if (displayStatus === "incoming") {
+        setOptimisticStatus("friends");
         await acceptFriendRequest({ targetUserId: profile.id });
-      } else if (friendshipStatus === "none") {
+      } else if (displayStatus === "none") {
+        setOptimisticStatus("outgoing");
         await requestFriend({ targetUserId: profile.id });
       } else {
         return;
@@ -73,8 +85,11 @@ export default function PublicProfileScreen() {
       await reloadFollows();
       await reload();
       await reloadActivity();
+    } catch {
+      setOptimisticStatus(previousStatus === friendshipStatus ? null : previousStatus);
     } finally {
       setIsSavingFollow(false);
+      setOptimisticStatus(null);
     }
   };
 
@@ -83,14 +98,18 @@ export default function PublicProfileScreen() {
       return;
     }
 
+    const previousStatus = friendshipStatus;
     try {
       setIsSavingFollow(true);
 
-      if (friendshipStatus === "outgoing") {
+      if (displayStatus === "outgoing") {
+        setOptimisticStatus("none");
         await cancelFriendRequest({ targetUserId: profile.id });
-      } else if (friendshipStatus === "incoming") {
+      } else if (displayStatus === "incoming") {
+        setOptimisticStatus("none");
         await declineFriendRequest({ targetUserId: profile.id });
-      } else if (friendshipStatus === "friends") {
+      } else if (displayStatus === "friends") {
+        setOptimisticStatus("none");
         await removeFriend({ targetUserId: profile.id });
       } else {
         return;
@@ -99,26 +118,29 @@ export default function PublicProfileScreen() {
       await reloadFollows();
       await reload();
       await reloadActivity();
+    } catch {
+      setOptimisticStatus(previousStatus === friendshipStatus ? null : previousStatus);
     } finally {
       setIsSavingFollow(false);
+      setOptimisticStatus(null);
     }
   };
 
   const primaryFriendActionLabel =
-    friendshipStatus === "incoming"
+    displayStatus === "incoming"
       ? "Accept request"
-      : friendshipStatus === "friends"
+      : displayStatus === "friends"
         ? "Friends"
-        : friendshipStatus === "outgoing"
+        : displayStatus === "outgoing"
           ? "Request sent"
           : "Add friend";
 
   const secondaryFriendActionLabel =
-    friendshipStatus === "outgoing"
+    displayStatus === "outgoing"
       ? "Cancel request"
-      : friendshipStatus === "incoming"
+      : displayStatus === "incoming"
         ? "Decline"
-        : friendshipStatus === "friends"
+        : displayStatus === "friends"
           ? "Remove friend"
           : null;
 
@@ -162,7 +184,7 @@ export default function PublicProfileScreen() {
               onPress={handleFollowToggle}
               style={[
                 styles.followButton,
-                friendshipStatus === "friends" || friendshipStatus === "outgoing"
+                displayStatus === "friends" || displayStatus === "outgoing"
                   ? styles.followButtonMuted
                   : null,
               ]}
@@ -170,7 +192,7 @@ export default function PublicProfileScreen() {
               <Text
                 style={[
                   styles.followButtonText,
-                  friendshipStatus === "friends" || friendshipStatus === "outgoing"
+                  displayStatus === "friends" || displayStatus === "outgoing"
                     ? styles.followButtonTextMuted
                     : null,
                 ]}
@@ -235,6 +257,19 @@ export default function PublicProfileScreen() {
                 post={post}
               />
             ))}
+            {activityHasMore ? (
+              <Pressable
+                disabled={activityLoadingMore}
+                onPress={loadMoreActivity}
+                style={[styles.secondaryButton, activityLoadingMore ? { opacity: 0.5 } : null]}
+              >
+                {activityLoadingMore ? (
+                  <ActivityIndicator color={theme.colors.accent} size="small" />
+                ) : (
+                  <Text style={styles.secondaryButtonText}>Load more</Text>
+                )}
+              </Pressable>
+            ) : null}
           </View>
         ) : (
           <Text style={styles.bodyText}>No public posts from this player yet.</Text>
