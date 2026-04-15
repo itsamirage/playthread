@@ -18,6 +18,11 @@ workflows:
           EXPO_PUBLIC_SUPABASE_ANON_KEY=$EXPO_PUBLIC_SUPABASE_ANON_KEY \
           EXPO_PUBLIC_EAS_PROJECT_ID=$EXPO_PUBLIC_EAS_PROJECT_ID \
           npx expo prebuild --clean --platform ios
+      - name: Set build number
+        script: |
+          BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number 6762104334) + 1))
+          echo "Setting build number to $BUILD_NUMBER"
+          cd ios && agvtool new-version -all $BUILD_NUMBER
       - name: Set up keychain
         script: keychain initialize
       - name: Import certificate and provisioning profile
