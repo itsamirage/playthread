@@ -19,6 +19,7 @@ type RequestBody = {
   postId?: string;
   commentId?: string;
   body?: string;
+  imageUrl?: string | null;
 };
 
 Deno.serve(async (request) => {
@@ -161,12 +162,15 @@ Deno.serve(async (request) => {
       },
     });
 
+    const imageUrl = String(body.imageUrl ?? "").trim() || null;
+
     const { data: comment, error: commentError } = await adminClient
       .from("post_comments")
       .insert({
         user_id: user.id,
         post_id: postId,
         body: textBody,
+        image_url: imageUrl,
       })
       .select("id")
       .single();

@@ -130,7 +130,7 @@ export default function PostCard({
         ) : null}
 
         {post.imageUrl ? (
-          <Image source={{ uri: post.imageUrl }} style={styles.postImage} />
+          <Image source={{ uri: post.imageUrl }} style={styles.postImage} contentFit="cover" />
         ) : null}
 
         {post.type === "clip" ? (

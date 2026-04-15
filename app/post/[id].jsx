@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useState } from "react";
 
 import PostCard from "../../components/PostCard";
@@ -75,7 +75,11 @@ export default function PostDetailScreen() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <KeyboardAvoidingView
+      style={styles.keyboardView}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.hero}>
         <Text style={styles.eyebrow}>PlayThread</Text>
         <Text style={styles.title}>Post thread</Text>
@@ -128,10 +132,15 @@ export default function PostDetailScreen() {
         />
       </SectionCard>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardView: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
   screen: {
     flex: 1,
     backgroundColor: theme.colors.background,

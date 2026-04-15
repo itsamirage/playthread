@@ -9,10 +9,12 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 
 import CoinGiftSheet from "./CoinGiftSheet";
 import { sendCoinGift } from "../lib/admin";
 import { useAuth } from "../lib/auth";
+import { pickPostImage } from "../lib/postMedia";
 import { describeIntegrityError } from "../lib/integrity";
 import { formatModerationWarning } from "../lib/moderation";
 import { getProfileNameColor } from "../lib/profileAppearance";
@@ -35,6 +37,7 @@ export default function PostCommentsThread({
   const { session } = useAuth();
   const { comments, isLoading, error, reload } = usePostComments(post?.id, Boolean(post?.id));
   const [draft, setDraft] = useState("");
+  const [draftImage, setDraftImage] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState(null);
   const [reactingCommentId, setReactingCommentId] = useState(null);
@@ -85,6 +88,7 @@ export default function PostCommentsThread({
             userId: session.user.id,
             postId: post.id,
             body: cleanBody,
+            imageAsset: draftImage,
           });
 
       if (commentError) {
@@ -92,6 +96,7 @@ export default function PostCommentsThread({
       }
 
       setDraft("");
+      setDraftImage(null);
       setEditingCommentId(null);
       await reload();
       await onCommentCountChange?.();
@@ -139,6 +144,16 @@ export default function PostCommentsThread({
   const handleCancelEdit = () => {
     setEditingCommentId(null);
     setDraft("");
+    setDraftImage(null);
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const asset = await pickPostImage();
+      if (asset) setDraftImage(asset);
+    } catch (err) {
+      Alert.alert("Image error", err instanceof Error ? err.message : "Could not pick image.");
+    }
   };
 
   const handleToggleLike = async (commentId) => {
@@ -279,7 +294,10 @@ export default function PostCommentsThread({
                       </Text>
                     </View>
                   ) : null}
-                  <Text style={styles.commentBody}>{comment.body}</Text>
+                  {comment.body ? <Text style={styles.commentBody}>{comment.body}</Text> : null}
+                  {comment.imageUrl ? (
+                    <Image source={{ uri: comment.imageUrl }} style={styles.commentImage} contentFit="cover" />
+                  ) : null}
                   {comment.isEdited ? (
                     <Text style={styles.commentEditedText}>
                       Last edited {new Date(comment.updatedAt).toLocaleString()}
@@ -341,8 +359,25 @@ export default function PostCommentsThread({
           style={styles.input}
           value={draft}
         />
+        {draftImage ? (
+          <View style={styles.draftImageContainer}>
+            <Image source={{ uri: draftImage.uri }} style={styles.draftImagePreview} contentFit="cover" />
+            <Pressable onPress={() => setDraftImage(null)} style={styles.draftImageRemove}>
+              <Text style={styles.draftImageRemoveText}>✕</Text>
+            </Pressable>
+          </View>
+        ) : null}
         <View style={styles.composerFooter}>
           <Text style={styles.counterText}>{draft.trim().length}/600</Text>
+          {!editingCommentId ? (
+            <Pressable
+              disabled={isSubmitting}
+              onPress={handlePickImage}
+              style={styles.imagePickerButton}
+            >
+              <Text style={styles.imagePickerButtonText}>📎</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             disabled={isSubmitting}
             onPress={handleSubmit}
@@ -605,5 +640,51 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     opacity: 0.92,
+  },
+  commentImage: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  draftImageContainer: {
+    position: "relative",
+    borderRadius: theme.radius.md,
+    overflow: "hidden",
+  },
+  draftImagePreview: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  draftImageRemove: {
+    position: "absolute",
+    top: theme.spacing.xs,
+    right: theme.spacing.xs,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: theme.radius.pill,
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  draftImageRemoveText: {
+    color: theme.colors.textPrimary,
+    fontSize: 12,
+    fontWeight: theme.fontWeights.bold,
+  },
+  imagePickerButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 36,
+    height: 36,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: theme.colors.border,
+    borderWidth: theme.borders.width,
+  },
+  imagePickerButtonText: {
+    fontSize: 16,
   },
 });
