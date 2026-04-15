@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
-  FOLLOW_STATUS_OPTIONS,
+  ACTIVE_FOLLOW_STATUS_OPTIONS,
   getFollowStatusLabel,
 } from "../lib/follows";
 import { getGameScoreBadge } from "../lib/gamePresentation";
@@ -16,17 +16,23 @@ export default function GameCard({
   onPress,
   onSelectStatus,
   onUnfollow,
+  onAddToBacklog,
 }) {
   const [isStatusPickerOpen, setIsStatusPickerOpen] = useState(false);
   const coverLetter = game.title.charAt(0).toUpperCase();
   const scoreBadge = getGameScoreBadge(game);
-  const buttonLabel = isFollowed
+  const isInBacklog = followStatus === "have_not_played";
+  const buttonLabel = isFollowed && !isInBacklog
     ? getFollowStatusLabel(followStatus)
-    : "Follow game";
+    : "Follow ▾";
 
   const handleSelectStatus = async (status) => {
     await onSelectStatus?.(status);
     setIsStatusPickerOpen(false);
+  };
+
+  const handleAddToBacklog = async () => {
+    await onAddToBacklog?.();
   };
 
   return (
@@ -82,30 +88,49 @@ export default function GameCard({
         ) : null}
       </Pressable>
 
-      <Pressable
-        onPress={() => setIsStatusPickerOpen((currentValue) => !currentValue)}
-        style={[
-          styles.followButton,
-          isFollowed ? styles.followButtonActive : null,
-        ]}
-      >
-        <Text
-          style={[
-            styles.followButtonText,
-            isFollowed ? styles.followButtonTextActive : null,
+      <View style={styles.buttonRow}>
+        <Pressable
+          onPress={handleAddToBacklog}
+          style={({ pressed }) => [
+            styles.backlogButton,
+            isInBacklog ? styles.backlogButtonActive : null,
+            pressed ? styles.buttonPressed : null,
           ]}
         >
-          {buttonLabel}
-        </Text>
-      </Pressable>
+          <Text
+            style={[
+              styles.backlogButtonText,
+              isInBacklog ? styles.backlogButtonTextActive : null,
+            ]}
+          >
+            {isInBacklog ? "In Backlog" : "+ Backlog"}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setIsStatusPickerOpen((currentValue) => !currentValue)}
+          style={[
+            styles.followButton,
+            isFollowed && !isInBacklog ? styles.followButtonActive : null,
+          ]}
+        >
+          <Text
+            style={[
+              styles.followButtonText,
+              isFollowed && !isInBacklog ? styles.followButtonTextActive : null,
+            ]}
+          >
+            {buttonLabel}
+          </Text>
+        </Pressable>
+      </View>
 
       {isStatusPickerOpen ? (
         <View style={styles.statusPicker}>
           <Text style={styles.statusPickerTitle}>
-            {isFollowed ? "Update your status" : "Choose your status"}
+            {isFollowed && !isInBacklog ? "Update your status" : "Choose your status"}
           </Text>
           <View style={styles.statusWrap}>
-            {FOLLOW_STATUS_OPTIONS.map((option) => {
+            {ACTIVE_FOLLOW_STATUS_OPTIONS.map((option) => {
               const isActive = option.key === followStatus;
 
               return (
@@ -123,7 +148,7 @@ export default function GameCard({
               );
             })}
           </View>
-          {isFollowed ? (
+          {isFollowed && !isInBacklog ? (
             <Pressable
               onPress={async () => {
                 await onUnfollow?.();
@@ -217,7 +242,36 @@ const styles = StyleSheet.create({
   scoreTextUpcoming: {
     color: theme.colors.textSecondary,
   },
+  buttonRow: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  backlogButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+  },
+  backlogButtonActive: {
+    backgroundColor: "rgba(0,229,255,0.10)",
+    borderColor: theme.colors.accent,
+  },
+  backlogButtonText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  backlogButtonTextActive: {
+    color: theme.colors.accent,
+  },
+  buttonPressed: {
+    opacity: 0.8,
+  },
   followButton: {
+    flex: 1,
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.03)",
     borderColor: theme.colors.border,

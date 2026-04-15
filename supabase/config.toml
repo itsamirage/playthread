@@ -22,6 +22,9 @@ verify_jwt = false
 [functions.trusted-comment-reaction]
 verify_jwt = false
 
+[functions.trusted-post-reaction]
+verify_jwt = false
+
 [functions.mux-video]
 verify_jwt = false
 

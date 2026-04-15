@@ -47,6 +47,7 @@ import {
   useSteamShowcaseCatalog,
 } from "../../lib/profileShowcase";
 import { getProfileNameColor } from "../../lib/profileAppearance";
+import { useMyReviewCount, useUserFollows } from "../../lib/userSocial";
 import { getProfileTitleOption, PROFILE_TITLE_OPTIONS } from "../../lib/titles";
 import { useTabReselectScroll } from "../../lib/tabReselect";
 import { theme } from "../../lib/theme";
@@ -160,11 +161,6 @@ export default function ProfileScreen() {
       matches: () => true,
       emptyText: "You are not following any games yet.",
     },
-    played: {
-      label: "Played",
-      matches: (game) => game.playStatus === "completed",
-      emptyText: "No games are marked as completed yet.",
-    },
     backlog: {
       label: "Backlog",
       matches: (game) => game.playStatus === "have_not_played",
@@ -193,6 +189,7 @@ export default function ProfileScreen() {
   const [gameSort, setGameSort] = useState("recent");
   const [showcaseSearch, setShowcaseSearch] = useState("");
   const [activeStatFilterKey, setActiveStatFilterKey] = useState(null);
+  const [isStatsExpanded, setIsStatsExpanded] = useState(false);
   const [identityDraft, setIdentityDraft] = useState({
     displayName: "",
     bio: "",
@@ -202,6 +199,8 @@ export default function ProfileScreen() {
   const { session } = useAuth();
   const { preferences: contentPreferences, savePreferences: saveContentPreferences } = useContentPreferences();
   const { followedCount, followedGames, isLoading: followsLoading, unfollowGame } = useFollows();
+  const { friendCount, incomingRequestUserIds } = useUserFollows(session?.user?.id);
+  const { reviewCount, avgRating } = useMyReviewCount(session?.user?.id);
   const { profile, reload: reloadProfile } = useCurrentProfile();
   const { accountsByProvider, isLoading: accountsLoading, reloadAccounts } = useConnectedAccounts();
   const {
@@ -715,58 +714,77 @@ export default function ProfileScreen() {
       </View>
 
       <SectionCard title="Stats" eyebrow="Overview">
-        <View style={styles.statRow}>
+        <View style={styles.statGrid}>
           <Pressable
             onPress={() => setActiveStatFilterKey("following")}
             style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
           >
             <Text style={styles.statValue}>{followedCount}</Text>
-            <Text style={styles.statLabel}>Following</Text>
+            <Text style={styles.statLabel} numberOfLines={1}>Following</Text>
           </Pressable>
           <Pressable
-            onPress={() => setActiveStatFilterKey("played")}
+            onPress={() => router.push("/friends")}
             style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
           >
-            <Text style={styles.statValue}>{completedCount}</Text>
-            <Text style={styles.statLabel}>Played</Text>
+            <Text style={styles.statValue}>{friendCount}</Text>
+            <Text style={styles.statLabel} numberOfLines={1}>Friends</Text>
           </Pressable>
           <Pressable
             onPress={() => setActiveStatFilterKey("backlog")}
             style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
           >
             <Text style={styles.statValue}>{backlogCount}</Text>
-            <Text style={styles.statLabel}>Backlog</Text>
+            <Text style={styles.statLabel} numberOfLines={1}>Backlog</Text>
           </Pressable>
-        </View>
-        <Text style={styles.helperText}>Tap Following, Played, or Backlog to open those games.</Text>
-        <View style={styles.statRow}>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{formatCoinCount(profile?.coins_from_posts ?? 0)}</Text>
-            <Text style={styles.statLabel}>Post coins</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{formatCoinCount(profile?.coins_from_comments ?? 0)}</Text>
-            <Text style={styles.statLabel}>Comment coins</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{formatCoinCount(availableCoins)}</Text>
-            <Text style={styles.statLabel}>Available</Text>
+            <Text style={styles.statValue}>{reviewCount}</Text>
+            {avgRating ? (
+              <Text style={styles.statSubValue}>{avgRating} avg</Text>
+            ) : null}
+            <Text style={styles.statLabel} numberOfLines={1}>Reviewed</Text>
           </View>
         </View>
-        <View style={styles.statRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{formatCoinCount(profile?.coins_from_gifts ?? 0)}</Text>
-            <Text style={styles.statLabel}>Gifted to you</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{formatCoinCount(lifetimeCoins)}</Text>
-            <Text style={styles.statLabel}>Lifetime earned</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{formatCoinCount(profile?.coins_spent ?? 0)}</Text>
-            <Text style={styles.statLabel}>Spent</Text>
-          </View>
-        </View>
+        <Text style={styles.helperText}>Tap Following or Backlog to browse those games. Tap Friends to see your social list.</Text>
+        <Pressable
+          onPress={() => setIsStatsExpanded((v) => !v)}
+          style={styles.expandToggle}
+        >
+          <Text style={styles.expandToggleText}>
+            {isStatsExpanded ? "Coin stats ▲" : "Coin stats ▼"}
+          </Text>
+        </Pressable>
+        {isStatsExpanded ? (
+          <>
+            <View style={styles.statRow}>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{formatCoinCount(profile?.coins_from_posts ?? 0)}</Text>
+                <Text style={styles.statLabel}>Post coins</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{formatCoinCount(profile?.coins_from_comments ?? 0)}</Text>
+                <Text style={styles.statLabel}>Comment coins</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{formatCoinCount(availableCoins)}</Text>
+                <Text style={styles.statLabel}>Available</Text>
+              </View>
+            </View>
+            <View style={styles.statRow}>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{formatCoinCount(profile?.coins_from_gifts ?? 0)}</Text>
+                <Text style={styles.statLabel}>Gifted to you</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{formatCoinCount(lifetimeCoins)}</Text>
+                <Text style={styles.statLabel}>Lifetime earned</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{formatCoinCount(profile?.coins_spent ?? 0)}</Text>
+                <Text style={styles.statLabel}>Spent</Text>
+              </View>
+            </View>
+          </>
+        ) : null}
       </SectionCard>
 
       <SectionCard title="Backlog" eyebrow="Want to play">
@@ -1650,27 +1668,47 @@ const styles = StyleSheet.create({
   titleBadgeTextGold: {
     color: "#ffcc33",
   },
+  statGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
   statRow: {
     flexDirection: "row",
     gap: theme.spacing.md,
   },
   statBox: {
     flex: 1,
+    minWidth: "44%",
     backgroundColor: "rgba(255,255,255,0.03)",
     borderRadius: theme.radius.md,
     paddingVertical: theme.spacing.lg,
     paddingHorizontal: theme.spacing.md,
-    gap: theme.spacing.xs,
+    gap: 2,
   },
   statValue: {
     color: theme.colors.textPrimary,
     fontSize: theme.fontSizes.xl,
     fontWeight: theme.fontWeights.bold,
   },
+  statSubValue: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.medium,
+  },
   statLabel: {
     color: theme.colors.textMuted,
     fontSize: theme.fontSizes.xs,
     textTransform: "uppercase",
+  },
+  expandToggle: {
+    alignSelf: "flex-start",
+    paddingVertical: theme.spacing.xs,
+  },
+  expandToggleText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.medium,
   },
   bodyText: {
     color: theme.colors.textPrimary,
@@ -2102,6 +2140,40 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeights.bold,
   },
   followMeta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.sm,
+  },
+  friendRequestBanner: {
+    backgroundColor: "rgba(0,229,255,0.10)",
+    borderColor: theme.colors.accent,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  friendRequestBannerText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  friendList: {
+    gap: theme.spacing.sm,
+  },
+  friendCard: {
+    gap: theme.spacing.xs,
+    paddingBottom: theme.spacing.sm,
+    borderBottomColor: theme.colors.border,
+    borderBottomWidth: theme.borders.width,
+  },
+  friendName: {
+    fontSize: theme.fontSizes.md,
+    fontWeight: theme.fontWeights.bold,
+  },
+  friendDisplayName: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+  },
+  friendBio: {
     color: theme.colors.textMuted,
     fontSize: theme.fontSizes.sm,
   },

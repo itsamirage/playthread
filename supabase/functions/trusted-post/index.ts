@@ -290,7 +290,7 @@ Deno.serve(async (request) => {
         video_status: postType === "clip" ? "uploading" : "none",
         spoiler: Boolean(body.spoiler),
         spoiler_tag: body.spoiler ? String(body.spoilerTag ?? "").trim() || null : null,
-        rating: body.rating != null ? Number(body.rating) / 2 : null,
+        rating: body.rating != null ? Number(body.rating) : null,
       })
       .select("id")
       .single();

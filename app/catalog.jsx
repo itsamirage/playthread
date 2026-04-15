@@ -120,6 +120,7 @@ export default function CatalogScreen() {
               onPress={() => router.push(`/game/${game.id}`)}
               onSelectStatus={(status) => handleSelectStatus(game, status)}
               onUnfollow={() => handleUnfollow(game)}
+              onAddToBacklog={() => handleSelectStatus(game, "have_not_played")}
             />
           ))
         ) : (

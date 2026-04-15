@@ -276,7 +276,18 @@ function searchQuery(searchTerm: string, limit: number) {
   return [
     gameFields(),
     `search "${safeSearchTerm}";`,
-    "where version_parent = null;",
+    "where (category = null | category = (0,4,8,9,10)) & version_parent = null & parent_game = null;",
+    `limit ${limit};`,
+  ].join(" ");
+}
+
+function nameContainsQuery(searchTerm: string, limit: number) {
+  const safeSearchTerm = escapeSearchTerm(searchTerm);
+
+  return [
+    gameFields(),
+    `where name ~ *"${safeSearchTerm}"* & (category = null | category = (0,4,8,9,10)) & version_parent = null & parent_game = null;`,
+    "sort total_rating_count desc;",
     `limit ${limit};`,
   ].join(" ");
 }
@@ -315,7 +326,7 @@ function developerGamesQuery(companyName: string, limit: number) {
 function genreGamesQuery(genreIds: number[], limit: number) {
   return [
     gameFields(),
-    `where genres = (${genreIds.join(",")}) & version_parent = null;`,
+    `where genres = (${genreIds.join(",")}) & version_parent = null & parent_game = null;`,
     `limit ${limit};`,
   ].join(" ");
 }
@@ -323,7 +334,7 @@ function genreGamesQuery(genreIds: number[], limit: number) {
 function gamesByIdsQuery(gameIds: number[]) {
   return [
     gameFields(),
-    `where id = (${gameIds.join(",")}) & version_parent = null;`,
+    `where id = (${gameIds.join(",")}) & version_parent = null & parent_game = null;`,
     `limit ${gameIds.length};`,
   ].join(" ");
 }
@@ -486,8 +497,25 @@ Deno.serve(async (request) => {
       const games = await getOrLoadCachedValue(
         `search:${query.toLowerCase()}:${limit}`,
         async () => {
-          const response = await igdbRequest("games", searchQuery(query, limit));
-          return response.map(normalizeIgdbGame);
+          // Run keyword search and name-contains search in parallel.
+          // Keyword search handles full-word relevance; name-contains catches
+          // partial inputs like "Biosh" that IGDB's word index misses.
+          const [keywordResults, nameResults] = await Promise.all([
+            igdbRequest("games", searchQuery(query, limit)),
+            igdbRequest("games", nameContainsQuery(query, limit)),
+          ]);
+
+          const seenIds = new Set<number>();
+          const merged: any[] = [];
+
+          for (const game of [...keywordResults, ...nameResults]) {
+            if (!seenIds.has(game.id)) {
+              seenIds.add(game.id);
+              merged.push(game);
+            }
+          }
+
+          return merged.map(normalizeIgdbGame);
         }
       );
       return jsonResponse({ games });

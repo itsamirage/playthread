@@ -1,19 +1,55 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
 
 import PostCard from "../../components/PostCard";
 import PostCommentsThread from "../../components/PostCommentsThread";
 import SectionCard from "../../components/SectionCard";
 import { useAuth } from "../../lib/auth";
+import { describeIntegrityError } from "../../lib/integrity";
 import { goBackOrFallback } from "../../lib/navigation";
-import { deletePost, useEditablePost } from "../../lib/posts";
+import { deletePost, togglePostReaction, useEditablePost } from "../../lib/posts";
 import { theme } from "../../lib/theme";
 
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { session } = useAuth();
-  const { post, isLoading, error } = useEditablePost(typeof id === "string" ? id : null, true);
+  const { post, isLoading, error, reload } = useEditablePost(typeof id === "string" ? id : null, true);
+  const [reactingPostId, setReactingPostId] = useState(null);
+  const [optimisticReaction, setOptimisticReaction] = useState(null);
+
+  const displayPost = optimisticReaction && post ? { ...post, ...optimisticReaction } : post;
+
+  const handleReact = async (reactionType) => {
+    if (!session?.user?.id || !post) return;
+
+    const prevReaction = optimisticReaction?.viewerReaction ?? post.viewerReaction ?? null;
+    const prevCounts = { ...(optimisticReaction?.reactionCounts ?? post.reactionCounts ?? {}) };
+    const toggling = prevReaction === reactionType;
+    const newReaction = toggling ? null : reactionType;
+    const newCounts = { ...prevCounts };
+    if (toggling) {
+      newCounts[reactionType] = Math.max(0, (newCounts[reactionType] ?? 0) - 1);
+    } else {
+      if (prevReaction) newCounts[prevReaction] = Math.max(0, (newCounts[prevReaction] ?? 0) - 1);
+      newCounts[reactionType] = (newCounts[reactionType] ?? 0) + 1;
+    }
+    setOptimisticReaction({ viewerReaction: newReaction, reactionCounts: newCounts });
+
+    try {
+      setReactingPostId(post.id);
+      await togglePostReaction({ userId: session.user.id, postId: post.id, reactionType });
+      await reload();
+      setOptimisticReaction(null);
+    } catch (nextError) {
+      setOptimisticReaction(null);
+      const errorCopy = describeIntegrityError(nextError);
+      Alert.alert(errorCopy.title, errorCopy.detail);
+    } finally {
+      setReactingPostId(null);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -55,8 +91,11 @@ export default function PostDetailScreen() {
       </View>
 
       <PostCard
-        post={post}
+        post={displayPost}
+        isReacting={reactingPostId === post.id}
         onAuthorPress={() => router.push(`/user/${post.userId}`)}
+        onGamePress={() => router.push(`/game/${post.gameId}`)}
+        onReact={handleReact}
         onDelete={
           session?.user?.id === post.userId
             ? async () => {
@@ -79,7 +118,6 @@ export default function PostDetailScreen() {
             ? () => router.push({ pathname: "/create-post", params: { gameId: String(post.gameId), postId: post.id } })
             : null
         }
-        onPress={() => router.push(`/game/${post.gameId}`)}
       />
 
       <SectionCard title="Conversation" eyebrow="Replies">

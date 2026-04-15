@@ -86,6 +86,7 @@ export default function GameDetailScreen() {
   const [deletingPostId, setDeletingPostId] = useState(null);
   const [developerOnly, setDeveloperOnly] = useState(false);
   const [moderatingPostId, setModeratingPostId] = useState(null);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
   const followStatus = getFollowStatus(params.id);
   const isFollowed = isFollowingGame(params.id);
@@ -537,113 +538,90 @@ export default function GameDetailScreen() {
       ) : null}
 
       <SectionCard title="Threads" eyebrow="Community">
-        <View style={styles.communityToolbar}>
-          <Pressable
-            onPress={() => setShowSpoilers((currentValue) => !currentValue)}
-            style={[styles.communityChip, showSpoilers ? styles.communityChipActive : null]}
-          >
-            <Text
-              style={[
-                styles.communityChipText,
-                showSpoilers ? styles.communityChipTextActive : null,
-              ]}
-            >
-              {showSpoilers ? "Spoilers visible" : "Spoilers blurred"}
-            </Text>
-          </Pressable>
-          {Object.entries(POST_SORT_OPTIONS).map(([sortKey, sortLabel]) => {
-            const isActive = threadSort === sortKey;
-
-            return (
+        <Pressable onPress={() => setIsFiltersOpen((v) => !v)} style={styles.filtersToggle}>
+          <Text style={styles.filtersToggleLabel}>Filters</Text>
+          <Text style={styles.filtersToggleArrow}>{isFiltersOpen ? "▲" : "▼"}</Text>
+        </Pressable>
+        {isFiltersOpen ? (
+          <>
+            <View style={styles.communityToolbar}>
               <Pressable
-                key={sortKey}
-                onPress={() => setThreadSort(sortKey)}
-                style={[styles.communityChip, isActive ? styles.communityChipActive : null]}
+                onPress={() => setShowSpoilers((currentValue) => !currentValue)}
+                style={[styles.communityChip, showSpoilers ? styles.communityChipActive : null]}
               >
-                <Text
-                  style={[
-                    styles.communityChipText,
-                    isActive ? styles.communityChipTextActive : null,
-                  ]}
-                >
-                  {sortLabel}
+                <Text style={[styles.communityChipText, showSpoilers ? styles.communityChipTextActive : null]}>
+                  {showSpoilers ? "Spoilers visible" : "Spoilers blurred"}
                 </Text>
               </Pressable>
-            );
-          })}
-        </View>
-        <View style={styles.communityToolbar}>
-          {POST_TYPE_OPTIONS.map((type) => {
-            const isActive = selectedThreadTypes.includes(type);
-
-            return (
-              <Pressable
-                key={type}
-                onPress={() =>
-                  setSelectedThreadTypes((currentValue) => {
-                    if (currentValue.includes(type)) {
-                      return currentValue.length === 1
-                        ? currentValue
-                        : currentValue.filter((value) => value !== type);
-                    }
-
-                    return [...currentValue, type];
-                  })
-                }
-                style={[styles.communityChip, isActive ? styles.communityChipActive : null]}
-              >
-                <Text
-                  style={[
-                    styles.communityChipText,
-                    isActive ? styles.communityChipTextActive : null,
-                  ]}
-                >
-                  {postTypeLabels[type] ?? type}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        {hasDeveloperPosts ? (
-          <View style={styles.communityToolbar}>
-            <Pressable
-              onPress={() => setDeveloperOnly((currentValue) => !currentValue)}
-              style={[styles.communityChip, developerOnly ? styles.communityChipActive : null]}
-            >
-              <Text
-                style={[
-                  styles.communityChipText,
-                  developerOnly ? styles.communityChipTextActive : null,
-                ]}
-              >
-                Developer
-              </Text>
-            </Pressable>
-          </View>
-        ) : null}
-        {threadSort === "top" ? (
-          <View style={styles.communityToolbar}>
-            {Object.entries(POST_TOP_PERIOD_OPTIONS).map(([periodKey, periodLabel]) => {
-              const isActive = threadTopPeriod === periodKey;
-
-              return (
-                <Pressable
-                  key={periodKey}
-                  onPress={() => setThreadTopPeriod(periodKey)}
-                  style={[styles.communityChip, isActive ? styles.communityChipActive : null]}
-                >
-                  <Text
-                    style={[
-                      styles.communityChipText,
-                      isActive ? styles.communityChipTextActive : null,
-                    ]}
+              {Object.entries(POST_SORT_OPTIONS).map(([sortKey, sortLabel]) => {
+                const isActive = threadSort === sortKey;
+                return (
+                  <Pressable
+                    key={sortKey}
+                    onPress={() => setThreadSort(sortKey)}
+                    style={[styles.communityChip, isActive ? styles.communityChipActive : null]}
                   >
-                    {periodLabel}
+                    <Text style={[styles.communityChipText, isActive ? styles.communityChipTextActive : null]}>
+                      {sortLabel}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={styles.communityToolbar}>
+              {POST_TYPE_OPTIONS.map((type) => {
+                const isActive = selectedThreadTypes.includes(type);
+                return (
+                  <Pressable
+                    key={type}
+                    onPress={() =>
+                      setSelectedThreadTypes((currentValue) => {
+                        if (currentValue.includes(type)) {
+                          return currentValue.length === 1 ? currentValue : currentValue.filter((value) => value !== type);
+                        }
+                        return [...currentValue, type];
+                      })
+                    }
+                    style={[styles.communityChip, isActive ? styles.communityChipActive : null]}
+                  >
+                    <Text style={[styles.communityChipText, isActive ? styles.communityChipTextActive : null]}>
+                      {postTypeLabels[type] ?? type}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {hasDeveloperPosts ? (
+              <View style={styles.communityToolbar}>
+                <Pressable
+                  onPress={() => setDeveloperOnly((currentValue) => !currentValue)}
+                  style={[styles.communityChip, developerOnly ? styles.communityChipActive : null]}
+                >
+                  <Text style={[styles.communityChipText, developerOnly ? styles.communityChipTextActive : null]}>
+                    Developer
                   </Text>
                 </Pressable>
-              );
-            })}
-          </View>
+              </View>
+            ) : null}
+            {threadSort === "top" ? (
+              <View style={styles.communityToolbar}>
+                {Object.entries(POST_TOP_PERIOD_OPTIONS).map(([periodKey, periodLabel]) => {
+                  const isActive = threadTopPeriod === periodKey;
+                  return (
+                    <Pressable
+                      key={periodKey}
+                      onPress={() => setThreadTopPeriod(periodKey)}
+                      style={[styles.communityChip, isActive ? styles.communityChipActive : null]}
+                    >
+                      <Text style={[styles.communityChipText, isActive ? styles.communityChipTextActive : null]}>
+                        {periodLabel}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+          </>
         ) : null}
         {!showSpoilers && posts.some((post) => post.spoiler) ? (
           <Text style={styles.helperText}>
@@ -674,6 +652,7 @@ export default function GameDetailScreen() {
                   onReact={(reactionType) => handleReact(post.id, reactionType)}
                   post={post}
                   onPress={() => router.push(`/post/${post.id}`)}
+                  onGamePress={() => router.push(`/game/${post.gameId}`)}
                   spoilerRevealHint="Tap to open this spoiler post. Your saved game-completion spoiler setting will stay unchanged."
                 />
                 {canModeratePosts ? (
@@ -832,6 +811,25 @@ const styles = StyleSheet.create({
   },
   overviewContent: {
     gap: theme.spacing.sm,
+  },
+  filtersToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderTopColor: theme.colors.border,
+    borderTopWidth: theme.borders.width,
+    paddingTop: theme.spacing.md,
+  },
+  filtersToggleLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  filtersToggleArrow: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
   },
   statCardActive: {
     borderColor: theme.colors.accent,

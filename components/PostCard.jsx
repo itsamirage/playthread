@@ -34,6 +34,7 @@ const reactionLabelsByMode = {
 export default function PostCard({
   post,
   onPress,
+  onGamePress,
   onAuthorPress,
   onReact,
   onOpenComments,
@@ -100,7 +101,11 @@ export default function PostCard({
       ) : null}
 
       <View style={styles.mainContent}>
-        <View style={styles.gameRow}>
+        <Pressable
+          disabled={!onGamePress}
+          onPress={(event) => { event.stopPropagation?.(); onGamePress?.(); }}
+          style={styles.gameRow}
+        >
           {post.gameCoverUrl ? (
             <Image source={{ uri: post.gameCoverUrl }} style={styles.coverImage} />
           ) : (
@@ -115,7 +120,7 @@ export default function PostCard({
             <Text style={styles.gameTitle}>{post.gameTitle}</Text>
             <Text style={styles.postTitle}>{post.title}</Text>
           </View>
-        </View>
+        </Pressable>
 
         <Text style={styles.bodyText}>{post.body}</Text>
         {post.isEdited ? (
@@ -252,7 +257,12 @@ export default function PostCard({
                       : null,
                   ]}
                 >
-                  {isAppreciation ? "Respect" : reactionLabels[reactionType]} {post.reactionCounts?.[reactionType] ?? 0}
+                  {(() => {
+                    const count = post.reactionCounts?.[reactionType] ?? 0;
+                    const base = isAppreciation ? "Respect" : reactionLabels[reactionType];
+                    const label = (reactionType === "like" || reactionType === "dislike") && count !== 1 ? base + "s" : base;
+                    return `${count} ${label}`;
+                  })()}
                 </Text>
               </Pressable>
             );

@@ -19,12 +19,15 @@ import { useFollows } from "../../lib/follows";
 import { useBrowseGames } from "../../lib/games";
 import { useTabReselectScroll } from "../../lib/tabReselect";
 import { theme } from "../../lib/theme";
+import { useCreatorSearch } from "../../lib/userSocial";
+import { getProfileNameColor } from "../../lib/profileAppearance";
 
 const SEARCH_MODES = {
   game: "Game",
   studio: "Studio",
   genre: "Genre",
   platform: "Platform",
+  player: "Players",
 };
 
 function normalizeSearchValue(value) {
@@ -155,6 +158,9 @@ export default function BrowseScreen() {
     hideMatureGames: preferences.hideMatureGames,
   });
   const cleanQuery = query.trim().toLowerCase();
+  const { results: playerResults, isLoading: playersLoading } = useCreatorSearch(
+    searchMode === "player" ? query : ""
+  );
   const handleClearFilters = () => {
     setQuery("");
   };
@@ -172,8 +178,14 @@ export default function BrowseScreen() {
         ? "Studios"
         : searchMode === "genre"
           ? "Genres"
-          : "Platforms";
-  const resultCount = searchMode === "game" ? filteredGames.length : facetResults.length;
+          : searchMode === "player"
+            ? "Players"
+            : "Platforms";
+  const resultCount = searchMode === "game"
+    ? filteredGames.length
+    : searchMode === "player"
+      ? playerResults.length
+      : facetResults.length;
 
   const handleSelectStatus = async (game, status) => {
     const { error } = await setFollowStatus(game, status);
@@ -214,7 +226,9 @@ export default function BrowseScreen() {
 
       <SectionCard title="Search" eyebrow="Discover">
         <TextInput
-          autoCapitalize="words"
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
           onChangeText={setQuery}
           placeholder={
             searchMode === "game"
@@ -223,7 +237,9 @@ export default function BrowseScreen() {
                 ? "Search studios"
                 : searchMode === "genre"
                   ? "Search genres"
-                  : "Search platforms"
+                  : searchMode === "player"
+                    ? "Search players by username"
+                    : "Search platforms"
           }
           placeholderTextColor={theme.colors.textMuted}
           style={styles.searchInput}
@@ -287,11 +303,35 @@ export default function BrowseScreen() {
       </View>
 
       <View style={styles.resultsList}>
-        {isLoading ? (
+        {isLoading || playersLoading ? (
           <View style={styles.loadingState}>
             <ActivityIndicator color={theme.colors.accent} />
             <Text style={styles.emptyText}>Loading results...</Text>
           </View>
+        ) : searchMode === "player" && playerResults.length > 0 ? (
+          playerResults.map((player) => (
+            <Pressable
+              key={player.id}
+              onPress={() => router.push(`/user/${player.id}`)}
+              style={({ pressed }) => [styles.facetCard, pressed ? styles.pressedCard : null]}
+            >
+              <Text style={[styles.facetTitle, { color: getProfileNameColor(player.selectedNameColor) }]}>
+                @{player.username}
+              </Text>
+              {player.displayName !== player.username ? (
+                <Text style={styles.facetMeta}>{player.displayName}</Text>
+              ) : null}
+              {player.bio ? (
+                <Text style={styles.facetHint} numberOfLines={2}>{player.bio}</Text>
+              ) : null}
+            </Pressable>
+          ))
+        ) : searchMode === "player" ? (
+          <SectionCard title="No players found" eyebrow="Try again">
+            <Text style={styles.emptyText}>
+              {cleanQuery.length < 2 ? "Type at least 2 letters to search players." : "No players matched that username."}
+            </Text>
+          </SectionCard>
         ) : searchMode === "game" && filteredGames.length > 0 ? (
           filteredGames.map((game) => (
             <GameCard
@@ -302,6 +342,7 @@ export default function BrowseScreen() {
               onPress={() => router.push(`/game/${game.id}`)}
               onSelectStatus={(status) => handleSelectStatus(game, status)}
               onUnfollow={() => handleUnfollow(game)}
+              onAddToBacklog={() => handleSelectStatus(game, "have_not_played")}
             />
           ))
         ) : searchMode !== "game" && facetResults.length > 0 ? (
@@ -336,7 +377,7 @@ export default function BrowseScreen() {
             </Pressable>
           ))
         ) : (
-          <SectionCard title="No games found" eyebrow="Try again">
+          <SectionCard title="No results" eyebrow="Try again">
             <Text style={styles.emptyText}>
               {searchMode === "game"
                 ? "Try a different game title."

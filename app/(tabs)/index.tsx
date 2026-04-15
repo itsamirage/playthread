@@ -26,8 +26,12 @@ export default function HomeScreen() {
   const [giftPost, setGiftPost] = useState(null);
   const [isSendingGift, setIsSendingGift] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState(null);
+  const [optimisticReactions, setOptimisticReactions] = useState<Record<string, { viewerReaction: string | null; reactionCounts: Record<string, number> }>>({});
   const scrollRef = useRef(null);
-  const feedPosts = posts;
+  const feedPosts = posts.map((post) => {
+    const opt = optimisticReactions[post.id];
+    return opt ? { ...post, ...opt } : post;
+  });
   const newPostCount = Math.min(posts.length, 4);
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
   const scrollHandlers = useTabReselectScroll("home", { scrollRef, onRefresh: reload });
@@ -38,15 +42,28 @@ export default function HomeScreen() {
       return;
     }
 
+    const post = posts.find((p) => p.id === postId);
+    if (!post) return;
+
+    const prevReaction = optimisticReactions[postId]?.viewerReaction ?? post.viewerReaction ?? null;
+    const prevCounts = { ...(optimisticReactions[postId]?.reactionCounts ?? post.reactionCounts ?? {}) };
+    const toggling = prevReaction === reactionType;
+    const newReaction = toggling ? null : reactionType;
+    const newCounts = { ...prevCounts };
+    if (toggling) {
+      newCounts[reactionType] = Math.max(0, (newCounts[reactionType] ?? 0) - 1);
+    } else {
+      if (prevReaction) newCounts[prevReaction] = Math.max(0, (newCounts[prevReaction] ?? 0) - 1);
+      newCounts[reactionType] = (newCounts[reactionType] ?? 0) + 1;
+    }
+
+    setOptimisticReactions((prev) => ({ ...prev, [postId]: { viewerReaction: newReaction, reactionCounts: newCounts } }));
+
     try {
       setReactingPostId(postId);
-      await togglePostReaction({
-        userId: session.user.id,
-        postId,
-        reactionType,
-      });
-      await reload();
+      await togglePostReaction({ userId: session.user.id, postId, reactionType });
     } catch (nextError) {
+      setOptimisticReactions((prev) => { const next = { ...prev }; delete next[postId]; return next; });
       const errorCopy = describeIntegrityError(nextError);
       Alert.alert(errorCopy.title, errorCopy.detail);
     } finally {
@@ -178,6 +195,7 @@ export default function HomeScreen() {
               onEdit={session?.user?.id === post.userId ? () => handleEditPost(post) : null}
               onGift={session?.user?.id && session.user.id !== post.userId ? () => setGiftPost(post) : null}
               onOpenComments={() => setSelectedPostId(post.id)}
+              onGamePress={() => router.push(`/game/${post.gameId}`)}
               onReact={(reactionType) => handleReact(post.id, reactionType)}
               post={post}
               onPress={() => router.push(`/post/${post.id}`)}
