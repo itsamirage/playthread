@@ -20,9 +20,12 @@ workflows:
         script: keychain initialize
       - name: Import certificate and provisioning profile
         script: |
+          echo "CERTIFICATE_P12 length: ${#CERTIFICATE_P12}"
+          echo "PROVISIONING_PROFILE length: ${#PROVISIONING_PROFILE}"
           echo "$CERTIFICATE_P12" | tr -d ' \n\r' | base64 --decode > /tmp/certificate.p12
           keychain add-certificates --certificate /tmp/certificate.p12 --certificate-password "$CERTIFICATE_PASSWORD"
           echo "$PROVISIONING_PROFILE" | tr -d ' \n\r' | base64 --decode > /tmp/profile.mobileprovision
+          echo "Decoded profile size: $(wc -c < /tmp/profile.mobileprovision) bytes"
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp /tmp/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
       - name: Set up code signing
