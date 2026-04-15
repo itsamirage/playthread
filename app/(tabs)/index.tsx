@@ -1,5 +1,5 @@
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 
 import PostCard from "../../components/PostCard";
@@ -12,6 +12,7 @@ import { useAuth } from "../../lib/auth";
 import { useFollows } from "../../lib/follows";
 import { describeIntegrityError } from "../../lib/integrity";
 import { deletePost, togglePostReaction, useFeedPosts } from "../../lib/posts";
+import { useTabReselectScroll } from "../../lib/tabReselect";
 import { theme } from "../../lib/theme";
 
 export default function HomeScreen() {
@@ -25,9 +26,11 @@ export default function HomeScreen() {
   const [giftPost, setGiftPost] = useState(null);
   const [isSendingGift, setIsSendingGift] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState(null);
+  const scrollRef = useRef(null);
   const feedPosts = posts;
   const newPostCount = Math.min(posts.length, 4);
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
+  const scrollHandlers = useTabReselectScroll("home", { scrollRef, onRefresh: reload });
 
   const handleReact = async (postId, reactionType) => {
     if (!session?.user?.id) {
@@ -108,7 +111,13 @@ export default function HomeScreen() {
   );
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView
+      ref={scrollRef}
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      onScroll={scrollHandlers.onScroll}
+      scrollEventThrottle={scrollHandlers.scrollEventThrottle}
+    >
       <View style={styles.hero}>
         <View style={styles.heroTopRow}>
           <View style={styles.heroTextBlock}>
@@ -165,8 +174,8 @@ export default function HomeScreen() {
               isDeleting={deletingPostId === post.id}
               isReacting={reactingPostId === post.id}
               onAuthorPress={() => router.push(`/user/${post.userId}`)}
-              onDelete={session?.user?.id === post.userId && post.type === "clip" ? () => handleDeletePost(post) : null}
-              onEdit={session?.user?.id === post.userId && post.type === "clip" ? () => handleEditPost(post) : null}
+              onDelete={session?.user?.id === post.userId ? () => handleDeletePost(post) : null}
+              onEdit={session?.user?.id === post.userId ? () => handleEditPost(post) : null}
               onGift={session?.user?.id && session.user.id !== post.userId ? () => setGiftPost(post) : null}
               onOpenComments={() => setSelectedPostId(post.id)}
               onReact={(reactionType) => handleReact(post.id, reactionType)}

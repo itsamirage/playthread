@@ -20,8 +20,9 @@ import SectionCard from "../components/SectionCard";
 import { useAuth } from "../lib/auth";
 import { pickClipVideo } from "../lib/clipMedia";
 import { useFollows } from "../lib/follows";
-import { useGameDetail } from "../lib/games";
+import { useBrowseGames, useGameDetail } from "../lib/games";
 import { describeIntegrityError } from "../lib/integrity";
+import { goBackOrFallback } from "../lib/navigation";
 import { pickPostImage } from "../lib/postMedia";
 import { createPost, updatePost, useEditablePost } from "../lib/posts";
 import { theme } from "../lib/theme";
@@ -59,12 +60,13 @@ export default function CreatePostScreen() {
   const initialGameId = Number(params.gameId);
   const editPostId = typeof params.postId === "string" ? params.postId : null;
   const { game: routeGame } = useGameDetail(initialGameId);
+  const launchedFromGamePage = !Number.isNaN(initialGameId) && initialGameId > 0;
   const { post: editablePost, isLoading: editablePostLoading } = useEditablePost(
     editPostId,
     Boolean(editPostId),
   );
   const [selectedGameId, setSelectedGameId] = useState(
-    !Number.isNaN(initialGameId) && initialGameId > 0 ? initialGameId : followedGames[0]?.id ?? null
+    !Number.isNaN(initialGameId) && initialGameId > 0 ? initialGameId : null
   );
   const [postType, setPostType] = useState("discussion");
   const [title, setTitle] = useState("");
@@ -74,6 +76,8 @@ export default function CreatePostScreen() {
   const [spoilerTag, setSpoilerTag] = useState("");
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedClip, setSelectedClip] = useState(null);
+  const [gameSearch, setGameSearch] = useState("");
+  const [showAlternateGamePicker, setShowAlternateGamePicker] = useState(!launchedFromGamePage);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -87,10 +91,7 @@ export default function CreatePostScreen() {
       return;
     }
 
-    if (!selectedGameId && followedGames[0]?.id) {
-      setSelectedGameId(followedGames[0].id);
-    }
-  }, [followedGames, initialGameId, selectedGameId]);
+  }, [initialGameId]);
 
   useEffect(() => {
     if (!isEditing || !editablePost || hasLoadedEditValues) {
@@ -135,6 +136,10 @@ export default function CreatePostScreen() {
   const footerPaddingBottom = Math.max(insets.bottom, theme.spacing.md);
   const scrollBottomPadding =
     footerHeight + footerPaddingBottom + theme.spacing.xl + (Platform.OS === "android" ? keyboardHeight : 0);
+  const { filteredGames: searchedGames, isLoading: isSearchingGames } = useBrowseGames({
+    query: gameSearch,
+    selectedGenre: "All",
+  });
 
   const selectedGame = useMemo(
     () => {
@@ -166,6 +171,17 @@ export default function CreatePostScreen() {
 
     return [...byId.values()];
   }, [followedGames, routeGame]);
+  const visibleSearchGames = useMemo(() => {
+    const uniqueGames = new Map();
+
+    for (const game of [...selectableGames, ...searchedGames]) {
+      if (game?.id) {
+        uniqueGames.set(game.id, game);
+      }
+    }
+
+    return [...uniqueGames.values()].slice(0, gameSearch.trim() ? 12 : 8);
+  }, [gameSearch, searchedGames, selectableGames]);
 
   const handleSubmit = async () => {
     Keyboard.dismiss();
@@ -176,7 +192,7 @@ export default function CreatePostScreen() {
     }
 
     if (!selectedGame) {
-      Alert.alert("Pick a game", "Choose one of your followed games first.");
+      Alert.alert("Pick a game", "Search for a game and attach this post before publishing.");
       return;
     }
 
@@ -266,21 +282,21 @@ export default function CreatePostScreen() {
     return (
       <View style={[styles.screen, styles.loadingCenter]}>
         <ActivityIndicator color={theme.colors.accent} />
-        <Text style={styles.helperText}>Loading clip details...</Text>
+        <Text style={styles.helperText}>Loading post details...</Text>
       </View>
     );
   }
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "android" ? "height" : undefined}
       keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       style={styles.screen}
     >
       <View style={styles.screen}>
         <ScrollView
           ref={scrollViewRef}
-          automaticallyAdjustKeyboardInsets
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           style={styles.screen}
@@ -294,43 +310,78 @@ export default function CreatePostScreen() {
           >
             <View style={styles.hero}>
               <Text style={styles.eyebrow}>PlayThread</Text>
-              <Text style={styles.title}>{isEditing ? "Edit clip" : "Create post"}</Text>
+              <Text style={styles.title}>{isEditing ? "Edit post" : "Create post"}</Text>
               <Text style={styles.subtitle}>
                 {isEditing
-                  ? "Update your clip caption and spoiler settings."
-                  : "Start the first real thread for one of the games you follow."}
+                  ? "Update your post and spoiler settings."
+                  : launchedFromGamePage
+                    ? "Start a new thread for this game, or switch to another one."
+                    : "Start a new thread for any game by searching first."}
               </Text>
             </View>
 
           <SectionCard title="Game" eyebrow="Choose a title">
             {isEditing ? (
               <Text style={styles.helperText}>
-                This clip stays attached to {selectedGame?.title ?? editablePost?.gameTitle ?? "its current game"}.
+                This post stays attached to {selectedGame?.title ?? editablePost?.gameTitle ?? "its current game"}.
               </Text>
-            ) : selectableGames.length > 0 ? (
-              <View style={styles.chipWrap}>
-                {selectableGames.map((game) => {
-                  const isActive = game.id === selectedGameId;
-
-                  return (
+            ) : (
+              <View style={styles.gamePickerBlock}>
+                {launchedFromGamePage && selectedGame ? (
+                  <View style={styles.selectedGameCard}>
+                    <Text style={styles.selectedGameLabel}>Posting in</Text>
+                    <Text style={styles.selectedGameTitle}>{selectedGame.title}</Text>
                     <Pressable
-                      key={game.id}
-                      onPress={() => setSelectedGameId(game.id)}
-                      style={[styles.chip, isActive ? styles.chipActive : null]}
+                      onPress={() => setShowAlternateGamePicker((currentValue) => !currentValue)}
+                      style={({ pressed }) => [
+                        styles.inlineLinkButton,
+                        pressed ? styles.buttonPressed : null,
+                      ]}
                     >
-                      <Text style={[styles.chipText, isActive ? styles.chipTextActive : null]}>
-                        {game.title}
+                      <Text style={styles.inlineLinkText}>
+                        {showAlternateGamePicker ? "Keep this game only" : "Choose other game"}
                       </Text>
                     </Pressable>
-                  );
-                })}
+                  </View>
+                ) : null}
+
+                {(!launchedFromGamePage || showAlternateGamePicker) ? (
+                  <>
+                    <TextInput
+                      onChangeText={setGameSearch}
+                      placeholder={launchedFromGamePage ? "Search for another game" : "Search for a game"}
+                      placeholderTextColor={theme.colors.textMuted}
+                      style={styles.input}
+                      value={gameSearch}
+                    />
+                    <View style={styles.chipWrap}>
+                      {visibleSearchGames.map((game) => {
+                        const isActive = game.id === selectedGameId;
+
+                        return (
+                          <Pressable
+                            key={game.id}
+                            onPress={() => setSelectedGameId(game.id)}
+                            style={[styles.chip, isActive ? styles.chipActive : null]}
+                          >
+                            <Text style={[styles.chipText, isActive ? styles.chipTextActive : null]}>
+                              {game.title}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    {isSearchingGames ? (
+                      <Text style={styles.helperText}>Searching games...</Text>
+                    ) : null}
+                    {!visibleSearchGames.length ? (
+                      <Text style={styles.helperText}>
+                        Search for a game to attach this post to.
+                      </Text>
+                    ) : null}
+                  </>
+                ) : null}
               </View>
-            ) : (
-              <Text style={styles.helperText}>
-                {routeGame
-                  ? `This post will be attached to ${routeGame.title}.`
-                  : "Open a game page or follow a game first before creating a post."}
-              </Text>
             )}
           </SectionCard>
 
@@ -452,10 +503,10 @@ export default function CreatePostScreen() {
           <SectionCard title={postType === "clip" ? "Clip" : "Image"} eyebrow="Optional media">
             <Text style={styles.helperText}>
               {isEditing
-                ? "Clip media replacement is disabled for now. Edit the caption or delete and re-upload if you need a different video."
+                ? "Media replacement is disabled for now. Edit the post text or delete and recreate the post if you need different media."
                 : postType === "clip"
                 ? "Attach a video clip up to 200 MB. Mux will process it after upload, so playback may appear a moment later."
-                : "Attach a JPG, PNG, WebP, or GIF up to 5 MB."}
+                : "Attach a JPG, PNG, WebP, or GIF up to 5 MB. Very small or extreme-ratio images are blocked, and upload metadata is recorded for moderation review."}
             </Text>
             {isEditing && postType === "clip" ? (
               <View style={styles.clipPreviewCard}>
@@ -514,6 +565,13 @@ export default function CreatePostScreen() {
             ) : selectedImage?.uri ? (
               <View style={styles.imageCard}>
                 <Image source={{ uri: selectedImage.uri }} style={styles.imagePreview} />
+                <Text style={styles.helperText}>
+                  {selectedImage.width && selectedImage.height
+                    ? `${selectedImage.width}x${selectedImage.height}`
+                    : "Selected image ready"}
+                  {selectedImage.fileSize ? ` • ${Math.max(1, Math.round(selectedImage.fileSize / 1024))} KB` : ""}
+                  {selectedImage.mimeType ? ` • ${selectedImage.mimeType}` : ""}
+                </Text>
                 <View style={styles.imageActions}>
                   <Pressable
                     onPress={handlePickImage}
@@ -580,7 +638,12 @@ export default function CreatePostScreen() {
             },
           ]}
         >
-          <Pressable onPress={() => router.back()} style={styles.secondaryButton}>
+          <Pressable
+            onPress={() =>
+              goBackOrFallback(router, selectedGame ? `/game/${selectedGame.id}` : "/(tabs)")
+            }
+            style={styles.secondaryButton}
+          >
             <Text style={styles.secondaryButtonText}>Cancel</Text>
           </Pressable>
 
@@ -644,6 +707,37 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: theme.spacing.sm,
+  },
+  gamePickerBlock: {
+    gap: theme.spacing.sm,
+  },
+  selectedGameCard: {
+    gap: theme.spacing.xs,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    padding: theme.spacing.md,
+  },
+  selectedGameLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+    textTransform: "uppercase",
+  },
+  selectedGameTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.md,
+    fontWeight: theme.fontWeights.bold,
+  },
+  inlineLinkButton: {
+    alignSelf: "flex-start",
+    paddingVertical: theme.spacing.xs,
+  },
+  inlineLinkText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
   },
   chip: {
     backgroundColor: "rgba(255,255,255,0.03)",

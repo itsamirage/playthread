@@ -21,6 +21,7 @@ import {
   createPostComment,
   deletePostComment,
   toggleCommentReaction,
+  updatePostComment,
   usePostComments,
 } from "../lib/posts";
 import { theme } from "../lib/theme";
@@ -40,6 +41,7 @@ export default function PostCommentsThread({
   const [giftingComment, setGiftingComment] = useState(null);
   const [isSendingGift, setIsSendingGift] = useState(false);
   const [displayComments, setDisplayComments] = useState([]);
+  const [editingCommentId, setEditingCommentId] = useState(null);
   const commentCount = post?.comments ?? comments.length;
 
   useEffect(() => {
@@ -51,6 +53,7 @@ export default function PostCommentsThread({
   useEffect(() => {
     if (!post?.id) {
       setDraft("");
+      setEditingCommentId(null);
     }
   }, [post?.id]);
 
@@ -73,17 +76,23 @@ export default function PostCommentsThread({
 
     try {
       setIsSubmitting(true);
-      const { error: commentError, moderation } = await createPostComment({
-        userId: session.user.id,
-        postId: post.id,
-        body: cleanBody,
-      });
+      const { error: commentError, moderation } = editingCommentId
+        ? await updatePostComment({
+            commentId: editingCommentId,
+            body: cleanBody,
+          })
+        : await createPostComment({
+            userId: session.user.id,
+            postId: post.id,
+            body: cleanBody,
+          });
 
       if (commentError) {
         throw commentError;
       }
 
       setDraft("");
+      setEditingCommentId(null);
       await reload();
       await onCommentCountChange?.();
 
@@ -122,6 +131,16 @@ export default function PostCommentsThread({
     }
   };
 
+  const handleStartEdit = (comment) => {
+    setEditingCommentId(comment.id);
+    setDraft(comment.body ?? "");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCommentId(null);
+    setDraft("");
+  };
+
   const handleToggleLike = async (commentId) => {
     if (!session?.user?.id) {
       Alert.alert("Sign in required", "You need to sign in before liking comments.");
@@ -158,7 +177,6 @@ export default function PostCommentsThread({
           };
         }),
       );
-      await reload();
     } catch (nextError) {
       const errorCopy = describeIntegrityError(nextError);
       Alert.alert(errorCopy.title, errorCopy.detail);
@@ -226,15 +244,24 @@ export default function PostCommentsThread({
                       </Text>
                     </Pressable>
                     {comment.isMine ? (
-                      <Pressable
-                        disabled={deletingCommentId === comment.id}
-                        onPress={() => handleDelete(comment.id)}
-                        style={styles.deleteButton}
-                      >
-                        <Text style={styles.deleteButtonText}>
-                          {deletingCommentId === comment.id ? "Deleting..." : "Delete"}
-                        </Text>
-                      </Pressable>
+                      <View style={styles.ownerCommentActions}>
+                        <Pressable
+                          disabled={isSubmitting}
+                          onPress={() => handleStartEdit(comment)}
+                          style={styles.editButton}
+                        >
+                          <Text style={styles.editButtonText}>Edit</Text>
+                        </Pressable>
+                        <Pressable
+                          disabled={deletingCommentId === comment.id}
+                          onPress={() => handleDelete(comment.id)}
+                          style={styles.deleteButton}
+                        >
+                          <Text style={styles.deleteButtonText}>
+                            {deletingCommentId === comment.id ? "Deleting..." : "Delete"}
+                          </Text>
+                        </Pressable>
+                      </View>
                     ) : null}
                   </View>
                   {authorTitle.key !== "none" ? (
@@ -253,6 +280,11 @@ export default function PostCommentsThread({
                     </View>
                   ) : null}
                   <Text style={styles.commentBody}>{comment.body}</Text>
+                  {comment.isEdited ? (
+                    <Text style={styles.commentEditedText}>
+                      Last edited {new Date(comment.updatedAt).toLocaleString()}
+                    </Text>
+                  ) : null}
                   <View style={styles.commentActions}>
                     <Pressable
                       disabled={reactingCommentId === comment.id}
@@ -291,6 +323,14 @@ export default function PostCommentsThread({
       </Container>
 
       <View style={styles.composer}>
+        {editingCommentId ? (
+          <View style={styles.editingBanner}>
+            <Text style={styles.editingBannerText}>Editing comment</Text>
+            <Pressable onPress={handleCancelEdit} style={styles.editingCancelButton}>
+              <Text style={styles.editingCancelButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+        ) : null}
         <TextInput
           editable={!isSubmitting}
           multiline
@@ -312,7 +352,15 @@ export default function PostCommentsThread({
               pressed ? styles.buttonPressed : null,
             ]}
           >
-            <Text style={styles.submitButtonText}>{isSubmitting ? "Posting..." : "Post comment"}</Text>
+            <Text style={styles.submitButtonText}>
+              {isSubmitting
+                ? editingCommentId
+                  ? "Saving..."
+                  : "Posting..."
+                : editingCommentId
+                  ? "Save edit"
+                  : "Post comment"}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -462,16 +510,60 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
+  ownerCommentActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+  },
+  editButton: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  editButtonText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
   deleteButtonText: {
     color: "#ff8a8a",
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.bold,
+  },
+  commentEditedText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
   },
   composer: {
     gap: theme.spacing.sm,
     borderTopColor: theme.colors.border,
     borderTopWidth: theme.borders.width,
     paddingTop: theme.spacing.md,
+  },
+  editingBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+    backgroundColor: "rgba(0,229,255,0.08)",
+    borderColor: "rgba(0,229,255,0.24)",
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  editingBannerText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  editingCancelButton: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  editingCancelButtonText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
   },
   input: {
     minHeight: 96,

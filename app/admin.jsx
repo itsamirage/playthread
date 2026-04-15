@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import * as Linking from "expo-linking";
 import {
   ActivityIndicator,
   Alert,
@@ -26,6 +27,7 @@ import {
   setBanState,
   setFlagStatus,
   updateIntegritySettings,
+  updateDeveloperGames,
   updateMemberRole,
   useAdminProfiles,
   useIntegrityEvents,
@@ -44,6 +46,7 @@ import {
   formatActionType,
   paginateItems,
 } from "../lib/adminInsights";
+import { describeImageModerationDetails } from "../lib/imageModerationPresentation";
 import { getProfileNameColor } from "../lib/profileAppearance";
 import { theme } from "../lib/theme";
 
@@ -72,6 +75,7 @@ export default function AdminScreen() {
   const [coinAdjustment, setCoinAdjustment] = useState("");
   const [coinReason, setCoinReason] = useState("");
   const [scopeDrafts, setScopeDrafts] = useState({});
+  const [developerDrafts, setDeveloperDrafts] = useState({});
   const [integrityDraft, setIntegrityDraft] = useState(null);
   const [flagStatusFilter, setFlagStatusFilter] = useState("all");
   const [flagOriginFilter, setFlagOriginFilter] = useState("all");
@@ -190,6 +194,24 @@ export default function AdminScreen() {
       await reloadModerationActions();
     } catch (error) {
       Alert.alert("Scope update failed", error instanceof Error ? error.message : "Could not save moderator scope.");
+    } finally {
+      setWorkingKey(null);
+    }
+  };
+
+  const handleSetDeveloperGames = async (member) => {
+    try {
+      setWorkingKey(`developer:${member.id}`);
+      await updateDeveloperGames({
+        targetUserId: member.id,
+        developerGameIds: parseGameIds(
+          developerDrafts[member.id] ?? (member.developerGameIds ?? []).join(","),
+        ),
+      });
+      await reloadProfiles();
+      await reloadModerationActions();
+    } catch (error) {
+      Alert.alert("Developer assignment failed", error instanceof Error ? error.message : "Could not save developer game assignments.");
     } finally {
       setWorkingKey(null);
     }
@@ -922,6 +944,19 @@ export default function AdminScreen() {
                     </>
                   ) : null}
 
+                  <TextInput
+                    onChangeText={(value) => setDeveloperDrafts((current) => ({ ...current, [member.id]: value }))}
+                    placeholder="Comma-separated IGDB game IDs for developer tag"
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={styles.textInput}
+                    value={developerDrafts[member.id] ?? (member.developerGameIds ?? []).join(",")}
+                  />
+                  <Pressable onPress={() => handleSetDeveloperGames(member)} style={styles.secondaryButton}>
+                    <Text style={styles.secondaryButtonText}>
+                      {workingKey === `developer:${member.id}` ? "Saving..." : "Save developer games"}
+                    </Text>
+                  </Pressable>
+
                   <View style={styles.inlineRow}>
                     <Pressable
                       onPress={() => handleAdjustCoins(member, Number(coinAdjustment))}
@@ -975,6 +1010,11 @@ export default function AdminScreen() {
               {selectedFlag.mediaStatus ? (
                 <Text style={styles.helperText}>Media status {selectedFlag.mediaStatus}</Text>
               ) : null}
+              {selectedFlag.imageMetadata ? (
+                <Text style={styles.helperText}>
+                  Image details: {describeImageModerationDetails(selectedFlag.imageMetadata).join(" | ")}
+                </Text>
+              ) : null}
               <Text style={styles.excerptText}>{JSON.stringify(selectedFlag.evidence)}</Text>
               <View style={styles.inlineRow}>
                 <Pressable onPress={() => handleShowAuthorContext(selectedFlag.author)} style={styles.secondaryButton}>
@@ -1001,6 +1041,11 @@ export default function AdminScreen() {
                 {selectedFlag.gameId ? (
                   <Pressable onPress={() => router.push(`/game/${selectedFlag.gameId}`)} style={styles.secondaryButton}>
                     <Text style={styles.secondaryButtonText}>Open game</Text>
+                  </Pressable>
+                ) : null}
+                {selectedFlag.mediaUrl ? (
+                  <Pressable onPress={() => Linking.openURL(selectedFlag.mediaUrl)} style={styles.secondaryButton}>
+                    <Text style={styles.secondaryButtonText}>Open raw media</Text>
                   </Pressable>
                 ) : null}
               </View>

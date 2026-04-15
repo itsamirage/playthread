@@ -1,5 +1,6 @@
 import { BlurView } from "expo-blur";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image } from "expo-image";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import ClipPlayer from "./ClipPlayer";
 import { formatModerationWarning } from "../lib/moderation";
@@ -42,6 +43,7 @@ export default function PostCard({
   isDeleting = false,
   isReacting = false,
   concealSpoilers = false,
+  spoilerRevealHint = null,
 }) {
   const reactionLabels = reactionLabelsByMode[post.reactionMode] ?? reactionLabelsByMode.sentiment;
   const authorTitle = getProfileTitleOption(post.authorTitleKey);
@@ -69,6 +71,16 @@ export default function PostCard({
               <Text style={styles.spoilerPillText}>
                 {post.spoilerTag ? `Spoiler: ${post.spoilerTag}` : "Spoiler"}
               </Text>
+            </View>
+          ) : null}
+          {post.isDeveloperPost ? (
+            <View style={styles.developerPill}>
+              <Text style={styles.developerPillText}>Developer</Text>
+            </View>
+          ) : null}
+          {post.isPinned ? (
+            <View style={styles.pinnedPill}>
+              <Text style={styles.pinnedPillText}>Pinned</Text>
             </View>
           ) : null}
         </View>
@@ -106,6 +118,11 @@ export default function PostCard({
         </View>
 
         <Text style={styles.bodyText}>{post.body}</Text>
+        {post.isEdited ? (
+          <Text style={styles.editedText}>
+            Edited {new Date(post.updatedAt).toLocaleString()}
+          </Text>
+        ) : null}
 
         {post.imageUrl ? (
           <Image source={{ uri: post.imageUrl }} style={styles.postImage} />
@@ -137,7 +154,7 @@ export default function PostCard({
                 }}
                 style={({ pressed }) => [styles.ownerActionButton, pressed ? styles.cardPressed : null]}
               >
-                <Text style={styles.ownerActionButtonText}>Edit clip</Text>
+                <Text style={styles.ownerActionButtonText}>Edit post</Text>
               </Pressable>
             ) : null}
             {onDelete ? (
@@ -153,7 +170,7 @@ export default function PostCard({
                 ]}
               >
                 <Text style={styles.ownerActionButtonDangerText}>
-                  {isDeleting ? "Deleting..." : "Delete clip"}
+                  {isDeleting ? "Deleting..." : "Delete post"}
                 </Text>
               </Pressable>
             ) : null}
@@ -248,7 +265,7 @@ export default function PostCard({
             <View style={styles.spoilerOverlay}>
               <Text style={styles.spoilerOverlayTitle}>Spoiler concealed</Text>
               <Text style={styles.spoilerOverlayText}>
-                This post stays blurred until you reveal spoilers for this game.
+                {spoilerRevealHint ?? "Tap this post if you want to open a potentially spoiler-heavy thread."}
               </Text>
             </View>
           </View>
@@ -307,6 +324,30 @@ const styles = StyleSheet.create({
     color: theme.colors.spoiler,
     fontSize: theme.fontSizes.xs,
     fontWeight: theme.fontWeights.bold,
+  },
+  developerPill: {
+    backgroundColor: "rgba(255,204,51,0.14)",
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+  },
+  developerPillText: {
+    color: "#ffcc33",
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+    textTransform: "uppercase",
+  },
+  pinnedPill: {
+    backgroundColor: "rgba(102,204,255,0.14)",
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+  },
+  pinnedPillText: {
+    color: "#8ad6ff",
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+    textTransform: "uppercase",
   },
   metaText: {
     color: theme.colors.textMuted,
@@ -382,6 +423,10 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontSize: theme.fontSizes.md,
     lineHeight: 22,
+  },
+  editedText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
   },
   postImage: {
     width: "100%",

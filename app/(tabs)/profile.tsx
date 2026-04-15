@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -40,6 +40,7 @@ import {
 } from "../../lib/platformAccounts";
 import { useAuth } from "../../lib/auth";
 import { saveProfileIdentity, saveProfileTitle, useCurrentProfile } from "../../lib/profile";
+import { useContentPreferences } from "../../lib/contentPreferences";
 import {
   saveProfileShowcase,
   useProfileShowcase,
@@ -47,6 +48,7 @@ import {
 } from "../../lib/profileShowcase";
 import { getProfileNameColor } from "../../lib/profileAppearance";
 import { getProfileTitleOption, PROFILE_TITLE_OPTIONS } from "../../lib/titles";
+import { useTabReselectScroll } from "../../lib/tabReselect";
 import { theme } from "../../lib/theme";
 
 const BANNER_STYLES = {
@@ -177,6 +179,7 @@ export default function ProfileScreen() {
     alpha: "A-Z",
   };
   const router = useRouter();
+  const scrollRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [linkingSteam, setLinkingSteam] = useState(false);
   const [syncingSteam, setSyncingSteam] = useState(false);
@@ -197,6 +200,7 @@ export default function ProfileScreen() {
   });
   const deferredShowcaseSearch = useDeferredValue(showcaseSearch);
   const { session } = useAuth();
+  const { preferences: contentPreferences, savePreferences: saveContentPreferences } = useContentPreferences();
   const { followedCount, followedGames, isLoading: followsLoading, unfollowGame } = useFollows();
   const { profile, reload: reloadProfile } = useCurrentProfile();
   const { accountsByProvider, isLoading: accountsLoading, reloadAccounts } = useConnectedAccounts();
@@ -302,6 +306,15 @@ export default function ProfileScreen() {
   const selectedShowcaseItems = selectedShowcaseIds
     .map((id) => selectedCatalogItems.find((item) => item.id === id))
     .filter(Boolean);
+  const scrollHandlers = useTabReselectScroll("profile", {
+    scrollRef,
+    onRefresh: () => {
+      void reloadProfile?.();
+      void reloadAccounts?.();
+      void reloadShowcase?.();
+      void reloadCatalog?.();
+    },
+  });
 
   const handleLogout = async () => {
     try {
@@ -631,7 +644,13 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView
+      ref={scrollRef}
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      onScroll={scrollHandlers.onScroll}
+      scrollEventThrottle={scrollHandlers.scrollEventThrottle}
+    >
       <View
         style={[
           styles.hero,
@@ -856,7 +875,7 @@ export default function ProfileScreen() {
 
       <SectionCard title="Profile identity" eyebrow="Edit">
         <Text style={styles.bodyText}>
-          Update your display name, short bio, and avatar URL through the trusted moderation path.
+          Update your display name and short bio through the trusted moderation path. Avatar images are limited to your linked Steam avatar for now.
         </Text>
         <TextInput
           onChangeText={(value) => setIdentityDraft((current) => ({ ...current, displayName: value }))}
@@ -873,24 +892,24 @@ export default function ProfileScreen() {
           style={[styles.textInput, styles.multilineInput]}
           value={identityDraft.bio}
         />
-        <TextInput
-          autoCapitalize="none"
-          onChangeText={(value) => setIdentityDraft((current) => ({ ...current, avatarUrl: value }))}
-          placeholder="Avatar URL (HTTPS image)"
-          placeholderTextColor={theme.colors.textMuted}
-          style={styles.textInput}
-          value={identityDraft.avatarUrl}
-        />
         {steamAccount?.avatarUrl ? (
           <Pressable onPress={handleUseSteamAvatar} style={styles.secondaryButton}>
             <Text style={styles.secondaryButtonText}>Use linked Steam avatar</Text>
           </Pressable>
         ) : null}
         {identityDraft.avatarUrl ? (
+          <Pressable
+            onPress={() => setIdentityDraft((current) => ({ ...current, avatarUrl: "" }))}
+            style={styles.secondaryButton}
+          >
+            <Text style={styles.secondaryButtonText}>Remove avatar</Text>
+          </Pressable>
+        ) : null}
+        {identityDraft.avatarUrl ? (
           <View style={styles.avatarPreviewCard}>
             <Image source={{ uri: identityDraft.avatarUrl }} style={styles.avatarPreviewImage} />
             <Text style={styles.helperText}>
-              External avatar URLs from untrusted hosts are allowed, but they will be flagged for manual review.
+              Linked Steam avatars stay available. Arbitrary avatar URLs are disabled until a stronger upload moderation path is in place.
             </Text>
           </View>
         ) : null}
@@ -908,6 +927,33 @@ export default function ProfileScreen() {
           ) : (
             <Text style={styles.primaryActionText}>Save profile identity</Text>
           )}
+        </Pressable>
+      </SectionCard>
+
+      <SectionCard title="Content settings" eyebrow="Visibility">
+        <Text style={styles.bodyText}>
+          Hide mature-rated games from browse and catalog surfaces.
+        </Text>
+        <Pressable
+          onPress={() =>
+            saveContentPreferences({
+              ...contentPreferences,
+              hideMatureGames: !contentPreferences.hideMatureGames,
+            })
+          }
+          style={[
+            styles.secondaryButton,
+            contentPreferences.hideMatureGames ? styles.sortChipActive : null,
+          ]}
+        >
+          <Text
+            style={[
+              styles.secondaryButtonText,
+              contentPreferences.hideMatureGames ? styles.sortChipTextActive : null,
+            ]}
+          >
+            {contentPreferences.hideMatureGames ? "Mature games hidden" : "Show mature games"}
+          </Text>
         </Pressable>
       </SectionCard>
 

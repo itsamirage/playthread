@@ -119,6 +119,27 @@ function getPrimaryGenre(genres: Array<{ name?: string }> = []) {
   return genres[0]?.name ?? "Unknown";
 }
 
+function isMatureAgeRating(ageRatings: Array<{ category?: number; rating?: number }> = []) {
+  return ageRatings.some((item) => {
+    const category = Number(item?.category ?? 0);
+    const rating = Number(item?.rating ?? 0);
+
+    if (category === 1) {
+      return rating === 6 || rating === 7;
+    }
+
+    if (category === 2) {
+      return rating === 9;
+    }
+
+    if (category === 3) {
+      return rating >= 4;
+    }
+
+    return false;
+  });
+}
+
 function normalizeIgdbGame(game: any) {
   const totalRating = game?.total_rating ?? game?.aggregated_rating ?? null;
   const members = toRoundedNumber(
@@ -137,6 +158,7 @@ function normalizeIgdbGame(game: any) {
     metacritic: toRoundedNumber(game.aggregated_rating ?? game.total_rating) ?? 0,
     starRating: toStarRating(totalRating) ?? 0,
     members: members ?? 0,
+    isMature: isMatureAgeRating(game.age_ratings),
     summary: game.summary ?? "No summary available yet.",
     coverUrl: toImageUrl(game.cover?.image_id, COVER_SIZE),
     screenshotUrls: (game.screenshots ?? [])
@@ -207,7 +229,7 @@ async function getOrLoadCachedValue<T>(cacheKey: string, loader: () => Promise<T
 }
 
 function gameFields() {
-  return "fields name,summary,first_release_date,aggregated_rating,aggregated_rating_count,total_rating,total_rating_count,follows,hypes,cover.image_id,screenshots.image_id,genres.name,platforms.name,involved_companies.developer,involved_companies.publisher,involved_companies.company.name;";
+  return "fields name,summary,first_release_date,aggregated_rating,aggregated_rating_count,total_rating,total_rating_count,follows,hypes,cover.image_id,screenshots.image_id,genres.name,platforms.name,age_ratings.category,age_ratings.rating,involved_companies.developer,involved_companies.publisher,involved_companies.company.name;";
 }
 
 function discoverQuery(limit: number) {

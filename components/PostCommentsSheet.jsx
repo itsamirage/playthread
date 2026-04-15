@@ -25,7 +25,7 @@ export default function PostCommentsSheet({
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "android" ? "height" : undefined}
         style={styles.modalBackdrop}
       >
         <View style={styles.modalCard}>

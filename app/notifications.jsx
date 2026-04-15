@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import SectionCard from "../components/SectionCard";
 import { useAuth } from "../lib/auth";
 import {
+  buildRouteFromNotification,
   groupNotifications,
   markAllNotificationsRead,
   markNotificationRead,
@@ -11,7 +12,18 @@ import {
   useNotificationPreferences,
   useNotifications,
 } from "../lib/notifications";
+import { goBackOrFallback } from "../lib/navigation";
 import { theme } from "../lib/theme";
+
+const PREFERENCE_ROWS = [
+  ["pushEnabled", "Allow push notifications", "Master switch for device alerts."],
+  ["postCommentEnabled", "Replies to your posts/comments", "Keeps discussion replies in your inbox."],
+  ["coinGiftReceivedEnabled", "Coin gifts received", "Alerts you when someone sends coins."],
+  ["moderationWarningEnabled", "Moderation warnings", "Shows review and moderation warnings."],
+  ["followedGamePostEnabled", "New posts in followed games", "Tracks fresh activity across followed titles."],
+  ["newFollowerEnabled", "Friend requests and accepts", "Shows when someone wants to add you or accepts your request."],
+  ["activityNoiseControlEnabled", "Reduce noisy activity pushes", "Aggregates repeated friend and followed-game push activity."],
+];
 
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -30,19 +42,7 @@ export default function NotificationsScreen() {
       await reload();
     }
 
-    if (notification.entityType === "post" && notification.entityId) {
-      router.push(`/post/${notification.entityId}`);
-      return;
-    }
-
-    if (notification.entityType === "profile" && notification.entityId) {
-      router.push(`/user/${notification.entityId}`);
-      return;
-    }
-
-    if (notification.metadata?.gameId) {
-      router.push(`/game/${notification.metadata.gameId}`);
-    }
+    router.push(buildRouteFromNotification(notification));
   };
 
   const handleMarkAllRead = async () => {
@@ -86,10 +86,10 @@ export default function NotificationsScreen() {
         <Text style={styles.eyebrow}>PlayThread</Text>
         <Text style={styles.title}>Notifications</Text>
         <Text style={styles.subtitle}>
-          Replies, gifts, moderation warnings, and new posts from games you follow.
+          Replies, gifts, friend activity, moderation warnings, and new posts from games you follow.
         </Text>
         <View style={styles.heroActions}>
-          <Pressable onPress={() => router.back()} style={styles.secondaryButton}>
+          <Pressable onPress={() => goBackOrFallback(router, "/(tabs)/profile")} style={styles.secondaryButton}>
             <Text style={styles.secondaryButtonText}>Back</Text>
           </Pressable>
           <Pressable onPress={() => router.push("/(tabs)/profile")} style={styles.secondaryButton}>
@@ -120,14 +120,19 @@ export default function NotificationsScreen() {
                       onPress={() => handleNotificationPress(notification)}
                       style={[styles.notificationCard, !notification.isRead ? styles.notificationUnread : null]}
                     >
+                      <View style={styles.notificationHeader}>
+                        <Text style={styles.notificationKind}>{notification.kindLabel}</Text>
+                        <Text style={styles.notificationMeta}>
+                          {new Date(notification.createdAt).toLocaleTimeString([], {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </Text>
+                      </View>
                       <Text style={styles.notificationTitle}>{notification.title}</Text>
                       {notification.body ? <Text style={styles.notificationBody}>{notification.body}</Text> : null}
                       <Text style={styles.notificationMeta}>
-                        {notification.actor ? `@${notification.actor} | ` : ""}
-                        {new Date(notification.createdAt).toLocaleTimeString([], {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
+                        {notification.actor ? `@${notification.actor}` : "PlayThread"}
                       </Text>
                     </Pressable>
                   ))}
@@ -150,21 +155,16 @@ export default function NotificationsScreen() {
           </View>
         ) : (
           <View style={styles.preferenceList}>
-            {[
-              ["pushEnabled", "Allow push notifications"],
-              ["postCommentEnabled", "Replies to your posts/comments"],
-              ["coinGiftReceivedEnabled", "Coin gifts received"],
-              ["moderationWarningEnabled", "Moderation warnings"],
-              ["followedGamePostEnabled", "New posts in followed games"],
-              ["newFollowerEnabled", "New followers"],
-              ["activityNoiseControlEnabled", "Reduce noisy activity pushes"],
-            ].map(([key, label]) => (
+            {PREFERENCE_ROWS.map(([key, label, hint]) => (
               <Pressable
                 key={key}
                 onPress={() => handleTogglePreference(key)}
                 style={[styles.preferenceRow, preferences[key] ? styles.preferenceRowActive : null]}
               >
-                <Text style={styles.preferenceLabel}>{label}</Text>
+                <View style={styles.preferenceCopy}>
+                  <Text style={styles.preferenceLabel}>{label}</Text>
+                  <Text style={styles.preferenceHint}>{hint}</Text>
+                </View>
                 <Text style={[styles.preferenceValue, preferences[key] ? styles.preferenceValueActive : null]}>
                   {preferences[key] ? "On" : "Off"}
                 </Text>
@@ -197,7 +197,7 @@ export default function NotificationsScreen() {
                   ))}
                 </View>
                 <Text style={styles.cooldownHint}>
-                  Noise control applies to new followers and followed-game posts.
+                  Noise control applies to friend activity and followed-game posts.
                 </Text>
               </View>
             ) : null}
@@ -312,6 +312,19 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.fontSizes.xs,
   },
+  notificationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm,
+  },
+  notificationKind: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
   emptyText: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSizes.md,
@@ -342,9 +355,17 @@ const styles = StyleSheet.create({
   },
   preferenceLabel: {
     color: theme.colors.textPrimary,
-    flex: 1,
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.medium,
+  },
+  preferenceCopy: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  preferenceHint: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
+    lineHeight: 18,
   },
   preferenceValue: {
     color: theme.colors.textMuted,

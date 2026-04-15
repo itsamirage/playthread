@@ -41,6 +41,15 @@ type RequestBody = {
   title?: string | null;
   body?: string;
   imageUrl?: string | null;
+  imageMetadata?: {
+    mimeType?: string | null;
+    extension?: string | null;
+    fileSize?: number | null;
+    width?: number | null;
+    height?: number | null;
+    aspectRatio?: number | null;
+    isAnimated?: boolean | null;
+  } | null;
   videoUploadId?: string | null;
   videoUploadToken?: string | null;
   rating?: number | null;
@@ -50,6 +59,27 @@ type RequestBody = {
 
 function canManagePost(postUserId: string | null, actorUserId: string, accountRole: string | null) {
   return postUserId === actorUserId || ["admin", "owner"].includes(accountRole ?? "");
+}
+
+function normalizeImageMetadata(value: RequestBody["imageMetadata"]) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const width = Number(value.width ?? 0);
+  const height = Number(value.height ?? 0);
+  const aspectRatio = Number(value.aspectRatio ?? 0);
+  const fileSize = Number(value.fileSize ?? 0);
+
+  return {
+    mime_type: String(value.mimeType ?? "").trim().toLowerCase() || null,
+    extension: String(value.extension ?? "").trim().toLowerCase() || null,
+    file_size: fileSize > 0 ? fileSize : null,
+    width: width > 0 ? width : null,
+    height: height > 0 ? height : null,
+    aspect_ratio: aspectRatio > 0 ? aspectRatio : null,
+    is_animated: Boolean(value.isAnimated),
+  };
 }
 
 Deno.serve(async (request) => {
@@ -207,6 +237,7 @@ Deno.serve(async (request) => {
 
     const postType = String(body.type ?? "").trim();
     const textBody = String(body.body ?? "").trim();
+    const imageMetadata = normalizeImageMetadata(body.imageMetadata);
     const videoUploadId = String(body.videoUploadId ?? "").trim() || null;
     const videoUploadToken = String(body.videoUploadToken ?? "").trim() || null;
     const gameId = Number(body.gameId);
@@ -311,6 +342,7 @@ Deno.serve(async (request) => {
                 ? "image"
                 : "text",
           image_url: String(body.imageUrl ?? "").trim() || null,
+          image_metadata: imageMetadata,
           video_upload_id: videoUploadId,
           video_status: postType === "clip" ? "uploading" : "none",
         },
@@ -327,6 +359,7 @@ Deno.serve(async (request) => {
         metadata: {
           labels: moderation.labels,
           postType,
+          imageMetadata,
         },
       });
     }
@@ -380,6 +413,7 @@ Deno.serve(async (request) => {
                 ? "image"
                 : "text",
           video_upload_id: videoUploadId,
+          image_metadata: imageMetadata,
         },
       });
     }

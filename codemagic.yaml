@@ -1,0 +1,37 @@
+workflows:
+  ios-testflight:
+    name: iOS → TestFlight
+    max_build_duration: 60
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: app.playthread.mobile
+      vars:
+        EXPO_PUBLIC_SUPABASE_URL: https://zippqumynxivnhhmvblc.supabase.co
+        EXPO_PUBLIC_EAS_PROJECT_ID: abdbb665-1d8f-4924-9174-863608ab17b5
+      node: 22.14.0
+    scripts:
+      - name: Install dependencies
+        script: npm ci
+      - name: Expo prebuild
+        script: |
+          EXPO_PUBLIC_SUPABASE_URL=$EXPO_PUBLIC_SUPABASE_URL \
+          EXPO_PUBLIC_SUPABASE_ANON_KEY=$EXPO_PUBLIC_SUPABASE_ANON_KEY \
+          EXPO_PUBLIC_EAS_PROJECT_ID=$EXPO_PUBLIC_EAS_PROJECT_ID \
+          npx expo prebuild --clean --platform ios
+      - name: Set up code signing
+        script: xcode-project use-profiles
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \
+            --workspace ios/PlayThread.xcworkspace \
+            --scheme PlayThread
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true

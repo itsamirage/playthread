@@ -60,10 +60,21 @@ type RequestBody =
       action?: "set_content_visibility";
       flagId?: string;
       visibility?: "clean" | "hidden";
+    }
+  | {
+      action?: "update_post_metadata";
+      postId?: string;
+      type?: "discussion" | "review" | "screenshot" | "guide" | "tip" | "clip";
+      pinnedHours?: number | null;
+    }
+  | {
+      action?: "set_developer_games";
+      targetUserId?: string;
+      developerGameIds?: number[];
     };
 
 const PROFILE_SELECT =
-  "id, username, display_name, created_at, account_role, moderation_scope, moderation_game_ids, is_banned, banned_reason, integrity_exempt, coins_from_posts, coins_from_comments, coins_from_gifts, coins_from_adjustments, coins_spent, selected_name_color, selected_banner_style, selected_title_key";
+  "id, username, display_name, created_at, account_role, moderation_scope, moderation_game_ids, developer_game_ids, is_banned, banned_reason, integrity_exempt, coins_from_posts, coins_from_comments, coins_from_gifts, coins_from_adjustments, coins_spent, selected_name_color, selected_banner_style, selected_title_key";
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -263,6 +274,53 @@ Deno.serve(async (request) => {
       return jsonResponse({ success: true, profile: data });
     }
 
+    if (action === "set_developer_games") {
+      assertAdmin(actorProfile);
+
+      const targetUserId = String(body.targetUserId ?? "").trim();
+      const developerGameIds = sanitizeGameIds(body.developerGameIds);
+
+      if (!targetUserId) {
+        throw new Error("Target user is required.");
+      }
+
+      const targetProfile = await requireProfile(adminClient, targetUserId);
+
+      if (!canAdministerTarget(actorProfile, targetProfile)) {
+        throw new Error("You cannot manage that account.");
+      }
+
+      const { data, error } = await adminClient
+        .from("profiles")
+        .update({
+          developer_game_ids: developerGameIds,
+        })
+        .eq("id", targetUserId)
+        .select(PROFILE_SELECT)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      const { error: actionError } = await adminClient.from("moderation_actions").insert({
+        target_user_id: targetUserId,
+        actor_user_id: user.id,
+        action_type: "set_developer_games",
+        reason: developerGameIds.length > 0 ? "Updated developer-tag game assignments." : "Removed developer-tag game assignments.",
+        metadata_json: {
+          previousDeveloperGameIds: targetProfile.developer_game_ids ?? [],
+          nextDeveloperGameIds: developerGameIds,
+        },
+      });
+
+      if (actionError) {
+        throw new Error(actionError.message);
+      }
+
+      return jsonResponse({ success: true, profile: data });
+    }
+
     if (action === "set_ban_state") {
       assertAdmin(actorProfile);
 
@@ -388,6 +446,83 @@ Deno.serve(async (request) => {
       }
 
       return jsonResponse({ success: true, settings: data });
+    }
+
+    if (action === "update_post_metadata") {
+      assertStaff(actorProfile);
+
+      const postId = String(body.postId ?? "").trim();
+      const nextType = String(body.type ?? "").trim();
+      const pinnedHoursValue = body.pinnedHours == null ? null : Number(body.pinnedHours);
+
+      if (!postId) {
+        throw new Error("Post id is required.");
+      }
+
+      if (!["discussion", "review", "screenshot", "guide", "tip", "clip"].includes(nextType)) {
+        throw new Error("Invalid post type.");
+      }
+
+      const { data: postRow, error: postError } = await adminClient
+        .from("posts")
+        .select("id, user_id, igdb_game_id, type, pinned_until")
+        .eq("id", postId)
+        .maybeSingle();
+
+      if (postError) {
+        throw new Error(postError.message);
+      }
+
+      if (!postRow) {
+        throw new Error("That post no longer exists.");
+      }
+
+      assertCanModerateGameScope(actorProfile, postRow.igdb_game_id ?? null);
+
+      const pinnedUntil =
+        pinnedHoursValue && pinnedHoursValue > 0
+          ? new Date(Date.now() + pinnedHoursValue * 60 * 60 * 1000).toISOString()
+          : null;
+
+      const { error: updateError } = await adminClient
+        .from("posts")
+        .update({
+          type: nextType,
+          pinned_until: pinnedUntil,
+        })
+        .eq("id", postId);
+
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+
+      const actionType =
+        nextType !== postRow.type ? "retag_post" : "pin_post";
+
+      const { error: actionError } = await adminClient.from("moderation_actions").insert({
+        target_user_id: postRow.user_id,
+        actor_user_id: user.id,
+        action_type: actionType,
+        reason: nextType !== postRow.type ? "Moderator updated the thread tag." : "Moderator updated post pin state.",
+        metadata_json: {
+          postId,
+          previousType: postRow.type,
+          nextType,
+          previousPinnedUntil: postRow.pinned_until ?? null,
+          nextPinnedUntil: pinnedUntil,
+        },
+      });
+
+      if (actionError) {
+        throw new Error(actionError.message);
+      }
+
+      return jsonResponse({
+        success: true,
+        postId,
+        type: nextType,
+        pinnedUntil,
+      });
     }
 
     if (action === "get_integrity_report") {

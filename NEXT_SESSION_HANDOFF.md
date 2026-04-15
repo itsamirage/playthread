@@ -285,10 +285,10 @@ Start by reviewing the new trusted-profile flow and live admin moderation paths,
     - `trusted-post`, `trusted-comment`, `trusted-coin`, `trusted-profile`, `trusted-follow`
   - remote DB migration push failed again because of Supabase temp-role auth circuit breaker:
     - `FATAL: Circuit breaker open: Too many authentication errors`
-  - consequence:
-    - live Edge functions are updated
-    - live database is still missing the two new `notification_preferences` columns until the migration is applied
-  - manual SQL fallback for Supabase SQL Editor if needed:
+  - initial consequence:
+    - live Edge functions were updated
+    - remote DB still needed the two new `notification_preferences` columns until the migration or manual SQL was applied
+  - manual SQL fallback for Supabase SQL Editor was:
 ```sql
 alter table public.notification_preferences
 add column if not exists activity_noise_control_enabled boolean not null default true,
@@ -301,3 +301,17 @@ alter table public.notification_preferences
 add constraint notification_preferences_activity_push_cooldown_minutes_valid
 check (activity_push_cooldown_minutes between 0 and 240);
 ```
+- April 13 follow-up verification:
+  - remote `public.notification_preferences` now has both new columns live:
+    - `activity_noise_control_enabled boolean not null default true`
+    - `activity_push_cooldown_minutes integer not null default 30`
+  - remote cooldown constraint is also live:
+    - `notification_preferences_activity_push_cooldown_minutes_valid`
+    - `check (activity_push_cooldown_minutes between 0 and 240)`
+  - result:
+    - the notification noise-control DB caveat is cleared
+    - no further manual SQL is needed for `202604121130_add_notification_noise_controls.sql`
+  - local validation rerun on April 13:
+    - `npm test` passed
+    - `npm exec expo export -- --platform web --output-dir .expo-export-check` passed
+  - remaining next step is still physical-device QA for TestFlight build `1.0.0 (4)` and any production-binary fixes that come out of that first real iPhone pass

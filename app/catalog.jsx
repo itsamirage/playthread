@@ -12,8 +12,10 @@ import {
 
 import GameCard from "../components/GameCard";
 import SectionCard from "../components/SectionCard";
+import { useContentPreferences } from "../lib/contentPreferences";
 import { useFollows } from "../lib/follows";
 import { useCatalogGames } from "../lib/games";
+import { goBackOrFallback } from "../lib/navigation";
 import { theme } from "../lib/theme";
 
 const sortOptions = [
@@ -35,7 +37,13 @@ export default function CatalogScreen() {
   const facet = String(params.facet ?? "");
   const value = String(params.value ?? "");
   const [sortBy, setSortBy] = useState("score_desc");
-  const { games, isLoading, error } = useCatalogGames({ facet, value, sortBy });
+  const { preferences } = useContentPreferences();
+  const { games, isLoading, error } = useCatalogGames({
+    facet,
+    value,
+    sortBy,
+    hideMatureGames: preferences.hideMatureGames,
+  });
   const { isFollowingGame, getFollowStatus, setFollowStatus, unfollowGame } = useFollows();
 
   const handleSelectStatus = async (game, status) => {
@@ -58,7 +66,7 @@ export default function CatalogScreen() {
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackOrFallback(router, "/(tabs)/browse")}
           style={({ pressed }) => [
             styles.backButton,
             pressed ? styles.buttonPressed : null,
@@ -73,6 +81,7 @@ export default function CatalogScreen() {
           {facet === "genre" ? `${value} games` : null}
           {facet === "year" ? `Games released in ${value}` : null}
         </Text>
+        {preferences.hideMatureGames ? <Text style={styles.subtitle}>Mature-rated games are hidden.</Text> : null}
       </View>
 
       <SectionCard title="Sort" eyebrow="Browse order">

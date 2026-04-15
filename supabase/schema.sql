@@ -50,7 +50,8 @@ create table if not exists public.profiles (
   linked_platforms text[] not null default '{}',
   created_at timestamptz not null default timezone('utc', now()),
   constraint profiles_username_length check (char_length(username) between 3 and 20),
-  constraint profiles_username_format check (username ~ '^[a-z0-9_]+$'),
+  constraint profiles_username_trimmed check (username = btrim(username)),
+  constraint profiles_username_format check (username ~ '^[ -~]+$'),
   constraint profiles_bio_length check (bio is null or char_length(bio) <= 160),
   constraint profiles_linked_platforms_valid check (
     linked_platforms <@ array['steam', 'xbox', 'psn']::text[]

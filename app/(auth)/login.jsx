@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 
-import { loginUser } from "../../lib/auth";
+import { isValidEmail, loginUser, requestPasswordReset } from "../../lib/auth";
 import { theme } from "../../lib/theme";
 
 export default function LoginScreen() {
@@ -19,6 +19,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   const handleLogin = async () => {
@@ -51,6 +52,33 @@ export default function LoginScreen() {
       setErrorMessage(error instanceof Error ? error.message : "Something went wrong while logging in.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+    setErrorMessage("");
+
+    if (!isValidEmail(cleanEmail)) {
+      Alert.alert("Invalid email", "Enter the email for the account you want to reset.");
+      return;
+    }
+
+    try {
+      setResetLoading(true);
+      const { error } = await requestPasswordReset(cleanEmail);
+
+      if (error) {
+        Alert.alert("Reset failed", error.message);
+        return;
+      }
+
+      Alert.alert(
+        "Reset email sent",
+        "Open the latest email on this device and follow the link to set a new password.",
+      );
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -104,6 +132,22 @@ export default function LoginScreen() {
               <ActivityIndicator color={theme.colors.background} />
             ) : (
               <Text style={styles.buttonText}>Log in</Text>
+            )}
+          </Pressable>
+
+          <Pressable
+            disabled={resetLoading}
+            onPress={handleForgotPassword}
+            style={({ pressed }) => [
+              styles.secondaryAction,
+              pressed && !resetLoading ? styles.buttonPressed : null,
+              resetLoading ? styles.buttonDisabled : null,
+            ]}
+          >
+            {resetLoading ? (
+              <ActivityIndicator color={theme.colors.textPrimary} />
+            ) : (
+              <Text style={styles.secondaryActionText}>Forgot password?</Text>
             )}
           </Pressable>
 
@@ -204,6 +248,15 @@ const styles = StyleSheet.create({
   },
   footerLink: {
     color: theme.colors.accent,
+    fontWeight: theme.fontWeights.bold,
+  },
+  secondaryAction: {
+    alignItems: "center",
+    paddingVertical: theme.spacing.sm,
+  },
+  secondaryActionText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.bold,
   },
 });

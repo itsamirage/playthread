@@ -5,6 +5,7 @@ import {
   FOLLOW_STATUS_OPTIONS,
   getFollowStatusLabel,
 } from "../lib/follows";
+import { getGameScoreBadge } from "../lib/gamePresentation";
 import { getMetacriticColor, theme } from "../lib/theme";
 import PlatformBadge from "./PlatformBadge";
 
@@ -18,6 +19,7 @@ export default function GameCard({
 }) {
   const [isStatusPickerOpen, setIsStatusPickerOpen] = useState(false);
   const coverLetter = game.title.charAt(0).toUpperCase();
+  const scoreBadge = getGameScoreBadge(game);
   const buttonLabel = isFollowed
     ? getFollowStatusLabel(followStatus)
     : "Follow game";
@@ -59,14 +61,25 @@ export default function GameCard({
           </Text>
         </View>
 
-        <View
-          style={[
-            styles.scoreBadge,
-            { backgroundColor: getMetacriticColor(game.metacritic) },
-          ]}
-        >
-          <Text style={styles.scoreText}>{game.metacritic}</Text>
-        </View>
+        {scoreBadge ? (
+          <View
+            style={[
+              styles.scoreBadge,
+              scoreBadge.kind === "score"
+                ? { backgroundColor: getMetacriticColor(game.metacritic) }
+                : styles.scoreBadgeUpcoming,
+            ]}
+          >
+            <Text
+              style={[
+                styles.scoreText,
+                scoreBadge.kind === "score" ? null : styles.scoreTextUpcoming,
+              ]}
+            >
+              {scoreBadge.label}
+            </Text>
+          </View>
+        ) : null}
       </Pressable>
 
       <Pressable
@@ -195,6 +208,14 @@ const styles = StyleSheet.create({
     color: "#081017",
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.bold,
+  },
+  scoreBadgeUpcoming: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: theme.colors.border,
+    borderWidth: theme.borders.width,
+  },
+  scoreTextUpcoming: {
+    color: theme.colors.textSecondary,
   },
   followButton: {
     alignItems: "center",

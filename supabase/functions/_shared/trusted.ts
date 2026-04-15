@@ -35,6 +35,7 @@ export type ProfileRow = {
   account_role: string | null;
   moderation_scope?: string | null;
   moderation_game_ids?: number[] | null;
+  developer_game_ids?: number[] | null;
   is_banned: boolean | null;
   banned_reason?: string | null;
   integrity_exempt: boolean | null;
@@ -176,7 +177,7 @@ export async function requireProfile(
   const { data, error } = await adminClient
     .from("profiles")
     .select(
-      "id, username, account_role, moderation_scope, moderation_game_ids, is_banned, banned_reason, integrity_exempt, coins_from_posts, coins_from_comments, coins_from_gifts, coins_from_adjustments, coins_spent",
+      "id, username, account_role, moderation_scope, moderation_game_ids, developer_game_ids, is_banned, banned_reason, integrity_exempt, coins_from_posts, coins_from_comments, coins_from_gifts, coins_from_adjustments, coins_spent",
     )
     .eq("id", userId)
     .maybeSingle();
@@ -362,7 +363,9 @@ export async function insertNotification(
       | "coin_gift_received"
       | "moderation_warning"
       | "followed_game_post"
-      | "new_follower";
+      | "new_follower"
+      | "friend_request"
+      | "friend_accept";
     title: string;
     body?: string | null;
     entityType?: string | null;
@@ -392,7 +395,7 @@ export async function insertNotification(
       ? new Date(Date.now() - pushCooldownMinutes * 60 * 1000).toISOString()
       : null;
   const aggregateWindowMinutes =
-    kind === "followed_game_post" || kind === "new_follower" ? 360 : 0;
+    ["followed_game_post", "new_follower", "friend_request", "friend_accept"].includes(kind) ? 360 : 0;
   const aggregateCutoff =
     aggregateWindowMinutes > 0
       ? new Date(Date.now() - aggregateWindowMinutes * 60 * 1000).toISOString()
@@ -614,7 +617,14 @@ export async function insertNotification(
 
 export function shouldStoreNotification(
   preferencesRow: NotificationPreferencesRow | null | undefined,
-  kind: "post_comment" | "coin_gift_received" | "moderation_warning" | "followed_game_post" | "new_follower",
+  kind:
+    | "post_comment"
+    | "coin_gift_received"
+    | "moderation_warning"
+    | "followed_game_post"
+    | "new_follower"
+    | "friend_request"
+    | "friend_accept",
 ) {
   const kindPreferenceMap: Record<string, boolean> = {
     post_comment: preferencesRow?.post_comment_enabled ?? true,
@@ -622,6 +632,8 @@ export function shouldStoreNotification(
     moderation_warning: preferencesRow?.moderation_warning_enabled ?? true,
     followed_game_post: preferencesRow?.followed_game_post_enabled ?? true,
     new_follower: preferencesRow?.new_follower_enabled ?? true,
+    friend_request: preferencesRow?.new_follower_enabled ?? true,
+    friend_accept: preferencesRow?.new_follower_enabled ?? true,
   };
 
   return kindPreferenceMap[kind] !== false;
@@ -629,14 +641,28 @@ export function shouldStoreNotification(
 
 export function shouldSendPushNotification(
   preferencesRow: NotificationPreferencesRow | null | undefined,
-  kind: "post_comment" | "coin_gift_received" | "moderation_warning" | "followed_game_post" | "new_follower",
+  kind:
+    | "post_comment"
+    | "coin_gift_received"
+    | "moderation_warning"
+    | "followed_game_post"
+    | "new_follower"
+    | "friend_request"
+    | "friend_accept",
 ) {
   return (preferencesRow?.push_enabled ?? true) && shouldStoreNotification(preferencesRow, kind);
 }
 
 export function getNotificationPushCooldownMinutes(
   preferencesRow: NotificationPreferencesRow | null | undefined,
-  kind: "post_comment" | "coin_gift_received" | "moderation_warning" | "followed_game_post" | "new_follower",
+  kind:
+    | "post_comment"
+    | "coin_gift_received"
+    | "moderation_warning"
+    | "followed_game_post"
+    | "new_follower"
+    | "friend_request"
+    | "friend_accept",
 ) {
   const noiseControlEnabled = preferencesRow?.activity_noise_control_enabled ?? true;
   const cooldownMinutes = Math.max(
@@ -648,13 +674,22 @@ export function getNotificationPushCooldownMinutes(
     return 0;
   }
 
-  return kind === "followed_game_post" || kind === "new_follower" ? cooldownMinutes : 0;
+  return ["followed_game_post", "new_follower", "friend_request", "friend_accept"].includes(kind)
+    ? cooldownMinutes
+    : 0;
 }
 
 export function buildAggregatedNotificationUpdate(
   existingRow: { entity_id?: string | null; metadata_json?: Record<string, unknown> | null } | null | undefined,
   notification: {
-    kind: "post_comment" | "coin_gift_received" | "moderation_warning" | "followed_game_post" | "new_follower";
+    kind:
+      | "post_comment"
+      | "coin_gift_received"
+      | "moderation_warning"
+      | "followed_game_post"
+      | "new_follower"
+      | "friend_request"
+      | "friend_accept";
     title: string;
     body?: string | null;
     entityType?: string | null;
@@ -713,6 +748,33 @@ export function buildAggregatedNotificationUpdate(
         ...notification.metadata,
         aggregatedCount,
         recentFollowerNames,
+      },
+    };
+  }
+
+  if (notification.kind === "friend_request") {
+    const priorNames = Array.isArray(existingMetadata.recentRequesterNames)
+      ? existingMetadata.recentRequesterNames.filter(Boolean).map((value) => String(value))
+      : [];
+    const nextName = String(notification.metadata?.requesterName ?? "A player");
+    const recentRequesterNames = [...new Set([nextName, ...priorNames])].slice(0, 3);
+    const aggregatedCount = Math.max(1, Number(existingMetadata.aggregatedCount ?? 1)) + 1;
+    const trailingCount = Math.max(0, aggregatedCount - recentRequesterNames.length);
+    const namePreview = recentRequesterNames.join(", ");
+
+    return {
+      title: aggregatedCount > 1 ? "You have new friend requests" : notification.title,
+      body:
+        trailingCount > 0
+          ? `${namePreview} and ${trailingCount} others sent friend requests.`
+          : `${namePreview} sent you a friend request.`,
+      entityType: "profile",
+      entityId: notification.entityId ?? existingRow.entity_id ?? null,
+      metadata: {
+        ...existingMetadata,
+        ...notification.metadata,
+        aggregatedCount,
+        recentRequesterNames,
       },
     };
   }

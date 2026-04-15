@@ -2,27 +2,9 @@ import { useRouter } from "expo-router";
 import * as Notifications from "expo-notifications";
 import { useEffect, useRef } from "react";
 
+import { buildRouteFromNotification } from "../lib/notificationRouting";
 import { usePushNotifications } from "../lib/pushNotifications";
-
-function buildRouteFromNotificationData(data) {
-  if (!data || typeof data !== "object") {
-    return null;
-  }
-
-  if (data.entityType === "post" && data.entityId) {
-    return `/post/${data.entityId}`;
-  }
-
-  if (data.entityType === "profile" && data.entityId) {
-    return `/user/${data.entityId}`;
-  }
-
-  if (data.gameId) {
-    return `/game/${data.gameId}`;
-  }
-
-  return null;
-}
+import { supabase } from "../lib/supabase";
 
 export default function NotificationRuntimeBridge() {
   usePushNotifications();
@@ -38,9 +20,18 @@ export default function NotificationRuntimeBridge() {
         return;
       }
 
-      const route = buildRouteFromNotificationData(
-        response?.notification?.request?.content?.data,
-      );
+      // Ensure the session is fresh before navigating to authenticated content
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.expires_at && session.expires_at * 1000 < Date.now() + 60000) {
+        await supabase.auth.refreshSession();
+      }
+
+      const data = response?.notification?.request?.content?.data;
+      const route = buildRouteFromNotification({
+        metadata: data,
+        entityType: data?.entityType,
+        entityId: data?.entityId,
+      });
 
       if (route) {
         lastHandledIdentifierRef.current = identifier;
@@ -57,9 +48,12 @@ export default function NotificationRuntimeBridge() {
         return;
       }
 
-      const route = buildRouteFromNotificationData(
-        response?.notification?.request?.content?.data,
-      );
+      const data = response?.notification?.request?.content?.data;
+      const route = buildRouteFromNotification({
+        metadata: data,
+        entityType: data?.entityType,
+        entityId: data?.entityId,
+      });
 
       if (route) {
         lastHandledIdentifierRef.current = identifier;

@@ -15,7 +15,7 @@ import {
 } from "../_shared/trusted.ts";
 
 type RequestBody = {
-  action?: "create" | "delete";
+  action?: "create" | "update" | "delete";
   postId?: string;
   commentId?: string;
   body?: string;
@@ -71,6 +71,57 @@ Deno.serve(async (request) => {
       }
 
       return jsonResponse({ success: true });
+    }
+
+    if (action === "update") {
+      const commentId = String(body.commentId ?? "").trim();
+      const textBody = String(body.body ?? "").trim();
+
+      if (!commentId) {
+        throw new Error("Comment id is required.");
+      }
+
+      if (!textBody) {
+        throw new Error("Comment body is required.");
+      }
+
+      const { data: commentRow, error: commentError } = await adminClient
+        .from("post_comments")
+        .select("id, user_id")
+        .eq("id", commentId)
+        .maybeSingle();
+
+      if (commentError) {
+        throw new Error(commentError.message);
+      }
+
+      if (!commentRow) {
+        throw new Error("That comment no longer exists.");
+      }
+
+      if (commentRow.user_id !== user.id && !["admin", "owner"].includes(profile.account_role ?? "")) {
+        throw new Error("You cannot edit that comment.");
+      }
+
+      const moderation = evaluateModerationText(textBody);
+      const { error: updateError } = await adminClient
+        .from("post_comments")
+        .update({
+          body: textBody,
+          moderation_state: moderation.moderationState,
+          moderation_labels: moderation.labels,
+        })
+        .eq("id", commentId);
+
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+
+      return jsonResponse({
+        success: true,
+        commentId,
+        moderation,
+      });
     }
 
     const postId = String(body.postId ?? "").trim();

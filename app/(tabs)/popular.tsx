@@ -1,5 +1,5 @@
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 
 import PostCard from "../../components/PostCard";
@@ -10,8 +10,10 @@ import NotificationInboxButton from "../../components/NotificationInboxButton";
 import { MODERATION_PERIOD_OPTIONS } from "../../lib/admin";
 import { sendCoinGift } from "../../lib/admin";
 import { useAuth } from "../../lib/auth";
+import { useFollows } from "../../lib/follows";
 import { describeIntegrityError } from "../../lib/integrity";
 import { deletePost, togglePostReaction, usePopularPosts } from "../../lib/posts";
+import { useTabReselectScroll } from "../../lib/tabReselect";
 import { theme } from "../../lib/theme";
 
 function getPopularSummary(post) {
@@ -29,6 +31,7 @@ function getPopularSummary(post) {
 export default function AllScreen() {
   const router = useRouter();
   const { session } = useAuth();
+  const { shouldShowSpoilersByDefault } = useFollows();
   const [period, setPeriod] = useState("day");
   const { posts, isLoading, error, reload } = usePopularPosts(period);
   const [reactingPostId, setReactingPostId] = useState(null);
@@ -36,10 +39,12 @@ export default function AllScreen() {
   const [giftPost, setGiftPost] = useState(null);
   const [isSendingGift, setIsSendingGift] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState(null);
+  const scrollRef = useRef(null);
   const topPosts = useMemo(() => posts.slice(0, 8), [posts]);
   const leadPost = topPosts[0] ?? null;
   const nextPosts = topPosts.slice(1, 4);
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
+  const scrollHandlers = useTabReselectScroll("all", { scrollRef, onRefresh: reload });
 
   const handleReact = async (postId, reactionType) => {
     if (!session?.user?.id) {
@@ -120,7 +125,13 @@ export default function AllScreen() {
   );
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView
+      ref={scrollRef}
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      onScroll={scrollHandlers.onScroll}
+      scrollEventThrottle={scrollHandlers.scrollEventThrottle}
+    >
       <View style={styles.hero}>
         <View style={styles.heroTopRow}>
           <View style={styles.heroTextBlock}>
@@ -171,7 +182,7 @@ export default function AllScreen() {
               {topPosts.slice(0, 3).map((post, index) => (
                 <Pressable
                   key={post.id}
-                  onPress={() => router.push(`/game/${post.gameId}`)}
+                  onPress={() => router.push(`/post/${post.id}`)}
                   style={({ pressed }) => [styles.rankRow, pressed ? styles.rowPressed : null]}
                 >
                   <Text style={styles.rank}>#{index + 1}</Text>
@@ -190,11 +201,12 @@ export default function AllScreen() {
           {leadPost ? (
             <View style={styles.feedList}>
               <PostCard
+                concealSpoilers={Boolean(leadPost.spoiler) && !shouldShowSpoilersByDefault(leadPost.gameId)}
                 isDeleting={deletingPostId === leadPost.id}
                 isReacting={reactingPostId === leadPost.id}
                 onAuthorPress={() => router.push(`/user/${leadPost.userId}`)}
-                onDelete={session?.user?.id === leadPost.userId && leadPost.type === "clip" ? () => handleDeletePost(leadPost) : null}
-                onEdit={session?.user?.id === leadPost.userId && leadPost.type === "clip" ? () => handleEditPost(leadPost) : null}
+                onDelete={session?.user?.id === leadPost.userId ? () => handleDeletePost(leadPost) : null}
+                onEdit={session?.user?.id === leadPost.userId ? () => handleEditPost(leadPost) : null}
                 onGift={session?.user?.id && session.user.id !== leadPost.userId ? () => setGiftPost(leadPost) : null}
                 onOpenComments={() => setSelectedPostId(leadPost.id)}
                 onPress={() => router.push(`/post/${leadPost.id}`)}
@@ -210,11 +222,12 @@ export default function AllScreen() {
                 {nextPosts.map((post) => (
                   <PostCard
                     key={post.id}
+                    concealSpoilers={Boolean(post.spoiler) && !shouldShowSpoilersByDefault(post.gameId)}
                     isDeleting={deletingPostId === post.id}
                     isReacting={reactingPostId === post.id}
                     onAuthorPress={() => router.push(`/user/${post.userId}`)}
-                    onDelete={session?.user?.id === post.userId && post.type === "clip" ? () => handleDeletePost(post) : null}
-                    onEdit={session?.user?.id === post.userId && post.type === "clip" ? () => handleEditPost(post) : null}
+                    onDelete={session?.user?.id === post.userId ? () => handleDeletePost(post) : null}
+                    onEdit={session?.user?.id === post.userId ? () => handleEditPost(post) : null}
                     onGift={session?.user?.id && session.user.id !== post.userId ? () => setGiftPost(post) : null}
                     onOpenComments={() => setSelectedPostId(post.id)}
                     onPress={() => router.push(`/post/${post.id}`)}

@@ -39,7 +39,7 @@ export default function SignupScreen() {
     if (!isValidUsername(cleanUsername)) {
       Alert.alert(
         "Invalid username",
-        "Use 3 to 20 lowercase letters, numbers, or underscores."
+        "Use 3 to 20 lowercase characters. Spaces and punctuation are allowed."
       );
       return;
     }
@@ -133,14 +133,14 @@ export default function SignupScreen() {
             <TextInput
               autoCapitalize="none"
               autoCorrect={false}
-              onChangeText={(value) => setUsername(value.toLowerCase())}
-              placeholder="lowercase_username"
+              onChangeText={setUsername}
+              placeholder="pants.pants!pants?"
               placeholderTextColor={theme.colors.textMuted}
               style={styles.input}
               value={username}
             />
             <Text style={styles.helper}>
-              Use 3 to 20 lowercase letters, numbers, or underscores.
+              Use 3 to 20 lowercase characters. Spaces and punctuation are allowed.
             </Text>
           </View>
 

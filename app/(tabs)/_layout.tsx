@@ -8,6 +8,7 @@ import { isStaffRole } from '@/lib/admin';
 import { useFollows } from '@/lib/follows';
 import { useCurrentProfile } from '@/lib/profile';
 import { useNotifications } from '@/lib/notifications';
+import { emitTabReselect } from '@/lib/tabReselect';
 import { theme } from '@/lib/theme';
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
@@ -39,10 +40,12 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.colors.accent,
         tabBarInactiveTintColor: theme.colors.textMuted,
+        tabBarHideOnKeyboard: false,
         tabBarStyle: {
           backgroundColor: theme.colors.card,
           borderTopColor: theme.colors.border,
@@ -57,6 +60,13 @@ export default function TabLayout() {
           title: 'Home',
           tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
         }}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            if (navigation.isFocused()) {
+              emitTabReselect("home");
+            }
+          },
+        })}
       />
       <Tabs.Screen
         name="popular"
@@ -64,6 +74,13 @@ export default function TabLayout() {
           title: 'All',
           tabBarIcon: ({ color }) => <TabBarIcon name="fire" color={color} />,
         }}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            if (navigation.isFocused()) {
+              emitTabReselect("all");
+            }
+          },
+        })}
       />
       <Tabs.Screen
         name="browse"
@@ -71,6 +88,13 @@ export default function TabLayout() {
           title: 'Browse',
           tabBarIcon: ({ color }) => <TabBarIcon name="search" color={color} />,
         }}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            if (navigation.isFocused()) {
+              emitTabReselect("browse");
+            }
+          },
+        })}
       />
       <Tabs.Screen
         name="profile"
@@ -79,6 +103,13 @@ export default function TabLayout() {
           tabBarBadge: unreadCount > 0 ? (unreadCount > 9 ? '9+' : String(unreadCount)) : undefined,
           tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
         }}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            if (navigation.isFocused()) {
+              emitTabReselect("profile");
+            }
+          },
+        })}
       />
       <Tabs.Screen
         name="admin"
@@ -86,13 +117,6 @@ export default function TabLayout() {
           href: isStaffRole(profile?.account_role) ? undefined : null,
           title: 'Admin',
           tabBarIcon: ({ color }) => <TabBarIcon name="shield" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="game/[id]"
-        options={{
-          href: null,
-          headerShown: false,
         }}
       />
     </Tabs>

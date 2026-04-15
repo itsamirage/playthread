@@ -5,12 +5,16 @@ import { useState } from "react";
 import PostCard from "../../components/PostCard";
 import SectionCard from "../../components/SectionCard";
 import { useAuth } from "../../lib/auth";
+import { goBackOrFallback } from "../../lib/navigation";
 import { getProfileNameColor } from "../../lib/profileAppearance";
 import { getProfileTitleOption } from "../../lib/titles";
 import { theme } from "../../lib/theme";
 import {
-  followUser,
-  unfollowUser,
+  acceptFriendRequest,
+  cancelFriendRequest,
+  declineFriendRequest,
+  removeFriend,
+  requestFriend,
   usePublicProfile,
   useUserActivity,
   useUserFollows,
@@ -23,12 +27,7 @@ export default function PublicProfileScreen() {
   const userId = typeof id === "string" ? id : null;
   const { profile, isLoading, error, reload } = usePublicProfile(userId);
   const { posts, isLoading: activityLoading, reload: reloadActivity } = useUserActivity(userId);
-  const {
-    followerCount,
-    followingCount,
-    isFollowingUser,
-    reload: reloadFollows,
-  } = useUserFollows(userId);
+  const { friendCount, friends, getFriendshipStatus, reload: reloadFollows } = useUserFollows(userId);
   const [isSavingFollow, setIsSavingFollow] = useState(false);
 
   if (isLoading) {
@@ -54,7 +53,7 @@ export default function PublicProfileScreen() {
   const canFollow = session?.user?.id && session.user.id !== profile.id;
   const title = getProfileTitleOption(profile.selectedTitleKey);
   const nameColor = getProfileNameColor(profile.selectedNameColor);
-  const currentlyFollowing = isFollowingUser(profile.id);
+  const friendshipStatus = getFriendshipStatus(profile.id);
 
   const handleFollowToggle = async () => {
     if (!canFollow) {
@@ -63,24 +62,71 @@ export default function PublicProfileScreen() {
 
     try {
       setIsSavingFollow(true);
-      if (currentlyFollowing) {
-        await unfollowUser({ followerUserId: session.user.id, targetUserId: profile.id });
+      if (friendshipStatus === "incoming") {
+        await acceptFriendRequest({ targetUserId: profile.id });
+      } else if (friendshipStatus === "none") {
+        await requestFriend({ targetUserId: profile.id });
       } else {
-        await followUser({ followerUserId: session.user.id, targetUserId: profile.id });
+        return;
       }
 
       await reloadFollows();
       await reload();
+      await reloadActivity();
     } finally {
       setIsSavingFollow(false);
     }
   };
 
+  const handleSecondaryFriendAction = async () => {
+    if (!canFollow) {
+      return;
+    }
+
+    try {
+      setIsSavingFollow(true);
+
+      if (friendshipStatus === "outgoing") {
+        await cancelFriendRequest({ targetUserId: profile.id });
+      } else if (friendshipStatus === "incoming") {
+        await declineFriendRequest({ targetUserId: profile.id });
+      } else if (friendshipStatus === "friends") {
+        await removeFriend({ targetUserId: profile.id });
+      } else {
+        return;
+      }
+
+      await reloadFollows();
+      await reload();
+      await reloadActivity();
+    } finally {
+      setIsSavingFollow(false);
+    }
+  };
+
+  const primaryFriendActionLabel =
+    friendshipStatus === "incoming"
+      ? "Accept request"
+      : friendshipStatus === "friends"
+        ? "Friends"
+        : friendshipStatus === "outgoing"
+          ? "Request sent"
+          : "Add friend";
+
+  const secondaryFriendActionLabel =
+    friendshipStatus === "outgoing"
+      ? "Cancel request"
+      : friendshipStatus === "incoming"
+        ? "Decline"
+        : friendshipStatus === "friends"
+          ? "Remove friend"
+          : null;
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
         <View style={styles.heroActions}>
-          <Pressable onPress={() => router.back()} style={styles.secondaryButton}>
+          <Pressable onPress={() => goBackOrFallback(router, "/(tabs)/browse")} style={styles.secondaryButton}>
             <Text style={styles.secondaryButtonText}>Back</Text>
           </Pressable>
           <Pressable onPress={() => router.push("/(tabs)/browse")} style={styles.secondaryButton}>
@@ -102,12 +148,8 @@ export default function PublicProfileScreen() {
         {profile.bio ? <Text style={styles.bioText}>{profile.bio}</Text> : null}
         <View style={styles.statRow}>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{followerCount}</Text>
-            <Text style={styles.statLabel}>Followers</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{followingCount}</Text>
-            <Text style={styles.statLabel}>Following</Text>
+            <Text style={styles.statValue}>{friendCount}</Text>
+            <Text style={styles.statLabel}>Friends</Text>
           </View>
           <View style={styles.statBox}>
             <Text style={styles.statValue}>{posts.length}</Text>
@@ -115,13 +157,67 @@ export default function PublicProfileScreen() {
           </View>
         </View>
         {canFollow ? (
-          <Pressable onPress={handleFollowToggle} style={styles.followButton}>
-            <Text style={styles.followButtonText}>
-              {isSavingFollow ? "Saving..." : currentlyFollowing ? "Following" : "Follow"}
-            </Text>
-          </Pressable>
+          <View style={styles.friendActionRow}>
+            <Pressable
+              onPress={handleFollowToggle}
+              style={[
+                styles.followButton,
+                friendshipStatus === "friends" || friendshipStatus === "outgoing"
+                  ? styles.followButtonMuted
+                  : null,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.followButtonText,
+                  friendshipStatus === "friends" || friendshipStatus === "outgoing"
+                    ? styles.followButtonTextMuted
+                    : null,
+                ]}
+              >
+                {isSavingFollow ? "Saving..." : primaryFriendActionLabel}
+              </Text>
+            </Pressable>
+            {secondaryFriendActionLabel ? (
+              <Pressable onPress={handleSecondaryFriendAction} style={styles.secondaryFriendButton}>
+                <Text style={styles.secondaryFriendButtonText}>
+                  {isSavingFollow ? "Saving..." : secondaryFriendActionLabel}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
       </View>
+
+      <SectionCard title="Friends" eyebrow={`${friendCount} connected`}>
+        {friends.length > 0 ? (
+          <View style={styles.friendList}>
+            {friends.map((friend) => (
+              <Pressable
+                key={friend.id}
+                onPress={() => router.push(`/user/${friend.id}`)}
+                style={styles.friendRow}
+              >
+                {friend.avatarUrl ? (
+                  <Image source={{ uri: friend.avatarUrl }} style={styles.friendAvatar} />
+                ) : (
+                  <View style={styles.friendAvatarFallback}>
+                    <Text style={styles.friendAvatarFallbackText}>
+                      {friend.displayName.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.friendCopy}>
+                  <Text style={styles.friendName}>{friend.displayName}</Text>
+                  <Text style={styles.friendUsername}>@{friend.username}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.bodyText}>No friends listed on this profile yet.</Text>
+        )}
+      </SectionCard>
 
       <SectionCard title="Recent activity" eyebrow="Profile feed">
         {activityLoading ? (
@@ -259,10 +355,82 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.xl,
   },
+  followButtonMuted: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderWidth: theme.borders.width,
+  },
   followButtonText: {
     color: theme.colors.background,
     fontSize: theme.fontSizes.md,
     fontWeight: theme.fontWeights.bold,
+  },
+  followButtonTextMuted: {
+    color: theme.colors.textPrimary,
+  },
+  friendActionRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  secondaryFriendButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  secondaryFriendButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  friendList: {
+    gap: theme.spacing.sm,
+  },
+  friendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.md,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    padding: theme.spacing.md,
+  },
+  friendAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  friendAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  friendAvatarFallbackText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.md,
+    fontWeight: theme.fontWeights.bold,
+  },
+  friendCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  friendName: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  friendUsername: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
   },
   feedList: {
     gap: theme.spacing.md,
