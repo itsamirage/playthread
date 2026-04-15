@@ -5,6 +5,7 @@ workflows:
     environment:
       vars:
         EXPO_PUBLIC_SUPABASE_URL: https://zippqumynxivnhhmvblc.supabase.co
+        EXPO_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppcHBxdW15bnhpdm5oaG12YmxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NTczMzcsImV4cCI6MjA5MTIzMzMzN30.jufKA4yHSshCyM-D1Xxa_hBfXTox4ErtpoEo0yXW6QE
         EXPO_PUBLIC_EAS_PROJECT_ID: abdbb665-1d8f-4924-9174-863608ab17b5
       groups:
         - playthread
@@ -14,9 +15,6 @@ workflows:
         script: npm ci
       - name: Expo prebuild
         script: |
-          EXPO_PUBLIC_SUPABASE_URL=$EXPO_PUBLIC_SUPABASE_URL \
-          EXPO_PUBLIC_SUPABASE_ANON_KEY=$EXPO_PUBLIC_SUPABASE_ANON_KEY \
-          EXPO_PUBLIC_EAS_PROJECT_ID=$EXPO_PUBLIC_EAS_PROJECT_ID \
           npx expo prebuild --clean --platform ios
       - name: Set build number
         script: |
