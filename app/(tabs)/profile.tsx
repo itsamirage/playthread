@@ -47,7 +47,7 @@ import {
   useSteamShowcaseCatalog,
 } from "../../lib/profileShowcase";
 import { getProfileNameColor } from "../../lib/profileAppearance";
-import { useMyReviewCount, useUserFollows } from "../../lib/userSocial";
+import { useMyReviewCount, useMyReviewsByGame, useUserFollows } from "../../lib/userSocial";
 import { getProfileTitleOption, PROFILE_TITLE_OPTIONS } from "../../lib/titles";
 import { useTabReselectScroll } from "../../lib/tabReselect";
 import { theme } from "../../lib/theme";
@@ -166,6 +166,11 @@ export default function ProfileScreen() {
       matches: (game) => game.playStatus === "have_not_played",
       emptyText: "Your backlog is clear right now.",
     },
+    completed: {
+      label: "Completed",
+      matches: (game) => game.playStatus === "completed",
+      emptyText: "No completed games yet. Mark a game as completed from its game page.",
+    },
   };
   const GAME_SORT_OPTIONS = {
     recent: "Recently played",
@@ -200,7 +205,8 @@ export default function ProfileScreen() {
   const { preferences: contentPreferences, savePreferences: saveContentPreferences } = useContentPreferences();
   const { followedCount, followedGames, isLoading: followsLoading, unfollowGame } = useFollows();
   const { friendCount, incomingRequestUserIds } = useUserFollows(session?.user?.id);
-  const { reviewCount, avgRating } = useMyReviewCount(session?.user?.id);
+  const { reviewCount, avgRating, reload: reloadReviews } = useMyReviewCount(session?.user?.id);
+  const { reviewsByGameId } = useMyReviewsByGame(session?.user?.id);
   const { profile, reload: reloadProfile } = useCurrentProfile();
   const { accountsByProvider, isLoading: accountsLoading, reloadAccounts } = useConnectedAccounts();
   const {
@@ -217,8 +223,7 @@ export default function ProfileScreen() {
 
   const completedCount = followedGames.filter((game) => game.playStatus === "completed").length;
   const backlogCount = followedGames.filter((game) => game.playStatus === "have_not_played").length;
-  const backlogGames = followedGames.filter((game) => game.playStatus === "have_not_played").slice(0, 6);
-  const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey] : null;
+const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey] : null;
   const filteredStatGames = activeStatFilter
     ? followedGames.filter((game) => activeStatFilter.matches(game))
     : [];
@@ -312,6 +317,7 @@ export default function ProfileScreen() {
       void reloadAccounts?.();
       void reloadShowcase?.();
       void reloadCatalog?.();
+      void reloadReviews?.();
     },
   });
 
@@ -736,7 +742,14 @@ export default function ProfileScreen() {
             <Text style={styles.statValue}>{backlogCount}</Text>
             <Text style={styles.statLabel} numberOfLines={1}>Backlog</Text>
           </Pressable>
-          <View style={styles.statBox}>
+          <Pressable
+            onPress={() => setActiveStatFilterKey("completed")}
+            style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
+          >
+            <Text style={styles.statValue}>{completedCount}</Text>
+            <Text style={styles.statLabel} numberOfLines={1}>Completed</Text>
+          </Pressable>
+          <View style={[styles.statBox, styles.statBoxFullRow]}>
             <Text style={styles.statValue}>{reviewCount}</Text>
             {avgRating ? (
               <Text style={styles.statSubValue}>{avgRating} avg</Text>
@@ -744,7 +757,7 @@ export default function ProfileScreen() {
             <Text style={styles.statLabel} numberOfLines={1}>Reviewed</Text>
           </View>
         </View>
-        <Text style={styles.helperText}>Tap Following or Backlog to browse those games. Tap Friends to see your social list.</Text>
+        <Text style={styles.helperText}>Tap Following, Backlog, or Completed to browse those games. Tap Friends to manage your social list.</Text>
         <Pressable
           onPress={() => setIsStatsExpanded((v) => !v)}
           style={styles.expandToggle}
@@ -785,53 +798,6 @@ export default function ProfileScreen() {
             </View>
           </>
         ) : null}
-      </SectionCard>
-
-      <SectionCard title="Backlog" eyebrow="Want to play">
-        <Text style={styles.bodyText}>
-          Games you own or want to get to later can live here without pretending you are actively playing them.
-        </Text>
-        {backlogGames.length > 0 ? (
-          <View style={styles.followList}>
-            {backlogGames.map((game) => (
-              <Pressable
-                key={`backlog:${game.id}`}
-                onPress={() => router.push(`/game/${game.id}`)}
-                style={({ pressed }) => [styles.followCard, pressed ? styles.buttonPressed : null]}
-              >
-                <View style={styles.followMainArea}>
-                  {game.coverUrl ? (
-                    <Image source={{ uri: game.coverUrl }} style={styles.followCover} />
-                  ) : (
-                    <View style={styles.followFallbackCover}>
-                      <Text style={styles.followFallbackText}>
-                        {game.title.charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={styles.followTextBlock}>
-                    <Text style={styles.followTitle}>{game.title}</Text>
-                    <Text style={styles.followMeta}>
-                      Backlog | Added {new Date(game.followedAt).toLocaleDateString()}
-                    </Text>
-                  </View>
-                </View>
-              </Pressable>
-            ))}
-            {backlogCount > backlogGames.length ? (
-              <Pressable
-                onPress={() => setActiveStatFilterKey("backlog")}
-                style={styles.secondaryButton}
-              >
-                <Text style={styles.secondaryButtonText}>Open full backlog</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : (
-          <Text style={styles.helperText}>
-            Add a game to your backlog from its game page when you want to play it later.
-          </Text>
-        )}
       </SectionCard>
 
       <SectionCard title="Profile store" eyebrow="Cosmetics">
@@ -1549,6 +1515,11 @@ export default function ProfileScreen() {
                         {getFollowStatusLabel(game.playStatus)} | Followed{" "}
                         {new Date(game.followedAt).toLocaleDateString()}
                       </Text>
+                      {activeStatFilterKey === "completed" && reviewsByGameId.has(game.id) ? (
+                        <Text style={styles.modalGameRating}>
+                          ★ {reviewsByGameId.get(game.id)} / 10
+                        </Text>
+                      ) : null}
                     </View>
                   </Pressable>
                 ))
@@ -1685,6 +1656,9 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.lg,
     paddingHorizontal: theme.spacing.md,
     gap: 2,
+  },
+  statBoxFullRow: {
+    minWidth: "100%",
   },
   statValue: {
     color: theme.colors.textPrimary,
