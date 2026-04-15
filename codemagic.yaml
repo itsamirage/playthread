@@ -6,6 +6,9 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: app.playthread.mobile
+        certificate: $CERTIFICATE_P12
+        certificate_password: $CERTIFICATE_PASSWORD
+        provisioning_profile: $PROVISIONING_PROFILE
       vars:
         EXPO_PUBLIC_SUPABASE_URL: https://zippqumynxivnhhmvblc.supabase.co
         EXPO_PUBLIC_EAS_PROJECT_ID: abdbb665-1d8f-4924-9174-863608ab17b5
