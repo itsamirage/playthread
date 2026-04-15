@@ -3,15 +3,11 @@ workflows:
     name: iOS → TestFlight
     max_build_duration: 60
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: app.playthread.mobile
-        certificate: $CERTIFICATE_P12
-        certificate_password: $CERTIFICATE_PASSWORD
-        provisioning_profile: $PROVISIONING_PROFILE
       vars:
         EXPO_PUBLIC_SUPABASE_URL: https://zippqumynxivnhhmvblc.supabase.co
         EXPO_PUBLIC_EAS_PROJECT_ID: abdbb665-1d8f-4924-9174-863608ab17b5
+      groups:
+        - ios_signing
       node: 22.14.0
     scripts:
       - name: Install dependencies
@@ -22,6 +18,15 @@ workflows:
           EXPO_PUBLIC_SUPABASE_ANON_KEY=$EXPO_PUBLIC_SUPABASE_ANON_KEY \
           EXPO_PUBLIC_EAS_PROJECT_ID=$EXPO_PUBLIC_EAS_PROJECT_ID \
           npx expo prebuild --clean --platform ios
+      - name: Set up keychain
+        script: keychain initialize
+      - name: Import certificate and provisioning profile
+        script: |
+          echo $CERTIFICATE_P12 | base64 --decode > /tmp/certificate.p12
+          keychain add-certificates --certificate /tmp/certificate.p12 --certificate-password $CERTIFICATE_PASSWORD
+          echo $PROVISIONING_PROFILE | base64 --decode > /tmp/profile.mobileprovision
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp /tmp/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
       - name: Set up code signing
         script: xcode-project use-profiles
       - name: Build IPA
