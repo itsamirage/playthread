@@ -6,6 +6,8 @@ workflows:
       vars:
         EXPO_PUBLIC_SUPABASE_URL: https://zippqumynxivnhhmvblc.supabase.co
         EXPO_PUBLIC_EAS_PROJECT_ID: abdbb665-1d8f-4924-9174-863608ab17b5
+      groups:
+        - playthread
       node: 22.14.0
     scripts:
       - name: Install dependencies
