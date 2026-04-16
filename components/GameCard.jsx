@@ -62,6 +62,18 @@ export default function GameCard({
               <PlatformBadge key={platform} platform={platform} />
             ))}
           </View>
+          <View style={styles.tagRow}>
+            {game.ageRatingLabel ? (
+              <View style={styles.ratingTag}>
+                <Text style={styles.ratingTagText}>{game.ageRatingLabel}</Text>
+              </View>
+            ) : null}
+            {game.isCoOp ? (
+              <View style={styles.coopTag}>
+                <Text style={styles.coopTagText}>Co-op</Text>
+              </View>
+            ) : null}
+          </View>
           <Text style={styles.subMeta}>
             {game.members} members | {game.starRating} stars
           </Text>
@@ -217,6 +229,36 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: theme.spacing.xs,
     paddingTop: 2,
+    flexWrap: "wrap",
+  },
+  tagRow: {
+    flexDirection: "row",
+    gap: theme.spacing.xs,
+    flexWrap: "wrap",
+  },
+  ratingTag: {
+    borderRadius: theme.radius.sm,
+    borderWidth: theme.borders.width,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  ratingTagText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+  },
+  coopTag: {
+    borderRadius: theme.radius.sm,
+    borderWidth: theme.borders.width,
+    borderColor: "rgba(0,229,255,0.3)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  coopTagText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
   },
   subMeta: {
     color: theme.colors.textMuted,

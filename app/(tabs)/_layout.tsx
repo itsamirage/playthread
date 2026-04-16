@@ -1,7 +1,8 @@
 import React from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { BottomTabBar } from '@react-navigation/bottom-tabs';
 import { Redirect, Tabs } from 'expo-router';
-import { ActivityIndicator, SafeAreaView, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Animated, SafeAreaView, StyleSheet, Text } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
 import { isStaffRole } from '@/lib/admin';
@@ -9,6 +10,7 @@ import { useFollows } from '@/lib/follows';
 import { useCurrentProfile } from '@/lib/profile';
 import { useNotifications } from '@/lib/notifications';
 import { emitTabReselect } from '@/lib/tabReselect';
+import { tabBarTranslateY } from '@/lib/tabBarScroll';
 import { theme } from '@/lib/theme';
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
@@ -41,11 +43,24 @@ export default function TabLayout() {
   return (
     <Tabs
       backBehavior="history"
+      tabBar={(props) => (
+        <Animated.View
+          style={{
+            transform: [{ translateY: tabBarTranslateY }],
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+          }}
+        >
+          <BottomTabBar {...props} />
+        </Animated.View>
+      )}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.colors.accent,
         tabBarInactiveTintColor: theme.colors.textMuted,
-        tabBarHideOnKeyboard: false,
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
           backgroundColor: theme.colors.card,
           borderTopColor: theme.colors.border,

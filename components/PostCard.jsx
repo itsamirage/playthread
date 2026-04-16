@@ -100,28 +100,28 @@ export default function PostCard({
         </View>
       ) : null}
 
-      <View style={styles.mainContent}>
-        <Pressable
-          disabled={!onGamePress}
-          onPress={(event) => { event.stopPropagation?.(); onGamePress?.(); }}
-          style={styles.gameRow}
-        >
-          {post.gameCoverUrl ? (
-            <Image source={{ uri: post.gameCoverUrl }} style={styles.coverImage} />
-          ) : (
-            <View style={styles.coverFallback}>
-              <Text style={styles.coverFallbackText}>
-                {post.gameTitle.charAt(0).toUpperCase()}
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.gameText}>
-            <Text style={styles.gameTitle}>{post.gameTitle}</Text>
-            <Text style={styles.postTitle}>{post.title}</Text>
+      <Pressable
+        disabled={!onGamePress}
+        onPress={(event) => { event.stopPropagation?.(); onGamePress?.(); }}
+        style={styles.gameRow}
+      >
+        {post.gameCoverUrl ? (
+          <Image source={{ uri: post.gameCoverUrl }} style={styles.coverImage} />
+        ) : (
+          <View style={styles.coverFallback}>
+            <Text style={styles.coverFallbackText}>
+              {post.gameTitle.charAt(0).toUpperCase()}
+            </Text>
           </View>
-        </Pressable>
+        )}
 
+        <View style={styles.gameText}>
+          <Text style={styles.gameTitle}>{post.gameTitle}</Text>
+          <Text style={styles.postTitle}>{post.title}</Text>
+        </View>
+      </Pressable>
+
+      <View style={styles.mainContent}>
         <Text style={styles.bodyText}>{post.body}</Text>
         {post.isEdited ? (
           <Text style={styles.editedText}>

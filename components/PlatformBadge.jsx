@@ -3,18 +3,19 @@ import { StyleSheet, Text, View } from "react-native";
 import { theme } from "../lib/theme";
 
 const platformMap = {
-  steam: {
-    label: "S",
-    color: theme.colors.steam,
-  },
-  xbox: {
-    label: "X",
-    color: theme.colors.xbox,
-  },
-  psn: {
-    label: "P",
-    color: theme.colors.psn,
-  },
+  ps5: { label: "PS5", color: theme.colors.psn },
+  ps4: { label: "PS4", color: theme.colors.psn },
+  ps3: { label: "PS3", color: theme.colors.psn },
+  psn: { label: "PS", color: theme.colors.psn },
+  xbox_series: { label: "XSX", color: theme.colors.xbox },
+  xbox_one: { label: "XB1", color: theme.colors.xbox },
+  xbox: { label: "XB", color: theme.colors.xbox },
+  switch: { label: "NSW", color: theme.colors.nintendo },
+  wii: { label: "Wii", color: "#9e9e9e" },
+  pc: { label: "PC", color: theme.colors.steam },
+  steam: { label: "PC", color: theme.colors.steam },
+  ios: { label: "iOS", color: theme.colors.ios },
+  android: { label: "AND", color: theme.colors.android },
 };
 
 export default function PlatformBadge({ platform }) {
@@ -33,15 +34,16 @@ export default function PlatformBadge({ platform }) {
 
 const styles = StyleSheet.create({
   badge: {
-    width: 22,
     height: 22,
+    minWidth: 22,
+    paddingHorizontal: 5,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 6,
   },
   text: {
     color: "#ffffff",
-    fontSize: theme.fontSizes.xs,
+    fontSize: 11,
     fontWeight: theme.fontWeights.bold,
   },
 });

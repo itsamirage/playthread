@@ -11,9 +11,18 @@ const corsHeaders = {
 };
 
 const platformMatchers = [
-  { key: "steam", pattern: /steam|pc \(microsoft windows\)|linux|mac/i },
+  { key: "ps5", pattern: /playstation 5|ps5/i },
+  { key: "ps4", pattern: /playstation 4|ps4/i },
+  { key: "ps3", pattern: /playstation 3|ps3/i },
+  { key: "psn", pattern: /playstation|psn/i },
+  { key: "xbox_series", pattern: /xbox series|xbox s|xbox x/i },
+  { key: "xbox_one", pattern: /xbox one/i },
   { key: "xbox", pattern: /xbox/i },
-  { key: "psn", pattern: /playstation|ps\d/i },
+  { key: "switch", pattern: /nintendo switch/i },
+  { key: "wii", pattern: /wii/i },
+  { key: "pc", pattern: /steam|pc \(microsoft windows\)|linux|mac os/i },
+  { key: "ios", pattern: /ios|iphone|ipad/i },
+  { key: "android", pattern: /android/i },
 ];
 
 type CatalogSort =
@@ -119,25 +128,54 @@ function getPrimaryGenre(genres: Array<{ name?: string }> = []) {
   return genres[0]?.name ?? "Unknown";
 }
 
-function isMatureAgeRating(ageRatings: Array<{ category?: number; rating?: number }> = []) {
+// IGDB age_ratings: category 1=ESRB, 2=PEGI, 3=CERO, 4=USK, 7=ACB
+const ESRB_LABELS: Record<number, string> = { 1: "RP", 2: "EC", 3: "E", 4: "E10+", 5: "T", 6: "M", 7: "AO" };
+const PEGI_LABELS: Record<number, string> = { 1: "3", 2: "7", 3: "12", 4: "16", 5: "18" };
+
+function getAgeRatingLabel(ageRatings: Array<{ category?: number; rating?: number }> = []): string | null {
+  const esrb = ageRatings.find((r) => Number(r?.category) === 1);
+  if (esrb) {
+    const label = ESRB_LABELS[Number(esrb.rating)];
+    return label ? `ESRB ${label}` : null;
+  }
+  const pegi = ageRatings.find((r) => Number(r?.category) === 2);
+  if (pegi) {
+    const label = PEGI_LABELS[Number(pegi.rating)];
+    return label ? `PEGI ${label}` : null;
+  }
+  return null;
+}
+
+function isMatureAgeRating(
+  ageRatings: Array<{ category?: number; rating?: number }> = [],
+  themes: Array<{ id?: number; name?: string }> = [],
+) {
+  // IGDB theme 42 = Erotic, theme 1 = Action (just a check for adult themes)
+  const hasAdultTheme = themes.some((t) => Number(t?.id) === 42);
+  if (hasAdultTheme) return true;
+
   return ageRatings.some((item) => {
     const category = Number(item?.category ?? 0);
     const rating = Number(item?.rating ?? 0);
 
     if (category === 1) {
-      return rating === 6 || rating === 7;
+      return rating === 6 || rating === 7; // ESRB M or AO
     }
 
     if (category === 2) {
-      return rating === 9;
+      return rating >= 4; // PEGI 16 or 18
     }
 
     if (category === 3) {
-      return rating >= 4;
+      return rating >= 4; // USK 18
     }
 
     return false;
   });
+}
+
+function getGameModes(gameModes: Array<{ name?: string }> = []): string[] {
+  return gameModes.map((m) => m?.name).filter(Boolean) as string[];
 }
 
 function normalizeIgdbGame(game: any) {
@@ -145,6 +183,8 @@ function normalizeIgdbGame(game: any) {
   const members = toRoundedNumber(
     game?.follows ?? game?.hypes ?? game?.total_rating_count ?? game?.aggregated_rating_count
   );
+
+  const gameModes = getGameModes(game.game_modes);
 
   return {
     id: game.id,
@@ -158,7 +198,10 @@ function normalizeIgdbGame(game: any) {
     metacritic: toRoundedNumber(game.aggregated_rating ?? game.total_rating) ?? 0,
     starRating: toStarRating(totalRating) ?? 0,
     members: members ?? 0,
-    isMature: isMatureAgeRating(game.age_ratings),
+    isMature: isMatureAgeRating(game.age_ratings, game.themes),
+    ageRatingLabel: getAgeRatingLabel(game.age_ratings),
+    gameModes,
+    isCoOp: gameModes.some((m) => /co.?op|cooperative/i.test(m)),
     summary: game.summary ?? "No summary available yet.",
     coverUrl: toImageUrl(game.cover?.image_id, COVER_SIZE),
     screenshotUrls: (game.screenshots ?? [])
@@ -229,7 +272,7 @@ async function getOrLoadCachedValue<T>(cacheKey: string, loader: () => Promise<T
 }
 
 function gameFields() {
-  return "fields name,summary,first_release_date,aggregated_rating,aggregated_rating_count,total_rating,total_rating_count,follows,hypes,cover.image_id,screenshots.image_id,genres.name,platforms.name,age_ratings.category,age_ratings.rating,involved_companies.developer,involved_companies.publisher,involved_companies.company.name;";
+  return "fields name,summary,first_release_date,aggregated_rating,aggregated_rating_count,total_rating,total_rating_count,follows,hypes,cover.image_id,screenshots.image_id,genres.name,platforms.name,age_ratings.category,age_ratings.rating,game_modes.name,themes.id,themes.name,involved_companies.developer,involved_companies.publisher,involved_companies.company.name;";
 }
 
 function discoverQuery(limit: number) {

@@ -163,6 +163,7 @@ export default function BrowseScreen() {
   );
   const handleClearFilters = () => {
     setQuery("");
+    setSearchMode("game");
   };
   const hasActiveFilters = cleanQuery.length > 0 || searchMode !== "game";
   const scrollHandlers = useTabReselectScroll("browse", {

@@ -399,6 +399,23 @@ export default function GameDetailScreen() {
                 <PlatformBadge key={platform} platform={platform} />
               ))}
             </View>
+            <View style={styles.tagRow}>
+              {game.ageRatingLabel ? (
+                <View style={styles.ratingTag}>
+                  <Text style={styles.ratingTagText}>{game.ageRatingLabel}</Text>
+                </View>
+              ) : null}
+              {game.isCoOp ? (
+                <View style={styles.coopTag}>
+                  <Text style={styles.coopTagText}>Co-op</Text>
+                </View>
+              ) : null}
+              {(game.gameModes ?? []).filter((m) => !/co.?op|cooperative/i.test(m)).map((mode) => (
+                <View key={mode} style={styles.modeTag}>
+                  <Text style={styles.modeTagText}>{mode}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         </View>
         <Pressable
@@ -928,6 +945,48 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: theme.spacing.xs,
     paddingTop: theme.spacing.xs,
+    flexWrap: "wrap",
+  },
+  tagRow: {
+    flexDirection: "row",
+    gap: theme.spacing.xs,
+    flexWrap: "wrap",
+    paddingTop: 2,
+  },
+  ratingTag: {
+    borderRadius: theme.radius.sm,
+    borderWidth: theme.borders.width,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  ratingTagText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+  },
+  coopTag: {
+    borderRadius: theme.radius.sm,
+    borderWidth: theme.borders.width,
+    borderColor: "rgba(0,229,255,0.3)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  coopTagText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+  },
+  modeTag: {
+    borderRadius: theme.radius.sm,
+    borderWidth: theme.borders.width,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  modeTagText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
   },
   statsRow: {
     flexDirection: "row",

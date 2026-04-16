@@ -779,29 +779,29 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
         {isStatsExpanded ? (
           <>
             <View style={styles.statRow}>
-              <View style={styles.statBox}>
+              <View style={[styles.statBox, styles.statBoxThird]}>
                 <Text style={styles.statValue}>{formatCoinCount(profile?.coins_from_posts ?? 0)}</Text>
                 <Text style={styles.statLabel}>Post coins</Text>
               </View>
-              <View style={styles.statBox}>
+              <View style={[styles.statBox, styles.statBoxThird]}>
                 <Text style={styles.statValue}>{formatCoinCount(profile?.coins_from_comments ?? 0)}</Text>
                 <Text style={styles.statLabel}>Comment coins</Text>
               </View>
-              <View style={styles.statBox}>
+              <View style={[styles.statBox, styles.statBoxThird]}>
                 <Text style={styles.statValue}>{formatCoinCount(availableCoins)}</Text>
                 <Text style={styles.statLabel}>Available</Text>
               </View>
             </View>
             <View style={styles.statRow}>
-              <View style={styles.statBox}>
+              <View style={[styles.statBox, styles.statBoxThird]}>
                 <Text style={styles.statValue}>{formatCoinCount(profile?.coins_from_gifts ?? 0)}</Text>
                 <Text style={styles.statLabel}>Gifted to you</Text>
               </View>
-              <View style={styles.statBox}>
+              <View style={[styles.statBox, styles.statBoxThird]}>
                 <Text style={styles.statValue}>{formatCoinCount(lifetimeCoins)}</Text>
                 <Text style={styles.statLabel}>Lifetime earned</Text>
               </View>
-              <View style={styles.statBox}>
+              <View style={[styles.statBox, styles.statBoxThird]}>
                 <Text style={styles.statValue}>{formatCoinCount(profile?.coins_spent ?? 0)}</Text>
                 <Text style={styles.statLabel}>Spent</Text>
               </View>
@@ -1708,6 +1708,9 @@ const styles = StyleSheet.create({
   },
   statBoxFullRow: {
     minWidth: "100%",
+  },
+  statBoxThird: {
+    minWidth: 0,
   },
   statValue: {
     color: theme.colors.textPrimary,
