@@ -1,4 +1,4 @@
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 
@@ -20,7 +20,7 @@ export default function HomeScreen() {
   const { session } = useAuth();
   const { followedCount, followedGameIds, followedGames, shouldShowSpoilersByDefault } =
     useFollows();
-  const { posts, isLoading, error, reload } = useFeedPosts(followedGameIds);
+  const { posts, isLoading, isLoadingMore, hasMore, error, reload, loadMore } = useFeedPosts(followedGameIds);
   const [reactingPostId, setReactingPostId] = useState(null);
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [giftPost, setGiftPost] = useState(null);
@@ -127,14 +127,25 @@ export default function HomeScreen() {
     }, [reload])
   );
 
-  return (
-    <ScrollView
-      ref={scrollRef}
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      onScroll={scrollHandlers.onScroll}
-      scrollEventThrottle={scrollHandlers.scrollEventThrottle}
-    >
+  const renderPost = ({ item: post }) => (
+    <PostCard
+      concealSpoilers={Boolean(post.spoiler) && !shouldShowSpoilersByDefault(post.gameId)}
+      isDeleting={deletingPostId === post.id}
+      isReacting={reactingPostId === post.id}
+      onAuthorPress={() => router.push(`/user/${post.userId}`)}
+      onDelete={session?.user?.id === post.userId ? () => handleDeletePost(post) : null}
+      onEdit={session?.user?.id === post.userId ? () => handleEditPost(post) : null}
+      onGift={session?.user?.id && session.user.id !== post.userId ? () => setGiftPost(post) : null}
+      onOpenComments={() => setSelectedPostId(post.id)}
+      onGamePress={() => router.push(`/game/${post.gameId}`)}
+      onReact={(reactionType) => handleReact(post.id, reactionType)}
+      post={post}
+      onPress={() => router.push(`/post/${post.id}`)}
+    />
+  );
+
+  const listHeader = (
+    <View style={styles.header}>
       <View style={styles.hero}>
         <View style={styles.heroTopRow}>
           <View style={styles.heroTextBlock}>
@@ -182,27 +193,7 @@ export default function HomeScreen() {
             <Text style={styles.bodyText}>Loading posts from the games you follow...</Text>
           </View>
         </SectionCard>
-      ) : feedPosts.length > 0 ? (
-        <View style={styles.feedList}>
-          {feedPosts.map((post) => (
-            <PostCard
-              key={post.id}
-              concealSpoilers={Boolean(post.spoiler) && !shouldShowSpoilersByDefault(post.gameId)}
-              isDeleting={deletingPostId === post.id}
-              isReacting={reactingPostId === post.id}
-              onAuthorPress={() => router.push(`/user/${post.userId}`)}
-              onDelete={session?.user?.id === post.userId ? () => handleDeletePost(post) : null}
-              onEdit={session?.user?.id === post.userId ? () => handleEditPost(post) : null}
-              onGift={session?.user?.id && session.user.id !== post.userId ? () => setGiftPost(post) : null}
-              onOpenComments={() => setSelectedPostId(post.id)}
-              onGamePress={() => router.push(`/game/${post.gameId}`)}
-              onReact={(reactionType) => handleReact(post.id, reactionType)}
-              post={post}
-              onPress={() => router.push(`/post/${post.id}`)}
-            />
-          ))}
-        </View>
-      ) : (
+      ) : feedPosts.length === 0 ? (
         <SectionCard title="Start your feed" eyebrow="Discover">
           <Text style={styles.bodyText}>
             {followedGames.length > 0
@@ -224,8 +215,44 @@ export default function HomeScreen() {
             <Text style={styles.primaryButtonText}>Browse games</Text>
           </Pressable>
         </SectionCard>
-      )}
+      ) : null}
+    </View>
+  );
 
+  const listFooter = (
+    <View style={styles.footer}>
+      {hasMore ? (
+        <Pressable
+          onPress={loadMore}
+          disabled={isLoadingMore}
+          style={({ pressed }) => [styles.loadMoreButton, pressed ? styles.primaryButtonPressed : null]}
+        >
+          {isLoadingMore ? (
+            <ActivityIndicator color={theme.colors.background} size="small" />
+          ) : (
+            <Text style={styles.loadMoreText}>Load more</Text>
+          )}
+        </Pressable>
+      ) : null}
+    </View>
+  );
+
+  return (
+    <View style={styles.screen}>
+      <FlatList
+        ref={scrollRef}
+        data={isLoading ? [] : feedPosts}
+        keyExtractor={(item) => item.id}
+        renderItem={renderPost}
+        ListHeaderComponent={listHeader}
+        ListFooterComponent={listFooter}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        contentContainerStyle={styles.content}
+        onScroll={scrollHandlers.onScroll}
+        scrollEventThrottle={scrollHandlers.scrollEventThrottle}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.3}
+      />
       <PostCommentsSheet
         onClose={() => setSelectedPostId(null)}
         onCommentCountChange={reload}
@@ -239,7 +266,7 @@ export default function HomeScreen() {
         onSubmit={handleSendGift}
         isSubmitting={isSendingGift}
       />
-    </ScrollView>
+    </View>
   );
 }
 
@@ -249,12 +276,22 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   content: {
-    padding: theme.layout.screenPadding,
+    paddingHorizontal: theme.layout.screenPadding,
+    paddingBottom: 100,
+  },
+  header: {
     gap: theme.spacing.lg,
+    paddingTop: theme.spacing.xl,
+    paddingBottom: theme.spacing.md,
+  },
+  footer: {
+    paddingTop: theme.spacing.md,
+  },
+  separator: {
+    height: theme.spacing.md,
   },
   hero: {
     gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xl,
   },
   heroTopRow: {
     flexDirection: "row",
@@ -323,9 +360,6 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.md,
     lineHeight: 22,
   },
-  feedList: {
-    gap: theme.spacing.md,
-  },
   loadingState: {
     alignItems: "center",
     gap: theme.spacing.sm,
@@ -343,6 +377,17 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: theme.colors.background,
     fontSize: theme.fontSizes.md,
+    fontWeight: theme.fontWeights.bold,
+  },
+  loadMoreButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.md,
+    paddingVertical: theme.spacing.md,
+  },
+  loadMoreText: {
+    color: theme.colors.background,
+    fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.bold,
   },
   warningText: {

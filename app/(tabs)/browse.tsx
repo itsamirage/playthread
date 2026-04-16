@@ -30,6 +30,24 @@ const SEARCH_MODES = {
   player: "Players",
 };
 
+const PLATFORM_FILTERS = [
+  { key: "ps5", label: "PS5" },
+  { key: "ps4", label: "PS4" },
+  { key: "xbox_series", label: "XSX" },
+  { key: "switch", label: "NSW" },
+  { key: "pc", label: "PC" },
+  { key: "ios", label: "iOS" },
+  { key: "android", label: "AND" },
+];
+
+const RATING_FILTERS = [
+  { key: "ESRB E", label: "E" },
+  { key: "ESRB E10+", label: "E10+" },
+  { key: "ESRB T", label: "T" },
+  { key: "ESRB M", label: "M" },
+  { key: "ESRB AO", label: "AO" },
+];
+
 function normalizeSearchValue(value) {
   return String(value ?? "")
     .toLowerCase()
@@ -148,6 +166,8 @@ export default function BrowseScreen() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [searchMode, setSearchMode] = useState("game");
+  const [activePlatformFilter, setActivePlatformFilter] = useState<string | null>(null);
+  const [activeRatingFilter, setActiveRatingFilter] = useState<string | null>(null);
   const scrollRef = useRef(null);
   const { followedCount, isFollowingGame, getFollowStatus, setFollowStatus, unfollowGame } =
     useFollows();
@@ -164,8 +184,16 @@ export default function BrowseScreen() {
   const handleClearFilters = () => {
     setQuery("");
     setSearchMode("game");
+    setActivePlatformFilter(null);
+    setActiveRatingFilter(null);
   };
-  const hasActiveFilters = cleanQuery.length > 0 || searchMode !== "game";
+  const hasActiveFilters = cleanQuery.length > 0 || searchMode !== "game" || activePlatformFilter !== null || activeRatingFilter !== null;
+
+  const displayedGames = filteredGames.filter((game) => {
+    if (activePlatformFilter && !game.platforms.includes(activePlatformFilter)) return false;
+    if (activeRatingFilter && game.ageRatingLabel !== activeRatingFilter) return false;
+    return true;
+  });
   const scrollHandlers = useTabReselectScroll("browse", {
     scrollRef,
     onRefresh: hasActiveFilters ? handleClearFilters : undefined,
@@ -183,7 +211,7 @@ export default function BrowseScreen() {
             ? "Players"
             : "Platforms";
   const resultCount = searchMode === "game"
-    ? filteredGames.length
+    ? displayedGames.length
     : searchMode === "player"
       ? playerResults.length
       : facetResults.length;
@@ -265,6 +293,39 @@ export default function BrowseScreen() {
           })}
         </View>
 
+        {searchMode === "game" ? (
+          <View style={styles.filterSection}>
+            <View style={styles.filterRow}>
+              {PLATFORM_FILTERS.map((f) => {
+                const isActive = activePlatformFilter === f.key;
+                return (
+                  <Pressable
+                    key={f.key}
+                    onPress={() => setActivePlatformFilter(isActive ? null : f.key)}
+                    style={[styles.filterChip, isActive ? styles.filterChipActive : null]}
+                  >
+                    <Text style={[styles.filterChipText, isActive ? styles.filterChipTextActive : null]}>{f.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={styles.filterRow}>
+              {RATING_FILTERS.map((f) => {
+                const isActive = activeRatingFilter === f.key;
+                return (
+                  <Pressable
+                    key={f.key}
+                    onPress={() => setActiveRatingFilter(isActive ? null : f.key)}
+                    style={[styles.filterChip, isActive ? styles.filterChipActive : null]}
+                  >
+                    <Text style={[styles.filterChipText, isActive ? styles.filterChipTextActive : null]}>{f.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.toolbarRow}>
           <Text style={styles.followedSummary}>Following {followedCount} games</Text>
           {hasActiveFilters ? (
@@ -333,8 +394,8 @@ export default function BrowseScreen() {
               {cleanQuery.length < 2 ? "Type at least 2 letters to search players." : "No players matched that username."}
             </Text>
           </SectionCard>
-        ) : searchMode === "game" && filteredGames.length > 0 ? (
-          filteredGames.map((game) => (
+        ) : searchMode === "game" && displayedGames.length > 0 ? (
+          displayedGames.map((game) => (
             <GameCard
               key={game.id}
               game={game}
@@ -450,6 +511,36 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: theme.spacing.sm,
     paddingTop: theme.spacing.sm,
+  },
+  filterSection: {
+    gap: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+  },
+  filterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.xs,
+  },
+  filterChip: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+  },
+  filterChipActive: {
+    backgroundColor: "rgba(0,229,255,0.12)",
+    borderColor: theme.colors.accent,
+  },
+  filterChipText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.medium,
+  },
+  filterChipTextActive: {
+    color: theme.colors.accent,
+    fontWeight: theme.fontWeights.bold,
   },
   modeChip: {
     backgroundColor: "rgba(255,255,255,0.03)",

@@ -21,6 +21,7 @@ import { sendCoinGift } from "../lib/admin";
 import { useAuth } from "../lib/auth";
 import { updatePostMetadata, useMyAdminProfile } from "../lib/admin";
 import { useContentPreferences } from "../lib/contentPreferences";
+import { useNowPlaying } from "../lib/nowPlaying";
 import {
   FOLLOW_STATUS_OPTIONS,
   getFollowStatusLabel,
@@ -88,6 +89,7 @@ export default function GameDetailScreen() {
   const [moderatingPostId, setModeratingPostId] = useState(null);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
+  const { isNowPlaying, toggleNowPlaying } = useNowPlaying(session?.user?.id);
   const followStatus = getFollowStatus(params.id);
   const isFollowed = isFollowingGame(params.id);
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
@@ -510,13 +512,23 @@ export default function GameDetailScreen() {
           </Text>
           <Text style={styles.statusInlineArrow}>{followPanelExpanded ? "▲" : "▼"}</Text>
         </Pressable>
+        {session?.user?.id ? (
+          <Pressable
+            onPress={() => toggleNowPlaying(game.id)}
+            style={[styles.nowPlayingButton, isNowPlaying(game.id) ? styles.nowPlayingButtonActive : null]}
+          >
+            <Text style={[styles.nowPlayingButtonText, isNowPlaying(game.id) ? styles.nowPlayingButtonTextActive : null]}>
+              {isNowPlaying(game.id) ? "▶ Playing" : "▶ Now Playing"}
+            </Text>
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={() =>
             router.push({ pathname: "/create-post", params: { gameId: String(game.id) } })
           }
           style={({ pressed }) => [styles.primaryButton, pressed ? styles.buttonPressed : null]}
         >
-          <Text style={styles.primaryButtonText}>Create post</Text>
+          <Text style={styles.primaryButtonText}>Post</Text>
         </Pressable>
       </View>
 
@@ -994,7 +1006,30 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: "row",
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
+    flexWrap: "wrap",
+  },
+  nowPlayingButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    borderColor: theme.colors.border,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  nowPlayingButtonActive: {
+    borderColor: theme.colors.accent,
+    backgroundColor: "rgba(0,229,255,0.1)",
+  },
+  nowPlayingButtonText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  nowPlayingButtonTextActive: {
+    color: theme.colors.accent,
   },
   scoreCard: {
     flex: 1,

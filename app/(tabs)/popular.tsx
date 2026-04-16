@@ -33,6 +33,8 @@ export default function AllScreen() {
   const { session } = useAuth();
   const { shouldShowSpoilersByDefault } = useFollows();
   const [period, setPeriod] = useState("day");
+  // Reset visible count whenever the period changes
+  const handleSetPeriod = (next) => { setPeriod(next); setVisibleCount(12); };
   const { posts, isLoading, error, reload } = usePopularPosts(period);
   const [reactingPostId, setReactingPostId] = useState(null);
   const [selectedPostId, setSelectedPostId] = useState(null);
@@ -40,13 +42,16 @@ export default function AllScreen() {
   const [isSendingGift, setIsSendingGift] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState(null);
   const [optimisticReactions, setOptimisticReactions] = useState<Record<string, { viewerReaction: string | null; reactionCounts: Record<string, number> }>>({});
+  const [visibleCount, setVisibleCount] = useState(12);
   const scrollRef = useRef(null);
-  const topPosts = useMemo(() => posts.slice(0, 8).map((post) => {
+  const rankedPosts = useMemo(() => posts.map((post) => {
     const opt = optimisticReactions[post.id];
     return opt ? { ...post, ...opt } : post;
   }), [posts, optimisticReactions]);
+  const topPosts = rankedPosts.slice(0, visibleCount);
   const leadPost = topPosts[0] ?? null;
-  const nextPosts = topPosts.slice(1, 4);
+  const nextPosts = topPosts.slice(1);
+  const hasMoreVisible = visibleCount < posts.length;
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
   const scrollHandlers = useTabReselectScroll("all", { scrollRef, onRefresh: reload });
 
@@ -170,7 +175,7 @@ export default function AllScreen() {
             return (
               <Pressable
                 key={option.key}
-                onPress={() => setPeriod(option.key)}
+                onPress={() => handleSetPeriod(option.key)}
                 style={[styles.filterChip, isActive ? styles.filterChipActive : null]}
               >
                 <Text style={[styles.filterChipText, isActive ? styles.filterChipTextActive : null]}>
@@ -256,6 +261,15 @@ export default function AllScreen() {
                 ))}
               </View>
             </SectionCard>
+          ) : null}
+
+          {hasMoreVisible ? (
+            <Pressable
+              onPress={() => setVisibleCount((n) => n + 12)}
+              style={({ pressed }) => [styles.loadMoreButton, pressed ? { opacity: 0.85 } : null]}
+            >
+              <Text style={styles.loadMoreText}>Show more</Text>
+            </Pressable>
           ) : null}
         </>
       ) : (
@@ -405,6 +419,17 @@ const styles = StyleSheet.create({
   },
   feedList: {
     gap: theme.spacing.md,
+  },
+  loadMoreButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.md,
+    paddingVertical: theme.spacing.md,
+  },
+  loadMoreText: {
+    color: theme.colors.background,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
   },
   warningText: {
     color: "#f5a623",

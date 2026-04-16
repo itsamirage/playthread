@@ -21,6 +21,8 @@ export default function FriendsScreen() {
     friendCount,
     incomingRequestUserIds,
     outgoingRequestUserIds,
+    incomingRequestProfiles,
+    outgoingRequestProfiles,
     getFriendshipStatus,
     reload,
   } = useUserFollows(session?.user?.id);
@@ -81,32 +83,37 @@ export default function FriendsScreen() {
         </Text>
       </View>
 
-      {incomingRequestUserIds.length > 0 ? (
+      {incomingRequestProfiles.length > 0 ? (
         <SectionCard
-          title={`${incomingRequestUserIds.length} pending ${incomingRequestUserIds.length === 1 ? "request" : "requests"}`}
+          title={`${incomingRequestProfiles.length} pending ${incomingRequestProfiles.length === 1 ? "request" : "requests"}`}
           eyebrow="Friend requests"
         >
           <Text style={styles.helperText}>
-            Someone wants to connect with you on PlayThread.
+            These players want to connect with you on PlayThread.
           </Text>
           <View style={styles.requestList}>
-            {incomingRequestUserIds.map((userId) => (
-              <View key={userId} style={styles.requestCard}>
+            {incomingRequestProfiles.map((profile) => (
+              <View key={profile.id} style={styles.requestCard}>
                 <Pressable
-                  onPress={() => router.push(`/user/${userId}`)}
+                  onPress={() => router.push(`/user/${profile.id}`)}
                   style={styles.requestNameRow}
                 >
-                  <Text style={styles.requestUsername}>View profile →</Text>
+                  <Text style={[styles.requestUsername, { color: getProfileNameColor(profile.selectedNameColor) }]}>
+                    @{profile.username}
+                  </Text>
+                  {profile.displayName !== profile.username ? (
+                    <Text style={styles.requestDisplayName}>{profile.displayName}</Text>
+                  ) : null}
                 </Pressable>
                 <View style={styles.requestActions}>
                   <Pressable
-                    onPress={() => handleAccept(userId)}
+                    onPress={() => handleAccept(profile.id)}
                     style={({ pressed }) => [styles.acceptButton, pressed ? styles.buttonPressed : null]}
                   >
                     <Text style={styles.acceptButtonText}>Accept</Text>
                   </Pressable>
                   <Pressable
-                    onPress={() => handleDecline(userId)}
+                    onPress={() => handleDecline(profile.id)}
                     style={({ pressed }) => [styles.declineButton, pressed ? styles.buttonPressed : null]}
                   >
                     <Text style={styles.declineButtonText}>Decline</Text>
@@ -118,19 +125,24 @@ export default function FriendsScreen() {
         </SectionCard>
       ) : null}
 
-      {outgoingRequestUserIds.length > 0 ? (
+      {outgoingRequestProfiles.length > 0 ? (
         <SectionCard title="Sent requests" eyebrow="Pending">
           <Text style={styles.helperText}>
-            Waiting for {outgoingRequestUserIds.length} {outgoingRequestUserIds.length === 1 ? "person" : "people"} to accept.
+            Waiting for {outgoingRequestProfiles.length} {outgoingRequestProfiles.length === 1 ? "person" : "people"} to accept.
           </Text>
           <View style={styles.requestList}>
-            {outgoingRequestUserIds.map((userId) => (
+            {outgoingRequestProfiles.map((profile) => (
               <Pressable
-                key={userId}
-                onPress={() => router.push(`/user/${userId}`)}
+                key={profile.id}
+                onPress={() => router.push(`/user/${profile.id}`)}
                 style={({ pressed }) => [styles.friendCard, pressed ? styles.buttonPressed : null]}
               >
-                <Text style={styles.friendUsername}>View profile →</Text>
+                <Text style={[styles.friendUsername, { color: getProfileNameColor(profile.selectedNameColor) }]}>
+                  @{profile.username}
+                </Text>
+                {profile.displayName !== profile.username ? (
+                  <Text style={styles.friendDisplayName}>{profile.displayName}</Text>
+                ) : null}
                 <Text style={styles.friendMeta}>Request pending</Text>
               </Pressable>
             ))}
@@ -249,6 +261,10 @@ const styles = StyleSheet.create({
     color: theme.colors.accent,
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.medium,
+  },
+  requestDisplayName: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
   },
   requestActions: {
     flexDirection: "row",

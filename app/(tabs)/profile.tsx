@@ -28,6 +28,7 @@ import {
 } from "../../lib/admin";
 import { logoutUser } from "../../lib/auth";
 import { getFollowStatusLabel, useFollows } from "../../lib/follows";
+import { useNowPlaying } from "../../lib/nowPlaying";
 import { formatModerationWarning } from "../../lib/moderation";
 import {
   getProviderLabel,
@@ -205,6 +206,7 @@ export default function ProfileScreen() {
   const { session } = useAuth();
   const { preferences: contentPreferences, savePreferences: saveContentPreferences } = useContentPreferences();
   const { followedCount, followedGames, isLoading: followsLoading, unfollowGame } = useFollows();
+  const { nowPlayingIds } = useNowPlaying(session?.user?.id);
   const { friendCount, incomingRequestUserIds } = useUserFollows(session?.user?.id);
   const { reviewCount, avgRating, reload: reloadReviews } = useMyReviewCount(session?.user?.id);
   const { reviewsByGameId } = useMyReviewsByGame(session?.user?.id);
@@ -1392,6 +1394,31 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
         ) : null}
       </SectionCard>
 
+      {nowPlayingIds.length > 0 ? (
+        <SectionCard title="Currently playing" eyebrow="Now playing">
+          <View style={styles.nowPlayingList}>
+            {followedGames
+              .filter((game) => nowPlayingIds.includes(Number(game.id)))
+              .map((game) => (
+                <Pressable
+                  key={game.id}
+                  onPress={() => router.push(`/game/${game.id}`)}
+                  style={({ pressed }) => [styles.nowPlayingCard, pressed ? styles.buttonPressed : null]}
+                >
+                  {game.coverUrl ? (
+                    <Image source={{ uri: game.coverUrl }} style={styles.nowPlayingCover} />
+                  ) : (
+                    <View style={[styles.nowPlayingCover, styles.nowPlayingFallbackCover]}>
+                      <Text style={styles.followFallbackText}>{game.title.charAt(0).toUpperCase()}</Text>
+                    </View>
+                  )}
+                  <Text style={styles.nowPlayingTitle} numberOfLines={2}>{game.title}</Text>
+                </Pressable>
+              ))}
+          </View>
+        </SectionCard>
+      ) : null}
+
       <SectionCard title="Following" eyebrow="Your games">
         {followsLoading ? (
           <View style={styles.loadingState}>
@@ -2126,6 +2153,31 @@ const styles = StyleSheet.create({
     color: theme.colors.accent,
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.medium,
+  },
+  nowPlayingList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.md,
+  },
+  nowPlayingCard: {
+    alignItems: "center",
+    gap: theme.spacing.xs,
+    width: 80,
+  },
+  nowPlayingCover: {
+    width: 72,
+    height: 96,
+    borderRadius: theme.radius.sm,
+  },
+  nowPlayingFallbackCover: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  nowPlayingTitle: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    textAlign: "center",
   },
   followList: {
     gap: theme.spacing.md,
