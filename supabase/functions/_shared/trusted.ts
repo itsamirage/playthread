@@ -68,7 +68,8 @@ type IntegrityEventType =
   | "comment_reaction"
   | "coin_gift"
   | "coin_adjustment"
-  | "store_spend";
+  | "store_spend"
+  | "clip_upload";
 
 type IntegrityEventInsert = {
   user_id: string;

@@ -31,6 +31,12 @@ const DEFAULT_REACTION_BY_MODE: Record<string, string> = {
   appreciation: "respect",
 };
 
+const DEFAULT_POST_CREATE_COOLDOWN_SECONDS = 20;
+const DEFAULT_POSTS_PER_DAY = 20;
+const DEFAULT_POSTS_PER_30_DAYS = 100;
+const DEFAULT_MEDIA_POSTS_PER_DAY = 10;
+const DEFAULT_MEDIA_POSTS_PER_30_DAYS = 40;
+
 type RequestBody = {
   action?: "create" | "update" | "delete";
   postId?: string;
@@ -102,6 +108,139 @@ function normalizeImageUrls(value: RequestBody["imageUrls"], fallbackImageUrl: s
   }
 
   return fallbackImageUrl ? [fallbackImageUrl] : [];
+}
+
+function readNumberEnv(name: string, fallback: number, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const rawValue = Deno.env.get(name);
+  const parsedValue = Number(rawValue ?? fallback);
+
+  if (!Number.isFinite(parsedValue)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(min, Math.floor(parsedValue)));
+}
+
+async function enforcePostCreateLimits({
+  adminClient,
+  profile,
+  userId,
+  hasMedia,
+}: {
+  adminClient: ReturnType<typeof getAdminClient>;
+  profile: { account_role: string | null; integrity_exempt: boolean | null };
+  userId: string;
+  hasMedia: boolean;
+}) {
+  if (profile.integrity_exempt || ["admin", "owner"].includes(profile.account_role ?? "")) {
+    return;
+  }
+
+  const cooldownSeconds = readNumberEnv(
+    "POST_CREATE_COOLDOWN_SECONDS",
+    DEFAULT_POST_CREATE_COOLDOWN_SECONDS,
+    { min: 0, max: 600 },
+  );
+  const maxPostsPerDay = readNumberEnv("POSTS_MAX_PER_DAY", DEFAULT_POSTS_PER_DAY, {
+    min: 1,
+    max: 500,
+  });
+  const maxPostsPer30Days = readNumberEnv("POSTS_MAX_PER_30_DAYS", DEFAULT_POSTS_PER_30_DAYS, {
+    min: 1,
+    max: 5000,
+  });
+  const maxMediaPostsPerDay = readNumberEnv(
+    "MEDIA_POSTS_MAX_PER_DAY",
+    DEFAULT_MEDIA_POSTS_PER_DAY,
+    { min: 1, max: 500 },
+  );
+  const maxMediaPostsPer30Days = readNumberEnv(
+    "MEDIA_POSTS_MAX_PER_30_DAYS",
+    DEFAULT_MEDIA_POSTS_PER_30_DAYS,
+    { min: 1, max: 5000 },
+  );
+
+  const now = Date.now();
+  const cooldownStart = new Date(now - cooldownSeconds * 1000).toISOString();
+  const dayStart = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+  const monthStart = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [cooldownResult, dailyResult, monthlyResult] = await Promise.all([
+    adminClient
+      .from("posts")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", cooldownStart),
+    adminClient
+      .from("posts")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", dayStart),
+    adminClient
+      .from("posts")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", monthStart),
+  ]);
+
+  if (cooldownResult.error) {
+    throw new Error(`Could not verify post cooldown: ${cooldownResult.error.message}`);
+  }
+
+  if (dailyResult.error) {
+    throw new Error(`Could not verify daily post limit: ${dailyResult.error.message}`);
+  }
+
+  if (monthlyResult.error) {
+    throw new Error(`Could not verify monthly post limit: ${monthlyResult.error.message}`);
+  }
+
+  if (cooldownSeconds > 0 && (cooldownResult.count ?? 0) > 0) {
+    throw new Error("Wait a few seconds before posting again.");
+  }
+
+  if ((dailyResult.count ?? 0) >= maxPostsPerDay) {
+    throw new Error(`You have reached the limit of ${maxPostsPerDay} posts in 24 hours.`);
+  }
+
+  if ((monthlyResult.count ?? 0) >= maxPostsPer30Days) {
+    throw new Error(`You have reached the limit of ${maxPostsPer30Days} posts in 30 days.`);
+  }
+
+  if (!hasMedia) {
+    return;
+  }
+
+  const [mediaDailyResult, mediaMonthlyResult] = await Promise.all([
+    adminClient
+      .from("posts")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", dayStart)
+      .or("image_url.not.is.null,video_upload_id.not.is.null"),
+    adminClient
+      .from("posts")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", monthStart)
+      .or("image_url.not.is.null,video_upload_id.not.is.null"),
+  ]);
+
+  if (mediaDailyResult.error) {
+    throw new Error(`Could not verify daily media post limit: ${mediaDailyResult.error.message}`);
+  }
+
+  if (mediaMonthlyResult.error) {
+    throw new Error(`Could not verify monthly media post limit: ${mediaMonthlyResult.error.message}`);
+  }
+
+  if ((mediaDailyResult.count ?? 0) >= maxMediaPostsPerDay) {
+    throw new Error(`You have reached the limit of ${maxMediaPostsPerDay} media posts in 24 hours.`);
+  }
+
+  if ((mediaMonthlyResult.count ?? 0) >= maxMediaPostsPer30Days) {
+    throw new Error(`You have reached the limit of ${maxMediaPostsPer30Days} media posts in 30 days.`);
+  }
 }
 
 Deno.serve(async (request) => {
@@ -282,6 +421,13 @@ Deno.serve(async (request) => {
     if (postType === "clip" && !videoUploadId && !videoUploadToken) {
       throw new Error("Clip posts require an uploaded video.");
     }
+
+    await enforcePostCreateLimits({
+      adminClient,
+      profile,
+      userId: user.id,
+      hasMedia: imageUrls.length > 0 || postType === "clip",
+    });
 
     const reactionMode = REACTION_MODE_BY_POST_TYPE[postType] ?? "sentiment";
     const defaultReactionType = DEFAULT_REACTION_BY_MODE[reactionMode] ?? "like";
