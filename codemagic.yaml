@@ -37,9 +37,18 @@ workflows:
         script: xcode-project use-profiles
       - name: Build IPA
         script: |
+          WORKSPACE_PATH="$(find ios -maxdepth 1 -name '*.xcworkspace' | head -n 1)"
+          if [ -z "$WORKSPACE_PATH" ]; then
+            echo "No Xcode workspace found under ios/ after Expo prebuild."
+            ls -la ios || true
+            exit 1
+          fi
+          SCHEME_NAME="$(basename "$WORKSPACE_PATH" .xcworkspace)"
+          echo "Using workspace: $WORKSPACE_PATH"
+          echo "Using scheme: $SCHEME_NAME"
           xcode-project build-ipa \
-            --workspace ios/PlayThread.xcworkspace \
-            --scheme PlayThread
+            --workspace "$WORKSPACE_PATH" \
+            --scheme "$SCHEME_NAME"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
