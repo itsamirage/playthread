@@ -16,6 +16,10 @@ workflows:
       - name: Expo prebuild
         script: |
           npx expo prebuild --clean --platform ios
+      - name: Install CocoaPods
+        script: |
+          cd ios
+          pod install
       - name: Set build number
         script: |
           BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number 6762104334) + 1))
@@ -48,12 +52,9 @@ workflows:
               --workspace "$WORKSPACE_PATH" \
               --scheme "$SCHEME_NAME"
           elif [ -n "$PROJECT_PATH" ]; then
-            SCHEME_NAME="$(basename "$PROJECT_PATH" .xcodeproj)"
-            echo "No workspace found. Falling back to project: $PROJECT_PATH"
-            echo "Using scheme: $SCHEME_NAME"
-            xcode-project build-ipa \
-              --project "$PROJECT_PATH" \
-              --scheme "$SCHEME_NAME"
+            echo "No workspace found after pod install."
+            ls -la ios || true
+            exit 1
           else
             echo "No Xcode workspace or project found under ios/ after Expo prebuild."
             ls -la ios || true
