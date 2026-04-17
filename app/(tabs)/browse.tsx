@@ -12,11 +12,13 @@ import {
 import { useRouter } from "expo-router";
 
 import GameCard from "../../components/GameCard";
+import PostCard from "../../components/PostCard";
 import NotificationInboxButton from "../../components/NotificationInboxButton";
 import SectionCard from "../../components/SectionCard";
 import { useContentPreferences } from "../../lib/contentPreferences";
 import { useFollows } from "../../lib/follows";
 import { useBrowseGames } from "../../lib/games";
+import { usePostSearch } from "../../lib/posts";
 import { useTabReselectScroll } from "../../lib/tabReselect";
 import { theme } from "../../lib/theme";
 import { useCreatorSearch } from "../../lib/userSocial";
@@ -28,6 +30,7 @@ const SEARCH_MODES = {
   genre: "Genre",
   platform: "Platform",
   player: "Players",
+  post: "Posts",
 };
 
 const PLATFORM_FILTERS = [
@@ -188,6 +191,9 @@ export default function BrowseScreen() {
   const { results: playerResults, isLoading: playersLoading } = useCreatorSearch(
     searchMode === "player" ? query : ""
   );
+  const { posts: postResults, isLoading: postsSearchLoading } = usePostSearch(
+    searchMode === "post" ? query : ""
+  );
   const handleClearFilters = () => {
     setQuery("");
     setSearchMode("game");
@@ -227,12 +233,16 @@ export default function BrowseScreen() {
           ? "Genres"
           : searchMode === "player"
             ? "Players"
-            : "Platforms";
+            : searchMode === "post"
+              ? "Posts"
+              : "Platforms";
   const resultCount = searchMode === "game"
     ? displayedGames.length
     : searchMode === "player"
       ? playerResults.length
-      : facetResults.length;
+      : searchMode === "post"
+        ? postResults.length
+        : facetResults.length;
 
   const handleSelectStatus = async (game, status) => {
     const { error } = await setFollowStatus(game, status);
@@ -264,7 +274,7 @@ export default function BrowseScreen() {
             <Text style={styles.eyebrow}>PlayThread</Text>
             <Text style={styles.title}>Browse</Text>
             <Text style={styles.subtitle}>
-              Search one lane at a time: game, studio, genre, or platform.
+              Search games, studios, genres, platforms, players, or posts.
             </Text>
           </View>
           <NotificationInboxButton />
@@ -286,7 +296,9 @@ export default function BrowseScreen() {
                   ? "Search genres"
                   : searchMode === "player"
                     ? "Search players by username"
-                    : "Search platforms"
+                    : searchMode === "post"
+                      ? "Search post titles and content"
+                      : "Search platforms"
           }
           placeholderTextColor={theme.colors.textMuted}
           style={styles.searchInput}
@@ -370,7 +382,7 @@ export default function BrowseScreen() {
           Source: {source === "igdb" ? "Live IGDB" : "Mock fallback"}
         </Text>
         {preferences.hideMatureGames ? (
-          <Text style={styles.sourceText}>Mature-rated games are hidden in your current settings.</Text>
+          <Text style={styles.sourceText}>NSFW games are hidden in your current settings.</Text>
         ) : null}
         {cleanQuery.length === 1 ? (
           <Text style={styles.sourceText}>Type at least 2 letters to search IGDB.</Text>
@@ -397,11 +409,30 @@ export default function BrowseScreen() {
       </View>
 
       <View style={styles.resultsList}>
-        {isLoading || playersLoading ? (
+        {isLoading || (searchMode === "player" && playersLoading) || (searchMode === "post" && postsSearchLoading) ? (
           <View style={styles.loadingState}>
             <ActivityIndicator color={theme.colors.accent} />
             <Text style={styles.emptyText}>Loading results...</Text>
           </View>
+        ) : searchMode === "post" && postResults.length > 0 ? (
+          <View style={styles.postResultsList}>
+            {postResults.map((post) => (
+              <PostCard
+                key={post.id}
+                post={post}
+                onPress={() => router.push(`/post/${post.id}`)}
+                onAuthorPress={() => router.push(`/user/${post.userId}`)}
+                onGamePress={() => router.push(`/game/${post.gameId}`)}
+                onOpenComments={() => router.push(`/post/${post.id}`)}
+              />
+            ))}
+          </View>
+        ) : searchMode === "post" ? (
+          <SectionCard title="No posts found" eyebrow="Try again">
+            <Text style={styles.emptyText}>
+              {cleanQuery.length < 2 ? "Type at least 2 letters to search posts." : "No posts matched that search."}
+            </Text>
+          </SectionCard>
         ) : searchMode === "player" && playerResults.length > 0 ? (
           playerResults.map((player) => (
             <Pressable
@@ -479,7 +510,9 @@ export default function BrowseScreen() {
                   ? "Try a different studio name."
                   : searchMode === "genre"
                     ? "Try a different genre."
-                    : "Try a different platform."}
+                    : searchMode === "player"
+                      ? "Try a different username."
+                      : "Try a different platform."}
             </Text>
           </SectionCard>
         )}
@@ -645,6 +678,9 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeights.semibold,
   },
   resultsList: {
+    gap: theme.spacing.md,
+  },
+  postResultsList: {
     gap: theme.spacing.md,
   },
   facetCard: {

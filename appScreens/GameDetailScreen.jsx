@@ -201,7 +201,7 @@ export default function GameDetailScreen() {
         <Text style={styles.title}>{preferences.hideMatureGames ? "Game hidden" : "Game not found"}</Text>
         <Text style={styles.subtitle}>
           {preferences.hideMatureGames
-            ? "This game is hidden by your mature-content preference. Turn that off in Profile settings to view it."
+            ? "This game is hidden by your NSFW content setting. Turn that off in Profile settings to view it."
             : `This detail page could not find a game for ID ${String(params.id)}.`}
         </Text>
 
@@ -292,6 +292,8 @@ export default function GameDetailScreen() {
       return;
     }
 
+    const isFirstRating = !myRating;
+
     try {
       setIsSavingRating(true);
       await saveGameRating({
@@ -301,6 +303,21 @@ export default function GameDetailScreen() {
       });
       await reloadRatings();
       setRatingPanelExpanded(false);
+
+      if (isFirstRating) {
+        Alert.alert(
+          "Rating saved",
+          `You gave ${game.title} a ${rating}/10. Want to write a review post too?`,
+          [
+            { text: "Maybe later", style: "cancel" },
+            {
+              text: "Write review",
+              onPress: () =>
+                router.push({ pathname: "/create-post", params: { gameId: String(game.id), type: "review" } }),
+            },
+          ],
+        );
+      }
     } catch (nextError) {
       Alert.alert("Rating failed", nextError?.message ?? "Could not save your rating.");
     } finally {
@@ -578,6 +595,16 @@ export default function GameDetailScreen() {
       ) : null}
 
       <SectionCard title="Threads" eyebrow="Community">
+        {!postsLoading && posts.length === 0 ? (
+          <Pressable
+            onPress={() =>
+              router.push({ pathname: "/create-post", params: { gameId: String(game.id) } })
+            }
+            style={({ pressed }) => [styles.primaryButton, pressed ? styles.buttonPressed : null]}
+          >
+            <Text style={styles.primaryButtonText}>Write the first post</Text>
+          </Pressable>
+        ) : null}
         <Pressable onPress={() => setIsFiltersOpen((v) => !v)} style={styles.filtersToggle}>
           <Text style={styles.filtersToggleLabel}>Filters</Text>
           <Text style={styles.filtersToggleArrow}>{isFiltersOpen ? "▲" : "▼"}</Text>

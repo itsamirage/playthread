@@ -11,6 +11,7 @@ import NotificationRuntimeBridge from '@/components/NotificationRuntimeBridge';
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '@/lib/auth';
 import { FollowsProvider } from '@/lib/follows';
+import { usePushNotifications } from '@/lib/pushNotifications';
 import { useNetworkStatus } from '@/lib/useNetworkStatus';
 
 export {
@@ -78,6 +79,11 @@ const offlineStyles = StyleSheet.create({
   },
 });
 
+function PushNotificationSync() {
+  usePushNotifications();
+  return null;
+}
+
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
 
@@ -85,6 +91,7 @@ function RootLayoutNav() {
     <AuthProvider>
       <FollowsProvider>
         <NotificationRuntimeBridge />
+        <PushNotificationSync />
         <OfflineBanner />
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
           <Stack>

@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useState } from "react";
 
+import BottomNavBar from "../../components/BottomNavBar";
 import PostCard from "../../components/PostCard";
 import SectionCard from "../../components/SectionCard";
 import { useAuth } from "../../lib/auth";
@@ -147,6 +148,7 @@ export default function PublicProfileScreen() {
           : null;
 
   return (
+    <View style={styles.screenWrapper}>
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
         <View style={styles.heroActions}>
@@ -285,10 +287,16 @@ export default function PublicProfileScreen() {
         )}
       </SectionCard>
     </ScrollView>
+    <BottomNavBar />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screenWrapper: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
   screen: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -296,6 +304,7 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.layout.screenPadding,
     gap: theme.spacing.lg,
+    paddingBottom: 80,
   },
   loadingScreen: {
     flex: 1,

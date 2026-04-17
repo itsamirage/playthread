@@ -284,6 +284,7 @@ export default function AllScreen() {
       )}
 
       <PostCommentsSheet
+        onAuthorPress={(userId) => router.push(`/user/${userId}`)}
         onClose={() => setSelectedPostId(null)}
         onCommentCountChange={reload}
         post={selectedPost}

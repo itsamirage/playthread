@@ -254,6 +254,7 @@ export default function HomeScreen() {
         onEndReachedThreshold={0.3}
       />
       <PostCommentsSheet
+        onAuthorPress={(userId) => router.push(`/user/${userId}`)}
         onClose={() => setSelectedPostId(null)}
         onCommentCountChange={reload}
         post={selectedPost}

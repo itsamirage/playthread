@@ -81,7 +81,7 @@ export default function CatalogScreen() {
           {facet === "genre" ? `${value} games` : null}
           {facet === "year" ? `Games released in ${value}` : null}
         </Text>
-        {preferences.hideMatureGames ? <Text style={styles.subtitle}>Mature-rated games are hidden.</Text> : null}
+        {preferences.hideMatureGames ? <Text style={styles.subtitle}>NSFW games are hidden.</Text> : null}
       </View>
 
       <SectionCard title="Sort" eyebrow="Browse order">

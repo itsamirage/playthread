@@ -928,29 +928,46 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
 
       <SectionCard title="Content settings" eyebrow="Visibility">
         <Text style={styles.bodyText}>
-          Hide mature-rated games from browse and catalog surfaces.
+          NSFW games (AO-rated or adult-themed titles) are filtered out of Browse and Catalog. Mature 17+ games always show regardless of this setting.
         </Text>
-        <Pressable
-          onPress={() =>
-            saveContentPreferences({
-              ...contentPreferences,
-              hideMatureGames: !contentPreferences.hideMatureGames,
-            })
-          }
-          style={[
-            styles.secondaryButton,
-            contentPreferences.hideMatureGames ? styles.sortChipActive : null,
-          ]}
-        >
-          <Text
+        <View style={styles.nsfwToggleRow}>
+          <Pressable
+            onPress={() =>
+              saveContentPreferences({ ...contentPreferences, hideMatureGames: false })
+            }
             style={[
-              styles.secondaryButtonText,
-              contentPreferences.hideMatureGames ? styles.sortChipTextActive : null,
+              styles.nsfwToggleOption,
+              !contentPreferences.hideMatureGames ? styles.nsfwToggleOptionActive : null,
             ]}
           >
-            {contentPreferences.hideMatureGames ? "Mature games hidden" : "Show mature games"}
-          </Text>
-        </Pressable>
+            <Text
+              style={[
+                styles.nsfwToggleOptionText,
+                !contentPreferences.hideMatureGames ? styles.nsfwToggleOptionTextActive : null,
+              ]}
+            >
+              Show NSFW
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() =>
+              saveContentPreferences({ ...contentPreferences, hideMatureGames: true })
+            }
+            style={[
+              styles.nsfwToggleOption,
+              contentPreferences.hideMatureGames ? styles.nsfwToggleOptionHidden : null,
+            ]}
+          >
+            <Text
+              style={[
+                styles.nsfwToggleOptionText,
+                contentPreferences.hideMatureGames ? styles.nsfwToggleOptionTextHidden : null,
+              ]}
+            >
+              Hide NSFW
+            </Text>
+          </Pressable>
+        </View>
       </SectionCard>
 
       <SectionCard title="Linked platforms" eyebrow="Connections">
@@ -2284,6 +2301,36 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.bold,
+  },
+  nsfwToggleRow: {
+    flexDirection: "row",
+    borderRadius: theme.radius.md,
+    borderColor: theme.colors.border,
+    borderWidth: theme.borders.width,
+    overflow: "hidden",
+  },
+  nsfwToggleOption: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: theme.spacing.md,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  nsfwToggleOptionActive: {
+    backgroundColor: theme.colors.accent,
+  },
+  nsfwToggleOptionHidden: {
+    backgroundColor: "rgba(185,28,28,0.25)",
+  },
+  nsfwToggleOptionText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  nsfwToggleOptionTextActive: {
+    color: theme.colors.background,
+  },
+  nsfwToggleOptionTextHidden: {
+    color: "#fca5a5",
   },
   primaryActionButton: {
     alignItems: "center",

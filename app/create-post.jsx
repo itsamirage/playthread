@@ -68,7 +68,8 @@ export default function CreatePostScreen() {
   const [selectedGameId, setSelectedGameId] = useState(
     !Number.isNaN(initialGameId) && initialGameId > 0 ? initialGameId : null
   );
-  const [postType, setPostType] = useState("discussion");
+  const initialType = typeof params.type === "string" && ["discussion", "review", "guide", "tip", "clip"].includes(params.type) ? params.type : "discussion";
+  const [postType, setPostType] = useState(initialType);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [rating, setRating] = useState("8");
