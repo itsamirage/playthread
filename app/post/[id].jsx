@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import BottomNavBar from "../../components/BottomNavBar";
 import PostCard from "../../components/PostCard";
@@ -13,14 +13,41 @@ import { deletePost, togglePostReaction, useEditablePost } from "../../lib/posts
 import { theme } from "../../lib/theme";
 
 export default function PostDetailScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, scrollTo } = useLocalSearchParams();
   const router = useRouter();
   const { session } = useAuth();
   const { post, isLoading, error, reload } = useEditablePost(typeof id === "string" ? id : null, true);
   const [reactingPostId, setReactingPostId] = useState(null);
   const [optimisticReaction, setOptimisticReaction] = useState(null);
+  const scrollRef = useRef(null);
+  const conversationOffsetRef = useRef(0);
+  const hasAutoScrolledRef = useRef(false);
 
   const displayPost = optimisticReaction && post ? { ...post, ...optimisticReaction } : post;
+  const shouldScrollToComments = scrollTo === "comments";
+
+  const handleScrollToComments = () => {
+    scrollRef.current?.scrollTo({
+      y: Math.max(0, conversationOffsetRef.current - theme.spacing.md),
+      animated: true,
+    });
+  };
+
+  useEffect(() => {
+    if (!post?.id) {
+      hasAutoScrolledRef.current = false;
+      return;
+    }
+
+    if (!shouldScrollToComments || hasAutoScrolledRef.current || conversationOffsetRef.current <= 0) {
+      return;
+    }
+
+    hasAutoScrolledRef.current = true;
+    requestAnimationFrame(() => {
+      handleScrollToComments();
+    });
+  }, [post?.id, shouldScrollToComments]);
 
   const handleReact = async (reactionType) => {
     if (!session?.user?.id || !post) return;
@@ -77,7 +104,12 @@ export default function PostDetailScreen() {
 
   return (
     <View style={styles.screenWrapper}>
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+      ref={scrollRef}
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.hero}>
         <Text style={styles.eyebrow}>PlayThread</Text>
         <Text style={styles.title}>Post thread</Text>
@@ -97,6 +129,7 @@ export default function PostDetailScreen() {
         isReacting={reactingPostId === post.id}
         onAuthorPress={() => router.push(`/user/${post.userId}`)}
         onGamePress={() => router.push(`/game/${post.gameId}`)}
+        onOpenComments={handleScrollToComments}
         onReact={handleReact}
         onDelete={
           session?.user?.id === post.userId
@@ -122,15 +155,27 @@ export default function PostDetailScreen() {
         }
       />
 
-      <SectionCard title="Conversation" eyebrow="Replies">
+      <View
+        onLayout={(event) => {
+          conversationOffsetRef.current = event.nativeEvent.layout.y;
+          if (shouldScrollToComments && !hasAutoScrolledRef.current) {
+            hasAutoScrolledRef.current = true;
+            requestAnimationFrame(() => {
+              handleScrollToComments();
+            });
+          }
+        }}
+      >
+        <SectionCard title="Conversation" eyebrow="Replies">
         <PostCommentsThread
           isEmbedded
           onAuthorPress={(userId) => router.push(`/user/${userId}`)}
           post={post}
         />
-      </SectionCard>
+        </SectionCard>
+      </View>
     </ScrollView>
-    <BottomNavBar />
+      <BottomNavBar />
     </View>
   );
 }
@@ -212,3 +257,6 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeights.bold,
   },
 });
+
+
+

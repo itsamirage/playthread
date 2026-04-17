@@ -263,7 +263,9 @@ export default function PublicProfileScreen() {
               <PostCard
                 key={post.id}
                 onAuthorPress={() => router.push(`/user/${post.userId}`)}
-                onOpenComments={() => router.push(`/post/${post.id}`)}
+                onOpenComments={() =>
+                  router.push({ pathname: "/post/[id]", params: { id: post.id, scrollTo: "comments" } })
+                }
                 onPress={() => router.push(`/post/${post.id}`)}
                 post={post}
               />

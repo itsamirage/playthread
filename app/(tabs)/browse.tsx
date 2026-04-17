@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +17,7 @@ import GameCard from "../../components/GameCard";
 import PostCard from "../../components/PostCard";
 import NotificationInboxButton from "../../components/NotificationInboxButton";
 import SectionCard from "../../components/SectionCard";
+import { searchPlatformCommunities } from "../../lib/communityHubs";
 import { useContentPreferences } from "../../lib/contentPreferences";
 import { useFollows } from "../../lib/follows";
 import { useBrowseGames } from "../../lib/games";
@@ -165,6 +168,13 @@ function getFacetRoute(mode, value) {
     };
   }
 
+  if (mode === "platform") {
+    return {
+      pathname: "/platforms",
+      params: { q: value },
+    };
+  }
+
   return {
     pathname: "/catalog",
     params: { facet: "genre", value },
@@ -222,8 +232,18 @@ export default function BrowseScreen() {
     scrollRef,
     onRefresh: hasActiveFilters ? handleClearFilters : undefined,
   });
-  const facetResults = buildFacetResults(games, searchMode, cleanQuery);
-  const platformResults = facetResults;
+  const facetResults = searchMode === "platform"
+    ? searchPlatformCommunities(cleanQuery).map((platform) => ({
+        key: platform.slug,
+        label: platform.title,
+        count: null,
+        hint: platform.subtitle,
+        route: {
+          pathname: "/platforms",
+          params: { q: platform.title },
+        },
+      }))
+    : buildFacetResults(games, searchMode, cleanQuery);
   const titleForMode =
     searchMode === "game"
       ? "Games"
@@ -261,15 +281,22 @@ export default function BrowseScreen() {
   };
 
   return (
-    <ScrollView
-      ref={scrollRef}
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      onScroll={scrollHandlers.onScroll}
-      scrollEventThrottle={scrollHandlers.scrollEventThrottle}
-    >
-      <View style={styles.hero}>
-        <View style={styles.heroTopRow}>
+    <View style={styles.screenWrapper}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.keyboardFrame}
+      >
+        <ScrollView
+          ref={scrollRef}
+          style={styles.screen}
+          contentContainerStyle={styles.content}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          onScroll={scrollHandlers.onScroll}
+          scrollEventThrottle={scrollHandlers.scrollEventThrottle}
+        >
+          <View style={styles.hero}>
+            <View style={styles.heroTopRow}>
           <View style={styles.heroTextBlock}>
             <Text style={styles.eyebrow}>PlayThread</Text>
             <Text style={styles.title}>Browse</Text>
@@ -279,9 +306,9 @@ export default function BrowseScreen() {
           </View>
           <NotificationInboxButton />
         </View>
-      </View>
+          </View>
 
-      <SectionCard title="Search" eyebrow="Discover">
+          <SectionCard title="Search" eyebrow="Discover">
         <TextInput
           autoCapitalize="none"
           autoCorrect={false}
@@ -369,6 +396,14 @@ export default function BrowseScreen() {
             </View>
           </View>
         ) : null}
+        {searchMode === "platform" ? (
+          <Pressable
+            onPress={() => router.push({ pathname: "/platforms", params: cleanQuery ? { q: query.trim() } : {} })}
+            style={styles.platformJumpButton}
+          >
+            <Text style={styles.platformJumpButtonText}>Open platform pages</Text>
+          </Pressable>
+        ) : null}
 
         <View style={styles.toolbarRow}>
           <Text style={styles.followedSummary}>Following {followedCount} games</Text>
@@ -397,8 +432,8 @@ export default function BrowseScreen() {
         ) : null}
       </SectionCard>
 
-      <View style={styles.resultsHeader}>
-        <View style={styles.resultsText}>
+          <View style={styles.resultsHeader}>
+            <View style={styles.resultsText}>
           <Text style={styles.resultsTitle}>{titleForMode}</Text>
           <Text style={styles.resultsMeta}>
             Mode: {SEARCH_MODES[searchMode]}
@@ -406,9 +441,9 @@ export default function BrowseScreen() {
           </Text>
         </View>
         <Text style={styles.resultsCount}>{resultCount} results</Text>
-      </View>
+          </View>
 
-      <View style={styles.resultsList}>
+          <View style={styles.resultsList}>
         {isLoading || (searchMode === "player" && playersLoading) || (searchMode === "post" && postsSearchLoading) ? (
           <View style={styles.loadingState}>
             <ActivityIndicator color={theme.colors.accent} />
@@ -423,7 +458,9 @@ export default function BrowseScreen() {
                 onPress={() => router.push(`/post/${post.id}`)}
                 onAuthorPress={() => router.push(`/user/${post.userId}`)}
                 onGamePress={() => router.push(`/game/${post.gameId}`)}
-                onOpenComments={() => router.push(`/post/${post.id}`)}
+                onOpenComments={() =>
+                  router.push({ pathname: "/post/[id]", params: { id: post.id, scrollTo: "comments" } })
+                }
               />
             ))}
           </View>
@@ -476,8 +513,7 @@ export default function BrowseScreen() {
               key={`${searchMode}:${result.key}`}
               onPress={() => {
                 if (searchMode === "platform") {
-                  setQuery(result.label);
-                  setSearchMode("game");
+                  router.push(result.route ?? getFacetRoute(searchMode, result.label));
                   return;
                 }
 
@@ -490,10 +526,14 @@ export default function BrowseScreen() {
             >
               <Text style={styles.facetTitle}>{result.label}</Text>
               <Text style={styles.facetMeta}>
-                {result.count} {result.count === 1 ? "game" : "games"}
+                {searchMode === "platform"
+                  ? "Platform community"
+                  : `${result.count} ${result.count === 1 ? "game" : "games"}`}
               </Text>
               <Text style={styles.facetHint}>
-                {searchMode === "studio"
+                {searchMode === "platform"
+                  ? `Open platform page. ${result.hint}`
+                  : searchMode === "studio"
                   ? "Open studio catalog"
                   : searchMode === "genre"
                     ? "Open genre catalog"
@@ -516,12 +556,21 @@ export default function BrowseScreen() {
             </Text>
           </SectionCard>
         )}
-      </View>
-    </ScrollView>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screenWrapper: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  keyboardFrame: {
+    flex: 1,
+  },
   screen: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -529,6 +578,7 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.layout.screenPadding,
     gap: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxl,
   },
   hero: {
     gap: theme.spacing.sm,
@@ -635,6 +685,20 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     paddingTop: theme.spacing.sm,
   },
+  platformJumpButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(0,229,255,0.12)",
+    borderColor: "rgba(0,229,255,0.32)",
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  platformJumpButtonText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
   followedSummary: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSizes.sm,
@@ -719,3 +783,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 });
+
+
+

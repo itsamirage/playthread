@@ -19,15 +19,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import SectionCard from "../components/SectionCard";
 import { useAuth } from "../lib/auth";
 import { pickClipVideo } from "../lib/clipMedia";
+import { getCommunityById } from "../lib/communityHubs";
 import { useFollows } from "../lib/follows";
 import { useBrowseGames, useGameDetail } from "../lib/games";
 import { describeIntegrityError } from "../lib/integrity";
 import { goBackOrFallback } from "../lib/navigation";
-import { pickPostImage } from "../lib/postMedia";
+import { pickPostImages } from "../lib/postMedia";
 import { createPost, updatePost, useEditablePost } from "../lib/posts";
 import { theme } from "../lib/theme";
 
-const postTypes = ["discussion", "review", "guide", "tip", "clip"];
+const postTypes = ["discussion", "review", "guide", "tip", "screenshot", "clip"];
 const ratingOptions = [
   "1",
   "1.5",
@@ -58,24 +59,31 @@ export default function CreatePostScreen() {
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef(null);
   const initialGameId = Number(params.gameId);
+  const lockedContext = String(params.lockContext ?? "") === "true";
+  const routeContextTitle = String(params.gameTitle ?? "").trim() || null;
+  const allowedPostTypes = String(params.allowedTypes ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
   const editPostId = typeof params.postId === "string" ? params.postId : null;
   const { game: routeGame } = useGameDetail(initialGameId);
-  const launchedFromGamePage = !Number.isNaN(initialGameId) && initialGameId > 0;
+  const routeCommunity = getCommunityById(initialGameId);
+  const launchedFromGamePage = !Number.isNaN(initialGameId) && initialGameId !== 0;
   const { post: editablePost, isLoading: editablePostLoading } = useEditablePost(
     editPostId,
     Boolean(editPostId),
   );
   const [selectedGameId, setSelectedGameId] = useState(
-    !Number.isNaN(initialGameId) && initialGameId > 0 ? initialGameId : null
+    !Number.isNaN(initialGameId) && initialGameId !== 0 ? initialGameId : null
   );
-  const initialType = typeof params.type === "string" && ["discussion", "review", "guide", "tip", "clip"].includes(params.type) ? params.type : "discussion";
+  const initialType = typeof params.type === "string" && postTypes.includes(params.type) ? params.type : "discussion";
   const [postType, setPostType] = useState(initialType);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [rating, setRating] = useState("8");
   const [isSpoiler, setIsSpoiler] = useState(false);
   const [spoilerTag, setSpoilerTag] = useState("");
-  const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedImages, setSelectedImages] = useState([]);
   const [selectedClip, setSelectedClip] = useState(null);
   const [gameSearch, setGameSearch] = useState("");
   const [showAlternateGamePicker, setShowAlternateGamePicker] = useState(!launchedFromGamePage);
@@ -85,13 +93,21 @@ export default function CreatePostScreen() {
   const [footerHeight, setFooterHeight] = useState(0);
   const [hasLoadedEditValues, setHasLoadedEditValues] = useState(false);
   const isEditing = Boolean(editPostId);
+  const availablePostTypes = allowedPostTypes.length > 0 ? postTypes.filter((type) => allowedPostTypes.includes(type)) : postTypes;
 
   useEffect(() => {
-    if (!Number.isNaN(initialGameId) && initialGameId > 0) {
+    if (!availablePostTypes.includes(postType)) {
+      setPostType(availablePostTypes[0] ?? "discussion");
+    }
+  }, [availablePostTypes, postType]);
+
+  useEffect(() => {
+    if (!Number.isNaN(initialGameId) && initialGameId !== 0) {
       setSelectedGameId(initialGameId);
       return;
     }
 
+    setSelectedGameId(null);
   }, [initialGameId]);
 
   useEffect(() => {
@@ -154,9 +170,25 @@ export default function CreatePostScreen() {
         return routeGame;
       }
 
+      if (routeCommunity?.id === selectedGameId) {
+        return {
+          id: routeCommunity.id,
+          title: routeCommunity.title,
+          coverUrl: null,
+        };
+      }
+
+      if (routeContextTitle && selectedGameId === initialGameId) {
+        return {
+          id: selectedGameId,
+          title: routeContextTitle,
+          coverUrl: null,
+        };
+      }
+
       return null;
     },
-    [followedGames, routeGame, selectedGameId]
+    [followedGames, initialGameId, routeCommunity, routeContextTitle, routeGame, selectedGameId]
   );
 
   const selectableGames = useMemo(() => {
@@ -224,7 +256,7 @@ export default function CreatePostScreen() {
             rating: postType === "review" ? Number(rating) : null,
             spoiler: isSpoiler,
             spoilerTag,
-            imageAsset: selectedImage,
+            imageAssets: selectedImages,
             clipAsset: selectedClip,
           });
 
@@ -249,10 +281,10 @@ export default function CreatePostScreen() {
 
   const handlePickImage = async () => {
     try {
-      const asset = await pickPostImage();
+      const assets = await pickPostImages({ limit: 6 });
 
-      if (asset) {
-        setSelectedImage(asset);
+      if (assets.length > 0) {
+        setSelectedImages(assets);
         setSelectedClip(null);
       }
     } catch (error) {
@@ -269,7 +301,7 @@ export default function CreatePostScreen() {
 
       if (asset) {
         setSelectedClip(asset);
-        setSelectedImage(null);
+        setSelectedImages([]);
       }
     } catch (error) {
       Alert.alert(
@@ -332,21 +364,23 @@ export default function CreatePostScreen() {
                   <View style={styles.selectedGameCard}>
                     <Text style={styles.selectedGameLabel}>Posting in</Text>
                     <Text style={styles.selectedGameTitle}>{selectedGame.title}</Text>
-                    <Pressable
-                      onPress={() => setShowAlternateGamePicker((currentValue) => !currentValue)}
-                      style={({ pressed }) => [
-                        styles.inlineLinkButton,
-                        pressed ? styles.buttonPressed : null,
-                      ]}
-                    >
-                      <Text style={styles.inlineLinkText}>
-                        {showAlternateGamePicker ? "Keep this game only" : "Choose other game"}
-                      </Text>
-                    </Pressable>
+                    {!lockedContext ? (
+                      <Pressable
+                        onPress={() => setShowAlternateGamePicker((currentValue) => !currentValue)}
+                        style={({ pressed }) => [
+                          styles.inlineLinkButton,
+                          pressed ? styles.buttonPressed : null,
+                        ]}
+                      >
+                        <Text style={styles.inlineLinkText}>
+                          {showAlternateGamePicker ? "Keep this game only" : "Choose other game"}
+                        </Text>
+                      </Pressable>
+                    ) : null}
                   </View>
                 ) : null}
 
-                {(!launchedFromGamePage || showAlternateGamePicker) ? (
+                {(!launchedFromGamePage || (showAlternateGamePicker && !lockedContext)) ? (
                   <>
                     <TextInput
                       onChangeText={setGameSearch}
@@ -389,6 +423,10 @@ export default function CreatePostScreen() {
           <SectionCard title="Post type" eyebrow="Thread style">
             <View style={styles.typeRow}>
               {postTypes.map((type) => {
+                if (!availablePostTypes.includes(type)) {
+                  return null;
+                }
+
                 const isActive = type === postType;
 
                 return (
@@ -413,7 +451,9 @@ export default function CreatePostScreen() {
                             ? "Guide"
                             : type === "tip"
                               ? "Tip"
-                              : "Clip"}
+                              : type === "screenshot"
+                                ? "Image"
+                                : "Clip"}
                     </Text>
                   </Pressable>
                 );
@@ -506,8 +546,8 @@ export default function CreatePostScreen() {
               {isEditing
                 ? "Media replacement is disabled for now. Edit the post text or delete and recreate the post if you need different media."
                 : postType === "clip"
-                ? "Attach a video clip up to 200 MB. Mux will process it after upload, so playback may appear a moment later."
-                : "Attach a JPG, PNG, WebP, or GIF up to 5 MB. Very small or extreme-ratio images are blocked, and upload metadata is recorded for moderation review."}
+                ? "Attach a video clip up to 200 MB and 3 minutes long. Mux will process it after upload, so playback may appear a moment later."
+                : "Attach up to 6 JPG, PNG, WebP, or GIF images. Each image is capped at 10 MB, and the full selection must stay under 24 MB after optimization. Very small or extreme-ratio images are blocked, and upload metadata is recorded for moderation review."}
             </Text>
             {isEditing && postType === "clip" ? (
               <View style={styles.clipPreviewCard}>
@@ -563,15 +603,17 @@ export default function CreatePostScreen() {
                   <Text style={styles.mediaButtonText}>Choose clip</Text>
                 </Pressable>
               )
-            ) : selectedImage?.uri ? (
+            ) : selectedImages.length > 0 ? (
               <View style={styles.imageCard}>
-                <Image source={{ uri: selectedImage.uri }} style={styles.imagePreview} />
+                <View style={styles.imagePreviewGrid}>
+                  {selectedImages.map((image, index) => (
+                    <View key={`${image.uri}:${index}`} style={styles.imagePreviewTile}>
+                      <Image source={{ uri: image.uri }} style={styles.imagePreview} />
+                    </View>
+                  ))}
+                </View>
                 <Text style={styles.helperText}>
-                  {selectedImage.width && selectedImage.height
-                    ? `${selectedImage.width}x${selectedImage.height}`
-                    : "Selected image ready"}
-                  {selectedImage.fileSize ? ` • ${Math.max(1, Math.round(selectedImage.fileSize / 1024))} KB` : ""}
-                  {selectedImage.mimeType ? ` • ${selectedImage.mimeType}` : ""}
+                  {selectedImages.length} {selectedImages.length === 1 ? "image" : "images"} selected
                 </Text>
                 <View style={styles.imageActions}>
                   <Pressable
@@ -581,17 +623,17 @@ export default function CreatePostScreen() {
                       pressed ? styles.buttonPressed : null,
                     ]}
                   >
-                    <Text style={styles.mediaButtonText}>Replace image</Text>
+                    <Text style={styles.mediaButtonText}>Replace images</Text>
                   </Pressable>
                   <Pressable
-                    onPress={() => setSelectedImage(null)}
+                    onPress={() => setSelectedImages([])}
                     style={({ pressed }) => [
                       styles.mediaButton,
                       styles.mediaButtonDanger,
                       pressed ? styles.buttonPressed : null,
                     ]}
                   >
-                    <Text style={styles.mediaButtonDangerText}>Remove image</Text>
+                    <Text style={styles.mediaButtonDangerText}>Remove images</Text>
                   </Pressable>
                 </View>
               </View>
@@ -603,7 +645,7 @@ export default function CreatePostScreen() {
                   pressed ? styles.buttonPressed : null,
                 ]}
               >
-                <Text style={styles.mediaButtonText}>Choose image</Text>
+                <Text style={styles.mediaButtonText}>Choose images</Text>
               </Pressable>
             )}
           </SectionCard>
@@ -818,9 +860,17 @@ const styles = StyleSheet.create({
   imageCard: {
     gap: theme.spacing.md,
   },
+  imagePreviewGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  imagePreviewTile: {
+    width: "48%",
+  },
   imagePreview: {
     width: "100%",
-    aspectRatio: 16 / 9,
+    aspectRatio: 1,
     borderRadius: theme.radius.md,
     backgroundColor: "rgba(255,255,255,0.03)",
   },

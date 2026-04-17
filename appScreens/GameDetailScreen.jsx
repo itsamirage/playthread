@@ -22,7 +22,6 @@ import { sendCoinGift } from "../lib/admin";
 import { useAuth } from "../lib/auth";
 import { updatePostMetadata, useMyAdminProfile } from "../lib/admin";
 import { useContentPreferences } from "../lib/contentPreferences";
-import { useNowPlaying } from "../lib/nowPlaying";
 import {
   FOLLOW_STATUS_OPTIONS,
   getFollowStatusLabel,
@@ -30,6 +29,7 @@ import {
   useFollows,
 } from "../lib/follows";
 import { GAME_RATING_OPTIONS, saveGameRating, useGameRating } from "../lib/gameRatings";
+import { formatDisplayRating } from "../lib/gameRatingMath";
 import { useGameDetail } from "../lib/games";
 import { goBackOrFallback } from "../lib/navigation";
 import {
@@ -91,11 +91,17 @@ export default function GameDetailScreen() {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const reactingRef = useRef(false);
 
-  const { isNowPlaying, toggleNowPlaying } = useNowPlaying(session?.user?.id);
   const followStatus = getFollowStatus(params.id);
   const isFollowed = isFollowingGame(params.id);
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
   const displayedCommunityRating = averageRating ?? game?.starRating ?? null;
+  const compactFollowStatusLabel = !isFollowed
+    ? "Your status"
+    : followStatus === "currently_playing"
+      ? "Now Playing"
+      : followStatus === "taking_a_break"
+        ? "On Break"
+        : getFollowStatusLabel(followStatus);
   const visiblePosts = sortPostsForDisplay(
     filterPostsByTypes(
       developerOnly ? posts.filter((post) => post.isDeveloperPost) : posts,
@@ -478,7 +484,7 @@ export default function GameDetailScreen() {
         <View style={styles.darkStatCard}>
           <Text style={styles.darkStatLabel}>Users</Text>
           <Text style={styles.darkStatValue}>
-            {displayedCommunityRating ? displayedCommunityRating.toFixed(1) : "--"}
+            {formatDisplayRating(displayedCommunityRating)}
           </Text>
         </View>
 
@@ -488,7 +494,7 @@ export default function GameDetailScreen() {
         >
           <Text style={styles.darkStatLabel}>My</Text>
           <Text style={[styles.darkStatValue, myRating ? { color: theme.colors.accent } : null]}>
-            {myRating ? myRating.toFixed(1) : "--"}
+            {formatDisplayRating(myRating)}
           </Text>
         </Pressable>
 
@@ -532,24 +538,11 @@ export default function GameDetailScreen() {
           onPress={() => setFollowPanelExpanded((currentValue) => !currentValue)}
           style={[styles.statusInlineButton, followPanelExpanded ? styles.statusInlineButtonActive : null]}
         >
-          <Text style={styles.statusInlineButtonText} numberOfLines={1}>
-            {isFollowed ? getFollowStatusLabel(followStatus) : "Your status"}
+          <Text style={styles.statusInlineButtonText}>
+            {compactFollowStatusLabel}
           </Text>
           <Text style={styles.statusInlineArrow}>{followPanelExpanded ? "▲" : "▼"}</Text>
         </Pressable>
-        {session?.user?.id ? (
-          <Pressable
-            onPress={() => toggleNowPlaying(game.id)}
-            style={[styles.nowPlayingButton, isNowPlaying(game.id) ? styles.nowPlayingButtonActive : null]}
-          >
-            <Text
-              numberOfLines={1}
-              style={[styles.nowPlayingButtonText, isNowPlaying(game.id) ? styles.nowPlayingButtonTextActive : null]}
-            >
-              {isNowPlaying(game.id) ? "▶ Active" : "Currently Playing"}
-            </Text>
-          </Pressable>
-        ) : null}
         <Pressable
           onPress={() =>
             router.push({ pathname: "/create-post", params: { gameId: String(game.id) } })
@@ -936,6 +929,7 @@ const styles = StyleSheet.create({
   },
   statusInlineButtonText: {
     flex: 1,
+    flexShrink: 1,
     color: theme.colors.textPrimary,
     fontSize: theme.fontSizes.md,
     fontWeight: theme.fontWeights.bold,
@@ -1053,29 +1047,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: theme.spacing.sm,
     flexWrap: "wrap",
-  },
-  nowPlayingButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 1,
-    borderRadius: theme.radius.md,
-    borderWidth: theme.borders.width,
-    borderColor: theme.colors.border,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    backgroundColor: "rgba(255,255,255,0.03)",
-  },
-  nowPlayingButtonActive: {
-    borderColor: theme.colors.accent,
-    backgroundColor: "rgba(0,229,255,0.1)",
-  },
-  nowPlayingButtonText: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSizes.sm,
-    fontWeight: theme.fontWeights.bold,
-  },
-  nowPlayingButtonTextActive: {
-    color: theme.colors.accent,
   },
   scoreCard: {
     flex: 1,
@@ -1326,3 +1297,4 @@ const styles = StyleSheet.create({
     color: theme.colors.background,
   },
 });
+

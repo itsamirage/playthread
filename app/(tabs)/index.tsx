@@ -9,6 +9,7 @@ import CoinGiftSheet from "../../components/CoinGiftSheet";
 import NotificationInboxButton from "../../components/NotificationInboxButton";
 import { sendCoinGift } from "../../lib/admin";
 import { useAuth } from "../../lib/auth";
+import { GENERAL_DISCUSSION } from "../../lib/communityHubs";
 import { useFollows } from "../../lib/follows";
 import { describeIntegrityError } from "../../lib/integrity";
 import { deletePost, togglePostReaction, useFeedPosts } from "../../lib/posts";
@@ -18,7 +19,7 @@ import { theme } from "../../lib/theme";
 export default function HomeScreen() {
   const router = useRouter();
   const { session } = useAuth();
-  const { followedCount, followedGameIds, followedGames, shouldShowSpoilersByDefault } =
+  const { followedGameIds, followedGames, shouldShowSpoilersByDefault } =
     useFollows();
   const { posts, isLoading, isLoadingMore, hasMore, error, reload, loadMore } = useFeedPosts(followedGameIds);
   const [reactingPostId, setReactingPostId] = useState(null);
@@ -32,7 +33,6 @@ export default function HomeScreen() {
     const opt = optimisticReactions[post.id];
     return opt ? { ...post, ...opt } : post;
   });
-  const newPostCount = Math.min(posts.length, 4);
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
   const scrollHandlers = useTabReselectScroll("home", { scrollRef, onRefresh: reload });
 
@@ -169,22 +169,22 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      <SectionCard title="Following summary" eyebrow="Your feed">
-        <View style={styles.statRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{followedCount}</Text>
-            <Text style={styles.statLabel}>Games</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{posts.length}</Text>
-            <Text style={styles.statLabel}>Posts</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{newPostCount}</Text>
-            <Text style={styles.statLabel}>New</Text>
-          </View>
-        </View>
-      </SectionCard>
+      <View style={styles.portalRow}>
+        <Pressable onPress={() => router.push(`/community/${GENERAL_DISCUSSION.slug}`)} style={styles.portalCard}>
+          <Text style={styles.portalEyebrow}>Community</Text>
+          <Text style={styles.portalTitle}>Gaming Discussion</Text>
+          <Text style={styles.portalBody}>
+            Talk about favorite sports games, genres, studios, and bigger gaming topics.
+          </Text>
+        </Pressable>
+        <Pressable onPress={() => router.push("/platforms")} style={styles.portalCard}>
+          <Text style={styles.portalEyebrow}>Browse</Text>
+          <Text style={styles.portalTitle}>Platforms</Text>
+          <Text style={styles.portalBody}>
+            Jump into Xbox, PlayStation, Nintendo, and PC communities with user-only threads.
+          </Text>
+        </Pressable>
+      </View>
 
       {isLoading ? (
         <SectionCard title="Loading feed" eyebrow="Your posts">
@@ -334,27 +334,37 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.md,
     lineHeight: 22,
   },
-  statRow: {
+  portalRow: {
     flexDirection: "row",
     gap: theme.spacing.md,
+    flexWrap: "wrap",
   },
-  statBox: {
+  portalCard: {
     flex: 1,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    minWidth: "47%",
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
     paddingVertical: theme.spacing.lg,
     paddingHorizontal: theme.spacing.md,
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
   },
-  statValue: {
+  portalEyebrow: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+    textTransform: "uppercase",
+  },
+  portalTitle: {
     color: theme.colors.textPrimary,
-    fontSize: theme.fontSizes.xl,
+    fontSize: theme.fontSizes.lg,
     fontWeight: theme.fontWeights.bold,
   },
-  statLabel: {
-    color: theme.colors.textMuted,
-    fontSize: theme.fontSizes.xs,
-    textTransform: "uppercase",
+  portalBody: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: 20,
   },
   bodyText: {
     color: theme.colors.textPrimary,

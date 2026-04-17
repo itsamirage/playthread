@@ -1500,7 +1500,9 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
               <PostCard
                 key={post.id}
                 onAuthorPress={() => {}}
-                onOpenComments={() => router.push(`/post/${post.id}`)}
+                onOpenComments={() =>
+                  router.push({ pathname: "/post/[id]", params: { id: post.id, scrollTo: "comments" } })
+                }
                 onPress={() => router.push(`/post/${post.id}`)}
                 post={post}
               />

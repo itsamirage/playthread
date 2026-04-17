@@ -13,6 +13,7 @@ import {
   recordIntegrityEvent,
   requireProfile,
 } from "../_shared/trusted.ts";
+import { DAILY_GIFT_LIMIT, getSentGiftCoinsToday, wouldExceedDailyGiftLimit } from "../../../lib/coinGifting.js";
 
 type RequestBody = {
   action?: "gift" | "adjust" | "redeem_store_item";
@@ -64,7 +65,6 @@ Deno.serve(async (request) => {
       }
 
       // Daily gift cap — prevent spam gifting
-      const DAILY_GIFT_LIMIT = 500;
       const todayStart = new Date();
       todayStart.setUTCHours(0, 0, 0, 0);
 
@@ -75,8 +75,8 @@ Deno.serve(async (request) => {
         .eq("entry_type", "gift_sent")
         .gte("created_at", todayStart.toISOString());
 
-      const sentToday = (todayGifts ?? []).reduce((sum: number, tx: { amount: number }) => sum + Math.abs(tx.amount), 0);
-      if (sentToday + amount > DAILY_GIFT_LIMIT) {
+      const sentToday = getSentGiftCoinsToday(todayGifts);
+      if (wouldExceedDailyGiftLimit({ sentToday, amount, limit: DAILY_GIFT_LIMIT })) {
         throw new Error(`Daily gift limit of ${DAILY_GIFT_LIMIT} coins reached. You've sent ${sentToday} coins today.`);
       }
 

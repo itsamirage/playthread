@@ -233,7 +233,7 @@ Direct Supabase client writes are only used for reads. All mutations (posts, com
 Friends use a `user_friendships` table with `status: "pending" | "accepted"`. The four states are `none / outgoing / incoming / friends`. All mutations go through `trusted-follow` Edge Function.
 
 ### Coins
-Users earn coins by posting (`coins_from_posts`), commenting (`coins_from_comments`), and receiving gifts (`coins_from_gifts`). The ledger is `coin_transactions`. Available balance = sum of all transaction `amount` values. Daily gift cap: 500 coins sent per UTC day (enforced in `trusted-coin`).
+Users earn coins by posting (`coins_from_posts`), commenting (`coins_from_comments`), and receiving gifts (`coins_from_gifts`). The ledger is `coin_transactions`. Available balance = sum of all transaction `amount` values. Daily gift cap: 200 coins sent per UTC day (enforced in `trusted-coin`).
 
 ### `useMyReviewsByGame` map keys
 The map uses `String(row.igdb_game_id)` as keys (not numeric) so lookups with `game.id` (always a string from IGDB API responses) match correctly.
@@ -299,7 +299,7 @@ All of this is committed and live on `main` (commit `76f656d`):
 - **BottomNavBar** — added to game detail, post detail, user profile screens
 - **Stale-closure reaction guard** — `useRef(false)` in GameDetailScreen prevents multi-decrement on rapid taps
 - **onAuthorPress in PostCommentsSheet** — home and all feeds can now navigate to user profiles from comments
-- **Daily coin gift cap** — 500 coins/day enforced in `trusted-coin` Edge Function
+- **Daily coin gift cap** — 200 coins/day enforced in `trusted-coin` Edge Function
 - **Reviewed stat on user profiles** — counts `game_ratings` rows (not post type), shows avg rating
 - **Highest Rated sort in Browse** — sorts by `game.metacritic` descending
 - **Currently Playing / Active button** — renamed from "Now Playing", `flexShrink: 1` prevents overflow

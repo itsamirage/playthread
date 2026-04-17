@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Alert,
@@ -14,6 +15,13 @@ import { Image } from "expo-image";
 import CoinGiftSheet from "./CoinGiftSheet";
 import { sendCoinGift } from "../lib/admin";
 import { useAuth } from "../lib/auth";
+import {
+  buildCommentTextSegments,
+  extractCommentGameLink,
+  injectCommentGameLink,
+  stripCommentGameLinkTokens,
+} from "../lib/commentGameLinks";
+import { useBrowseGames } from "../lib/games";
 import { pickPostImage } from "../lib/postMedia";
 import { describeIntegrityError } from "../lib/integrity";
 import { formatModerationWarning } from "../lib/moderation";
@@ -34,6 +42,7 @@ export default function PostCommentsThread({
   onCommentCountChange,
   onAuthorPress,
 }) {
+  const router = useRouter();
   const { session } = useAuth();
   const { comments, isLoading, error, reload } = usePostComments(post?.id, Boolean(post?.id));
   const [draft, setDraft] = useState("");
@@ -45,7 +54,14 @@ export default function PostCommentsThread({
   const [isSendingGift, setIsSendingGift] = useState(false);
   const [displayComments, setDisplayComments] = useState([]);
   const [editingCommentId, setEditingCommentId] = useState(null);
+  const [linkedGame, setLinkedGame] = useState(null);
+  const [showLinkPicker, setShowLinkPicker] = useState(false);
+  const [gameLinkQuery, setGameLinkQuery] = useState("");
   const commentCount = post?.comments ?? comments.length;
+  const { filteredGames: linkedGameResults } = useBrowseGames({
+    query: showLinkPicker ? gameLinkQuery : "",
+    selectedGenre: "All",
+  });
 
   useEffect(() => {
     setDisplayComments(comments);
@@ -82,12 +98,12 @@ export default function PostCommentsThread({
       const { error: commentError, moderation } = editingCommentId
         ? await updatePostComment({
             commentId: editingCommentId,
-            body: cleanBody,
+            body: injectCommentGameLink(cleanBody, linkedGame),
           })
         : await createPostComment({
             userId: session.user.id,
             postId: post.id,
-            body: cleanBody,
+            body: injectCommentGameLink(cleanBody, linkedGame),
             imageAsset: draftImage,
           });
 
@@ -98,6 +114,9 @@ export default function PostCommentsThread({
       setDraft("");
       setDraftImage(null);
       setEditingCommentId(null);
+      setLinkedGame(null);
+      setShowLinkPicker(false);
+      setGameLinkQuery("");
       await reload();
       await onCommentCountChange?.();
 
@@ -138,13 +157,17 @@ export default function PostCommentsThread({
 
   const handleStartEdit = (comment) => {
     setEditingCommentId(comment.id);
-    setDraft(comment.body ?? "");
+    setDraft(stripCommentGameLinkTokens(comment.body ?? ""));
+    setLinkedGame(extractCommentGameLink(comment.body ?? ""));
   };
 
   const handleCancelEdit = () => {
     setEditingCommentId(null);
     setDraft("");
     setDraftImage(null);
+    setLinkedGame(null);
+    setShowLinkPicker(false);
+    setGameLinkQuery("");
   };
 
   const handlePickImage = async () => {
@@ -294,7 +317,23 @@ export default function PostCommentsThread({
                       </Text>
                     </View>
                   ) : null}
-                  {comment.body ? <Text style={styles.commentBody}>{comment.body}</Text> : null}
+                  {comment.body ? (
+                    <Text style={styles.commentBody}>
+                      {buildCommentTextSegments(comment.body).map((segment, index) =>
+                        segment.gameId ? (
+                          <Text
+                            key={`${comment.id}:segment:${index}`}
+                            style={styles.commentLinkText}
+                            onPress={() => router.push(`/game/${segment.gameId}`)}
+                          >
+                            {segment.text}
+                          </Text>
+                        ) : (
+                          <Text key={`${comment.id}:segment:${index}`}>{segment.text}</Text>
+                        ),
+                      )}
+                    </Text>
+                  ) : null}
                   {comment.imageUrl ? (
                     <Image source={{ uri: comment.imageUrl }} style={styles.commentImage} contentFit="cover" />
                   ) : null}
@@ -363,19 +402,59 @@ export default function PostCommentsThread({
           <View style={styles.draftImageContainer}>
             <Image source={{ uri: draftImage.uri }} style={styles.draftImagePreview} contentFit="cover" />
             <Pressable onPress={() => setDraftImage(null)} style={styles.draftImageRemove}>
-              <Text style={styles.draftImageRemoveText}>✕</Text>
+              <Text style={styles.draftImageRemoveText}>X</Text>
             </Pressable>
+          </View>
+        ) : null}
+        {linkedGame ? (
+          <View style={styles.linkedGameBanner}>
+            <Text style={styles.linkedGameLabel}>Linked game: {linkedGame.title}</Text>
+            <Pressable onPress={() => setLinkedGame(null)}>
+              <Text style={styles.linkedGameRemove}>Remove</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {showLinkPicker ? (
+          <View style={styles.linkPicker}>
+            <TextInput
+              onChangeText={setGameLinkQuery}
+              placeholder="Search a game to link"
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.input}
+              value={gameLinkQuery}
+            />
+            <View style={styles.linkResults}>
+              {linkedGameResults.slice(0, 6).map((game) => (
+                <Pressable
+                  key={`comment-link:${game.id}`}
+                  onPress={() => {
+                    setLinkedGame({ gameId: game.id, title: game.title });
+                    if (!draft.toLowerCase().includes(game.title.toLowerCase())) {
+                      setDraft((current) => `${current}${current ? " " : ""}${game.title}`);
+                    }
+                    setShowLinkPicker(false);
+                    setGameLinkQuery("");
+                  }}
+                  style={styles.actionChip}
+                >
+                  <Text style={styles.actionChipText}>{game.title}</Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
         ) : null}
         <View style={styles.composerFooter}>
           <Text style={styles.counterText}>{draft.trim().length}/600</Text>
+          <Pressable onPress={() => setShowLinkPicker((current) => !current)} style={styles.actionChip}>
+            <Text style={styles.actionChipText}>{showLinkPicker ? "Close link" : "Link game"}</Text>
+          </Pressable>
           {!editingCommentId ? (
             <Pressable
               disabled={isSubmitting}
               onPress={handlePickImage}
               style={styles.imagePickerButton}
             >
-              <Text style={styles.imagePickerButtonText}>📎</Text>
+              <Text style={styles.imagePickerButtonText}>Image</Text>
             </Pressable>
           ) : null}
           <Pressable
@@ -494,6 +573,10 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.md,
     lineHeight: 22,
   },
+  commentLinkText: {
+    color: theme.colors.accent,
+    fontWeight: theme.fontWeights.bold,
+  },
   commentActions: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -599,6 +682,36 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.bold,
+  },
+  linkedGameBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm,
+    backgroundColor: "rgba(0,229,255,0.08)",
+    borderColor: "rgba(0,229,255,0.24)",
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  linkedGameLabel: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  linkedGameRemove: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  linkPicker: {
+    gap: theme.spacing.sm,
+  },
+  linkResults: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
   },
   input: {
     minHeight: 96,

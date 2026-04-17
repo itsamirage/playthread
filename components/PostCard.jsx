@@ -62,6 +62,11 @@ export default function PostCard({
   const reactionLabels = reactionLabelsByMode[post.reactionMode] ?? reactionLabelsByMode.sentiment;
   const authorTitle = getProfileTitleOption(post.authorTitleKey);
   const authorNameColor = getProfileNameColor(post.authorNameColor);
+  const imageUrls = Array.isArray(post.imageUrls) && post.imageUrls.length > 0
+    ? post.imageUrls
+    : post.imageUrl
+      ? [post.imageUrl]
+      : [];
   const reactionTypes =
     post.reactionMode === "utility"
       ? ["helpful", "not_helpful"]
@@ -142,8 +147,19 @@ export default function PostCard({
           </Text>
         ) : null}
 
-        {post.imageUrl ? (
-          <Image source={{ uri: post.imageUrl }} style={styles.postImage} contentFit="cover" />
+        {imageUrls.length === 1 ? (
+          <Image source={{ uri: imageUrls[0] }} style={styles.postImage} contentFit="cover" />
+        ) : imageUrls.length > 1 ? (
+          <View style={styles.postImageGrid}>
+            {imageUrls.map((imageUrl, index) => (
+              <Image
+                key={`${post.id}:image:${index}`}
+                source={{ uri: imageUrl }}
+                style={styles.postImageGridItem}
+                contentFit="cover"
+              />
+            ))}
+          </View>
         ) : null}
 
         {post.type === "clip" ? (
@@ -456,6 +472,17 @@ const styles = StyleSheet.create({
   postImage: {
     width: "100%",
     aspectRatio: 16 / 9,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  postImageGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  postImageGridItem: {
+    width: "48%",
+    aspectRatio: 1,
     borderRadius: theme.radius.md,
     backgroundColor: "rgba(255,255,255,0.03)",
   },

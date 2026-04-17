@@ -41,6 +41,7 @@ type RequestBody = {
   title?: string | null;
   body?: string;
   imageUrl?: string | null;
+  imageUrls?: string[] | null;
   imageMetadata?: {
     mimeType?: string | null;
     extension?: string | null;
@@ -50,6 +51,15 @@ type RequestBody = {
     aspectRatio?: number | null;
     isAnimated?: boolean | null;
   } | null;
+  imageMetadataList?: Array<{
+    mimeType?: string | null;
+    extension?: string | null;
+    fileSize?: number | null;
+    width?: number | null;
+    height?: number | null;
+    aspectRatio?: number | null;
+    isAnimated?: boolean | null;
+  }> | null;
   videoUploadId?: string | null;
   videoUploadToken?: string | null;
   rating?: number | null;
@@ -80,6 +90,18 @@ function normalizeImageMetadata(value: RequestBody["imageMetadata"]) {
     aspect_ratio: aspectRatio > 0 ? aspectRatio : null,
     is_animated: Boolean(value.isAnimated),
   };
+}
+
+function normalizeImageUrls(value: RequestBody["imageUrls"], fallbackImageUrl: string | null) {
+  const urls = Array.isArray(value)
+    ? value.map((item) => String(item ?? "").trim()).filter(Boolean)
+    : [];
+
+  if (urls.length > 0) {
+    return urls;
+  }
+
+  return fallbackImageUrl ? [fallbackImageUrl] : [];
 }
 
 Deno.serve(async (request) => {
@@ -238,6 +260,8 @@ Deno.serve(async (request) => {
     const postType = String(body.type ?? "").trim();
     const textBody = String(body.body ?? "").trim();
     const imageMetadata = normalizeImageMetadata(body.imageMetadata);
+    const fallbackImageUrl = String(body.imageUrl ?? "").trim() || null;
+    const imageUrls = normalizeImageUrls(body.imageUrls, fallbackImageUrl);
     const videoUploadId = String(body.videoUploadId ?? "").trim() || null;
     const videoUploadToken = String(body.videoUploadToken ?? "").trim() || null;
     const gameId = Number(body.gameId);
@@ -283,7 +307,8 @@ Deno.serve(async (request) => {
         reaction_mode: reactionMode,
         title: String(body.title ?? "").trim() || null,
         body: textBody,
-        image_url: String(body.imageUrl ?? "").trim() || null,
+        image_url: imageUrls[0] ?? fallbackImageUrl,
+        image_urls: imageUrls,
         video_provider: postType === "clip" ? "mux" : null,
         video_upload_id: postType === "clip" ? videoUploadId : null,
         video_upload_token: postType === "clip" ? videoUploadToken : null,
@@ -338,11 +363,12 @@ Deno.serve(async (request) => {
           media_kind:
             postType === "clip"
               ? "clip"
-              : String(body.imageUrl ?? "").trim()
+                : imageUrls[0] ?? fallbackImageUrl
                 ? "image"
                 : "text",
-          image_url: String(body.imageUrl ?? "").trim() || null,
-          image_metadata: imageMetadata,
+          image_url: imageUrls[0] ?? fallbackImageUrl,
+          image_urls: imageUrls,
+          image_metadata: body.imageMetadataList ?? imageMetadata,
           video_upload_id: videoUploadId,
           video_status: postType === "clip" ? "uploading" : "none",
         },
@@ -409,11 +435,11 @@ Deno.serve(async (request) => {
           media_kind:
             postType === "clip"
               ? "clip"
-              : String(body.imageUrl ?? "").trim()
+                : imageUrls[0] ?? fallbackImageUrl
                 ? "image"
                 : "text",
           video_upload_id: videoUploadId,
-          image_metadata: imageMetadata,
+          image_metadata: body.imageMetadataList ?? imageMetadata,
         },
       });
     }
