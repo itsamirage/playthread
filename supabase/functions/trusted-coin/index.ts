@@ -63,6 +63,23 @@ Deno.serve(async (request) => {
         throw new Error("Not enough coins to send that gift.");
       }
 
+      // Daily gift cap — prevent spam gifting
+      const DAILY_GIFT_LIMIT = 500;
+      const todayStart = new Date();
+      todayStart.setUTCHours(0, 0, 0, 0);
+
+      const { data: todayGifts } = await adminClient
+        .from("coin_transactions")
+        .select("amount")
+        .eq("user_id", user.id)
+        .eq("entry_type", "gift_sent")
+        .gte("created_at", todayStart.toISOString());
+
+      const sentToday = (todayGifts ?? []).reduce((sum: number, tx: { amount: number }) => sum + Math.abs(tx.amount), 0);
+      if (sentToday + amount > DAILY_GIFT_LIMIT) {
+        throw new Error(`Daily gift limit of ${DAILY_GIFT_LIMIT} coins reached. You've sent ${sentToday} coins today.`);
+      }
+
       await requireProfile(adminClient, toUserId);
 
       const { requestIpHash } = await enforceIntegrityCheck({

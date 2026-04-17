@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 
+import BottomNavBar from "../components/BottomNavBar";
 import PostCard from "../components/PostCard";
 import PostCommentsSheet from "../components/PostCommentsSheet";
 import PlatformBadge from "../components/PlatformBadge";
@@ -88,6 +89,7 @@ export default function GameDetailScreen() {
   const [developerOnly, setDeveloperOnly] = useState(false);
   const [moderatingPostId, setModeratingPostId] = useState(null);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const reactingRef = useRef(false);
 
   const { isNowPlaying, toggleNowPlaying } = useNowPlaying(session?.user?.id);
   const followStatus = getFollowStatus(params.id);
@@ -238,6 +240,10 @@ export default function GameDetailScreen() {
       return;
     }
 
+    // Ref guard prevents stale-closure double-clicks from decrementing multiple times
+    if (reactingRef.current) return;
+    reactingRef.current = true;
+
     const post = posts.find((p) => p.id === postId);
     const previousReaction = post?.viewerReaction ?? null;
 
@@ -253,6 +259,7 @@ export default function GameDetailScreen() {
       Alert.alert("Reaction failed", nextError?.message ?? "Could not update that reaction.");
     } finally {
       setReactingPostId(null);
+      reactingRef.current = false;
     }
   };
 
@@ -347,6 +354,7 @@ export default function GameDetailScreen() {
   };
 
   return (
+    <View style={styles.screenWrapper}>
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.topBar}>
         <Pressable onPress={() => goBackOrFallback(router, "/(tabs)/browse")} style={styles.topBarBackButton}>
@@ -517,8 +525,11 @@ export default function GameDetailScreen() {
             onPress={() => toggleNowPlaying(game.id)}
             style={[styles.nowPlayingButton, isNowPlaying(game.id) ? styles.nowPlayingButtonActive : null]}
           >
-            <Text style={[styles.nowPlayingButtonText, isNowPlaying(game.id) ? styles.nowPlayingButtonTextActive : null]}>
-              {isNowPlaying(game.id) ? "▶ Playing" : "▶ Now Playing"}
+            <Text
+              numberOfLines={1}
+              style={[styles.nowPlayingButtonText, isNowPlaying(game.id) ? styles.nowPlayingButtonTextActive : null]}
+            >
+              {isNowPlaying(game.id) ? "▶ Active" : "Currently Playing"}
             </Text>
           </Pressable>
         ) : null}
@@ -763,6 +774,7 @@ export default function GameDetailScreen() {
       <PostCommentsSheet
         onClose={() => setSelectedPostId(null)}
         onCommentCountChange={reloadPosts}
+        onAuthorPress={(userId) => router.push(`/user/${userId}`)}
         post={selectedPost}
         visible={Boolean(selectedPost)}
       />
@@ -774,10 +786,16 @@ export default function GameDetailScreen() {
         isSubmitting={isSendingGift}
       />
     </ScrollView>
+    <BottomNavBar />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screenWrapper: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
   screen: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -785,7 +803,7 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.layout.screenPadding,
     gap: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
+    paddingBottom: 80,
   },
   topBar: {
     flexDirection: "row",
@@ -1012,6 +1030,7 @@ const styles = StyleSheet.create({
   nowPlayingButton: {
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 1,
     borderRadius: theme.radius.md,
     borderWidth: theme.borders.width,
     borderColor: theme.colors.border,

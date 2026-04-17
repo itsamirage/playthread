@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useState } from "react";
 
+import BottomNavBar from "../../components/BottomNavBar";
 import PostCard from "../../components/PostCard";
 import PostCommentsThread from "../../components/PostCommentsThread";
 import SectionCard from "../../components/SectionCard";
@@ -75,10 +76,7 @@ export default function PostDetailScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.keyboardView}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
+    <View style={styles.screenWrapper}>
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.hero}>
         <Text style={styles.eyebrow}>PlayThread</Text>
@@ -132,12 +130,13 @@ export default function PostDetailScreen() {
         />
       </SectionCard>
     </ScrollView>
-    </KeyboardAvoidingView>
+    <BottomNavBar />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  keyboardView: {
+  screenWrapper: {
     flex: 1,
     backgroundColor: theme.colors.background,
   },
@@ -148,6 +147,7 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.layout.screenPadding,
     gap: theme.spacing.lg,
+    paddingBottom: 80,
   },
   loadingScreen: {
     flex: 1,

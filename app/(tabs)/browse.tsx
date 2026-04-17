@@ -48,6 +48,12 @@ const RATING_FILTERS = [
   { key: "ESRB AO", label: "AO" },
 ];
 
+const GAME_SORT_OPTIONS = [
+  { key: "popular", label: "Popular" },
+  { key: "highest_rated", label: "Highest Rated" },
+  { key: "az", label: "A–Z" },
+];
+
 function normalizeSearchValue(value) {
   return String(value ?? "")
     .toLowerCase()
@@ -168,6 +174,7 @@ export default function BrowseScreen() {
   const [searchMode, setSearchMode] = useState("game");
   const [activePlatformFilter, setActivePlatformFilter] = useState<string | null>(null);
   const [activeRatingFilter, setActiveRatingFilter] = useState<string | null>(null);
+  const [gameSort, setGameSort] = useState("popular");
   const scrollRef = useRef(null);
   const { followedCount, isFollowingGame, getFollowStatus, setFollowStatus, unfollowGame } =
     useFollows();
@@ -186,14 +193,25 @@ export default function BrowseScreen() {
     setSearchMode("game");
     setActivePlatformFilter(null);
     setActiveRatingFilter(null);
+    setGameSort("popular");
   };
-  const hasActiveFilters = cleanQuery.length > 0 || searchMode !== "game" || activePlatformFilter !== null || activeRatingFilter !== null;
+  const hasActiveFilters = cleanQuery.length > 0 || searchMode !== "game" || activePlatformFilter !== null || activeRatingFilter !== null || gameSort !== "popular";
 
-  const displayedGames = filteredGames.filter((game) => {
-    if (activePlatformFilter && !game.platforms.includes(activePlatformFilter)) return false;
-    if (activeRatingFilter && game.ageRatingLabel !== activeRatingFilter) return false;
-    return true;
-  });
+  const displayedGames = filteredGames
+    .filter((game) => {
+      if (activePlatformFilter && !game.platforms.includes(activePlatformFilter)) return false;
+      if (activeRatingFilter && game.ageRatingLabel !== activeRatingFilter) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (gameSort === "highest_rated") {
+        return (b.metacritic ?? 0) - (a.metacritic ?? 0);
+      }
+      if (gameSort === "az") {
+        return a.title.localeCompare(b.title);
+      }
+      return 0; // "popular" keeps original order from IGDB
+    });
   const scrollHandlers = useTabReselectScroll("browse", {
     scrollRef,
     onRefresh: hasActiveFilters ? handleClearFilters : undefined,
@@ -295,6 +313,20 @@ export default function BrowseScreen() {
 
         {searchMode === "game" ? (
           <View style={styles.filterSection}>
+            <View style={styles.filterRow}>
+              {GAME_SORT_OPTIONS.map((s) => {
+                const isActive = gameSort === s.key;
+                return (
+                  <Pressable
+                    key={s.key}
+                    onPress={() => setGameSort(s.key)}
+                    style={[styles.filterChip, isActive ? styles.filterChipActive : null]}
+                  >
+                    <Text style={[styles.filterChipText, isActive ? styles.filterChipTextActive : null]}>{s.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             <View style={styles.filterRow}>
               {PLATFORM_FILTERS.map((f) => {
                 const isActive = activePlatformFilter === f.key;

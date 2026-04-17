@@ -69,7 +69,7 @@ export default function SignupScreen() {
       if (profileReason === "missing-user-id") {
         Alert.alert(
           "Account created",
-          "Your account was made. Check your email if Supabase asks you to confirm it, then return to the PlayThread login screen."
+          "Your account was made. Check your email to confirm it, then return to the Playthread login screen."
         );
         return;
       }
@@ -92,7 +92,7 @@ export default function SignupScreen() {
 
       Alert.alert(
         "Account created",
-        "Check your email if Supabase asks you to confirm your account, then return to the PlayThread login screen."
+        "Check your email to confirm your Playthread account, then return to the login screen."
       );
     } catch (error) {
       Alert.alert("Error", "Something went wrong while signing up.");

@@ -1,6 +1,7 @@
 import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useRef, useState } from "react";
+import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
 import ClipPlayer from "./ClipPlayer";
 import { formatModerationWarning } from "../lib/moderation";
@@ -46,6 +47,18 @@ export default function PostCard({
   concealSpoilers = false,
   spoilerRevealHint = null,
 }) {
+  const [spoilerRevealed, setSpoilerRevealed] = useState(false);
+  const blurOpacity = useRef(new Animated.Value(1)).current;
+  const isSpoilerConcealed = concealSpoilers && !spoilerRevealed;
+
+  const handleRevealSpoiler = () => {
+    Animated.timing(blurOpacity, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start(() => setSpoilerRevealed(true));
+  };
+
   const reactionLabels = reactionLabelsByMode[post.reactionMode] ?? reactionLabelsByMode.sentiment;
   const authorTitle = getProfileTitleOption(post.authorTitleKey);
   const authorNameColor = getProfileNameColor(post.authorNameColor);
@@ -58,7 +71,7 @@ export default function PostCard({
 
   return (
     <Pressable
-      disabled={!onPress}
+      disabled={!onPress || isSpoilerConcealed}
       onPress={onPress}
       style={({ pressed }) => [styles.card, pressed ? styles.cardPressed : null]}
     >
@@ -269,16 +282,18 @@ export default function PostCard({
           })}
         </View>
 
-        {concealSpoilers ? (
-          <View pointerEvents="none" style={styles.blurWrap}>
-            <BlurView intensity={80} style={styles.blurLayer} tint="dark" />
+        {isSpoilerConcealed ? (
+          <Pressable onPress={handleRevealSpoiler} style={styles.blurWrap}>
+            <Animated.View style={[styles.blurLayer, { opacity: blurOpacity }]}>
+              <BlurView intensity={80} style={styles.blurLayer} tint="dark" />
+            </Animated.View>
             <View style={styles.spoilerOverlay}>
               <Text style={styles.spoilerOverlayTitle}>Spoiler concealed</Text>
               <Text style={styles.spoilerOverlayText}>
-                {spoilerRevealHint ?? "Tap this post if you want to open a potentially spoiler-heavy thread."}
+                {spoilerRevealHint ?? "Tap to reveal this spoiler post."}
               </Text>
             </View>
-          </View>
+          </Pressable>
         ) : null}
       </View>
     </Pressable>

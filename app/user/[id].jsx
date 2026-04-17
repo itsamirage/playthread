@@ -16,6 +16,7 @@ import {
   removeFriend,
   requestFriend,
   usePublicProfile,
+  usePublicReviewCount,
   useUserActivity,
   useUserFollows,
 } from "../../lib/userSocial";
@@ -35,6 +36,7 @@ export default function PublicProfileScreen() {
     loadMore: loadMoreActivity,
   } = useUserActivity(userId);
   const { friendCount, friends, getFriendshipStatus, reload: reloadFollows } = useUserFollows(userId);
+  const { reviewCount, avgRating: reviewAvgRating } = usePublicReviewCount(userId);
   const [isSavingFollow, setIsSavingFollow] = useState(false);
   const [optimisticStatus, setOptimisticStatus] = useState(null);
 
@@ -176,6 +178,13 @@ export default function PublicProfileScreen() {
           <View style={styles.statBox}>
             <Text style={styles.statValue}>{posts.length}</Text>
             <Text style={styles.statLabel}>Posts</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{reviewCount}</Text>
+            {reviewAvgRating ? (
+              <Text style={styles.statSubValue}>{reviewAvgRating} avg</Text>
+            ) : null}
+            <Text style={styles.statLabel}>Reviewed</Text>
           </View>
         </View>
         {canFollow ? (
@@ -377,6 +386,11 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontSize: theme.fontSizes.xl,
     fontWeight: theme.fontWeights.bold,
+  },
+  statSubValue: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: "500",
   },
   statLabel: {
     color: theme.colors.textMuted,

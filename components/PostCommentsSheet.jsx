@@ -16,6 +16,7 @@ export default function PostCommentsSheet({
   visible,
   onClose,
   onCommentCountChange,
+  onAuthorPress,
 }) {
   return (
     <Modal
@@ -39,7 +40,11 @@ export default function PostCommentsSheet({
               <Text style={styles.closeButtonText}>Close</Text>
             </Pressable>
           </View>
-          <PostCommentsThread post={post} onCommentCountChange={onCommentCountChange} />
+          <PostCommentsThread
+            post={post}
+            onCommentCountChange={onCommentCountChange}
+            onAuthorPress={onAuthorPress}
+          />
         </View>
       </KeyboardAvoidingView>
     </Modal>
