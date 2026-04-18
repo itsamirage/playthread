@@ -37,13 +37,13 @@ const SEARCH_MODES = {
 };
 
 const PLATFORM_FILTERS = [
-  { key: "ps5", label: "PS5" },
-  { key: "ps4", label: "PS4" },
-  { key: "xbox_series", label: "XSX" },
-  { key: "switch", label: "NSW" },
-  { key: "pc", label: "PC" },
-  { key: "ios", label: "iOS" },
-  { key: "android", label: "AND" },
+  { key: "ps5", label: "PS5", aliases: ["ps5", "psn"] },
+  { key: "ps4", label: "PS4", aliases: ["ps4", "psn"] },
+  { key: "xbox_series", label: "XSX", aliases: ["xbox_series", "xbox_one", "xbox"] },
+  { key: "switch", label: "NSW", aliases: ["switch"] },
+  { key: "pc", label: "PC", aliases: ["pc", "steam"] },
+  { key: "ios", label: "iOS", aliases: ["ios"] },
+  { key: "android", label: "AND", aliases: ["android"] },
 ];
 
 const RATING_FILTERS = [
@@ -56,9 +56,19 @@ const RATING_FILTERS = [
 
 const GAME_SORT_OPTIONS = [
   { key: "popular", label: "Popular" },
+  { key: "relevance", label: "Relevance" },
   { key: "highest_rated", label: "Highest Rated" },
-  { key: "az", label: "A–Z" },
 ];
+
+function matchesPlatformFilter(game, filterKey) {
+  if (!filterKey) {
+    return true;
+  }
+
+  const filter = PLATFORM_FILTERS.find((entry) => entry.key === filterKey);
+  const aliases = new Set(filter?.aliases ?? [filterKey]);
+  return (game.platforms ?? []).some((platform) => aliases.has(platform));
+}
 
 function normalizeSearchValue(value) {
   return String(value ?? "")
@@ -192,7 +202,7 @@ export default function BrowseScreen() {
   const { followedCount, isFollowingGame, getFollowStatus, setFollowStatus, unfollowGame } =
     useFollows();
   const { preferences } = useContentPreferences();
-  const { games, filteredGames, isLoading, error, isDebouncing, source } = useBrowseGames({
+  const { games, filteredGames, isLoading, isLoadingMore, hasMore, loadMore, error, isDebouncing, source } = useBrowseGames({
     query,
     selectedGenre: "All",
     hideMatureGames: preferences.hideMatureGames,
@@ -215,7 +225,7 @@ export default function BrowseScreen() {
 
   const displayedGames = filteredGames
     .filter((game) => {
-      if (activePlatformFilter && !game.platforms.includes(activePlatformFilter)) return false;
+      if (!matchesPlatformFilter(game, activePlatformFilter)) return false;
       if (activeRatingFilter && game.ageRatingLabel !== activeRatingFilter) return false;
       return true;
     })
@@ -223,8 +233,8 @@ export default function BrowseScreen() {
       if (gameSort === "highest_rated") {
         return (b.metacritic ?? 0) - (a.metacritic ?? 0);
       }
-      if (gameSort === "az") {
-        return a.title.localeCompare(b.title);
+      if (gameSort === "relevance") {
+        return 0;
       }
       return 0; // "popular" keeps original order from IGDB
     });
@@ -280,6 +290,22 @@ export default function BrowseScreen() {
     }
   };
 
+  const handleScroll = (event: any) => {
+    scrollHandlers.onScroll?.(event);
+
+    if (searchMode !== "game" || !hasMore || isLoading || isLoadingMore) {
+      return;
+    }
+
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distanceFromBottom =
+      contentSize.height - (contentOffset.y + layoutMeasurement.height);
+
+    if (distanceFromBottom < 320) {
+      loadMore();
+    }
+  };
+
   return (
     <View style={styles.screenWrapper}>
       <KeyboardAvoidingView
@@ -292,7 +318,7 @@ export default function BrowseScreen() {
           contentContainerStyle={styles.content}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
-          onScroll={scrollHandlers.onScroll}
+          onScroll={handleScroll}
           scrollEventThrottle={scrollHandlers.scrollEventThrottle}
         >
           <View style={styles.hero}>
@@ -372,7 +398,11 @@ export default function BrowseScreen() {
                 return (
                   <Pressable
                     key={f.key}
-                    onPress={() => setActivePlatformFilter(isActive ? null : f.key)}
+                    onPress={() => {
+                      setSearchMode("game");
+                      setGameSort("popular");
+                      setActivePlatformFilter(isActive ? null : f.key);
+                    }}
                     style={[styles.filterChip, isActive ? styles.filterChipActive : null]}
                   >
                     <Text style={[styles.filterChipText, isActive ? styles.filterChipTextActive : null]}>{f.label}</Text>
@@ -386,7 +416,11 @@ export default function BrowseScreen() {
                 return (
                   <Pressable
                     key={f.key}
-                    onPress={() => setActiveRatingFilter(isActive ? null : f.key)}
+                    onPress={() => {
+                      setSearchMode("game");
+                      setGameSort("popular");
+                      setActiveRatingFilter(isActive ? null : f.key);
+                    }}
                     style={[styles.filterChip, isActive ? styles.filterChipActive : null]}
                   >
                     <Text style={[styles.filterChipText, isActive ? styles.filterChipTextActive : null]}>{f.label}</Text>
@@ -495,18 +529,31 @@ export default function BrowseScreen() {
             </Text>
           </SectionCard>
         ) : searchMode === "game" && displayedGames.length > 0 ? (
-          displayedGames.map((game) => (
-            <GameCard
-              key={game.id}
-              game={game}
-              isFollowed={isFollowingGame(game.id)}
-              followStatus={getFollowStatus(game.id)}
-              onPress={() => router.push(`/game/${game.id}`)}
-              onSelectStatus={(status) => handleSelectStatus(game, status)}
-              onUnfollow={() => handleUnfollow(game)}
-              onAddToBacklog={() => handleSelectStatus(game, "have_not_played")}
-            />
-          ))
+          <>
+            {displayedGames.map((game) => (
+              <GameCard
+                key={game.id}
+                game={game}
+                isFollowed={isFollowingGame(game.id)}
+                followStatus={getFollowStatus(game.id)}
+                onPress={() => router.push(`/game/${game.id}`)}
+                onSelectStatus={(status) => handleSelectStatus(game, status)}
+                onUnfollow={() => handleUnfollow(game)}
+                onAddToBacklog={() => handleSelectStatus(game, "have_not_played")}
+              />
+            ))}
+            {isLoadingMore ? (
+              <View style={styles.loadingState}>
+                <ActivityIndicator color={theme.colors.accent} />
+                <Text style={styles.emptyText}>Loading more games...</Text>
+              </View>
+            ) : null}
+            {hasMore && !isLoadingMore ? (
+              <Pressable onPress={loadMore} style={styles.loadMoreButton}>
+                <Text style={styles.loadMoreButtonText}>Load more games</Text>
+              </Pressable>
+            ) : null}
+          </>
         ) : searchMode !== "game" && facetResults.length > 0 ? (
           facetResults.map((result) => (
             <Pressable
@@ -776,6 +823,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: theme.spacing.sm,
     paddingVertical: theme.spacing.xl,
+  },
+  loadMoreButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingVertical: theme.spacing.md,
+  },
+  loadMoreButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
   },
   emptyText: {
     color: theme.colors.textSecondary,

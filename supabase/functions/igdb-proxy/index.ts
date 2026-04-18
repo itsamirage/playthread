@@ -34,6 +34,7 @@ type CatalogSort =
 type IgdbRequestBody = {
   action?: "discover" | "starter" | "detail" | "search" | "covers" | "catalog";
   limit?: number;
+  offset?: number;
   gameId?: number;
   query?: string;
   gameIds?: number[];
@@ -275,12 +276,13 @@ function gameFields() {
   return "fields name,summary,first_release_date,aggregated_rating,aggregated_rating_count,total_rating,total_rating_count,follows,hypes,cover.image_id,screenshots.image_id,genres.name,platforms.name,age_ratings.category,age_ratings.rating,game_modes.name,themes.id,themes.name,involved_companies.developer,involved_companies.publisher,involved_companies.company.name;";
 }
 
-function discoverQuery(limit: number) {
+function discoverQuery(limit: number, offset: number) {
   return [
     gameFields(),
     "where total_rating_count != null;",
     "sort total_rating_count desc;",
     `limit ${limit};`,
+    `offset ${offset};`,
   ].join(" ");
 }
 
@@ -313,7 +315,7 @@ function escapeSearchTerm(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-function searchQuery(searchTerm: string, limit: number) {
+function searchQuery(searchTerm: string, limit: number, offset: number) {
   const safeSearchTerm = escapeSearchTerm(searchTerm);
 
   return [
@@ -321,10 +323,11 @@ function searchQuery(searchTerm: string, limit: number) {
     `search "${safeSearchTerm}";`,
     "where (category = null | category = (0,4,8,9,10)) & version_parent = null & parent_game = null;",
     `limit ${limit};`,
+    `offset ${offset};`,
   ].join(" ");
 }
 
-function nameContainsQuery(searchTerm: string, limit: number) {
+function nameContainsQuery(searchTerm: string, limit: number, offset: number) {
   const safeSearchTerm = escapeSearchTerm(searchTerm);
 
   return [
@@ -332,6 +335,7 @@ function nameContainsQuery(searchTerm: string, limit: number) {
     `where name ~ *"${safeSearchTerm}"* & (category = null | category = (0,4,8,9,10)) & version_parent = null & parent_game = null;`,
     "sort total_rating_count desc;",
     `limit ${limit};`,
+    `offset ${offset};`,
   ].join(" ");
 }
 
@@ -499,8 +503,9 @@ Deno.serve(async (request) => {
 
     if (action === "discover") {
       const limit = Math.min(Math.max(Number(body.limit ?? 60), 1), 100);
-      const games = await getOrLoadCachedValue(`discover:${limit}`, async () => {
-        const response = await igdbRequest("games", discoverQuery(limit));
+      const offset = Math.max(Number(body.offset ?? 0), 0);
+      const games = await getOrLoadCachedValue(`discover:${limit}:${offset}`, async () => {
+        const response = await igdbRequest("games", discoverQuery(limit, offset));
         return response.map(normalizeIgdbGame);
       });
       return jsonResponse({ games });
@@ -532,20 +537,21 @@ Deno.serve(async (request) => {
     if (action === "search") {
       const query = String(body.query ?? "").trim();
       const limit = Math.min(Math.max(Number(body.limit ?? 20), 1), 50);
+      const offset = Math.max(Number(body.offset ?? 0), 0);
 
       if (!query) {
         return jsonResponse({ games: [] });
       }
 
       const games = await getOrLoadCachedValue(
-        `search:${query.toLowerCase()}:${limit}`,
+        `search:${query.toLowerCase()}:${limit}:${offset}`,
         async () => {
           // Run keyword search and name-contains search in parallel.
           // Keyword search handles full-word relevance; name-contains catches
           // partial inputs like "Biosh" that IGDB's word index misses.
           const [keywordResults, nameResults] = await Promise.all([
-            igdbRequest("games", searchQuery(query, limit)),
-            igdbRequest("games", nameContainsQuery(query, limit)),
+            igdbRequest("games", searchQuery(query, limit, offset)),
+            igdbRequest("games", nameContainsQuery(query, limit, offset)),
           ]);
 
           const seenIds = new Set<number>();
