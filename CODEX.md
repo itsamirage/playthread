@@ -1,6 +1,6 @@
 # Playthread — Codex Handover Document
 
-**Last updated:** 2026-04-17  
+**Last updated:** 2026-04-17 (later session)  
 **Repo:** https://github.com/itsamirage/playthread  
 **Branch model:** single `main` branch, push directly, no PRs  
 **App Store ID:** 6762104334
@@ -195,8 +195,9 @@ Pushes to `main` do **not** auto-trigger a build. Builds are triggered manually 
 ### Important `codemagic.yaml` notes
 - The workflow is `ios-testflight`
 - Build number auto-increments from the last TestFlight build
-- Workspace: `ios/PlayThread.xcworkspace`, scheme: `PlayThread`
-- `expo prebuild --clean` regenerates the native iOS folder from scratch each build — **never manually edit files inside `/ios/`**
+- `expo prebuild --clean --platform ios` regenerates the native iOS folder from scratch each build — **never manually edit files inside `/ios/`**
+- Codemagic now runs `cd ios && pod install` after prebuild, then builds from the generated Xcode workspace
+- `expo-image-picker` is pinned to the Expo SDK 54-compatible line so CocoaPods resolves `ExpoImageManipulator` correctly
 
 ---
 
@@ -292,7 +293,7 @@ Redemption goes through `trusted-coin` with `action: "redeem_store_item"`.
 
 ## 11. Recent Work (as of 2026-04-17)
 
-All of this is committed and live on `main` (commit `76f656d`):
+All of this is committed and live on `main` (latest commit in this session: `3be3857`):
 
 - **Rating rounding fix** — `normalizeStoredRating` now snaps to nearest 0.5 instead of `toFixed(1)`
 - **Spoiler reveal animation** — 150ms opacity fade, blur overlay is a `Pressable` (prevents accidental edit/delete)
@@ -311,15 +312,32 @@ All of this is committed and live on `main` (commit `76f656d`):
 - **create-post `type` param** — deep-links can pre-select post type (e.g. `type: "review"`)
 - **Empty state CTA above filters** — game page shows "Write the first post" button before filter UI when no posts exist
 - **`useMyReviewsByGame` type fix** — map keys are now `String(igdb_game_id)` to match string `game.id` lookups
+- **Coin gift cap is live** — `trusted-coin` deployed to production with the 200-coin daily sender cap
+- **Scroll-to-comments** — post detail can open already aimed at the comments section
+- **Keyboard-safe Browse search** — results stay usable while the keyboard is open
+- **Game page status cleanup** — redundant separate "active" toggle removed; primary play status remains the source of truth
+- **Multi-image posts** — posts now support up to 6 images and render as galleries
+- **Image limits + optimization** — 10 MB per image, 24 MB total selection cap, non-GIF images resized/compressed client-side before upload
+- **Clip limits** — clips capped at 3 minutes, with server-side upload safeguards for Mux
+- **Community hubs** — home now links to generic `Gaming Discussion` and `Platforms` hubs
+- **Platform communities** — platform search routes to `Platforms` and then into user-only platform discussion/review pages
+- **Comment game-linking** — comments can link a mentioned game and open that game page
+- **Browse platform tags fixed** — tapping tags like `iOS` immediately shows matching game results
+- **Endless Browse** — game discovery and search now page forward as the user scrolls
+- **Create-post game search fix** — composer now uses raw search results, and the picker is a scrollable result list with cover art and platform labels
+- **Supabase write guardrails** — `trusted-post` / `trusted-comment` now enforce light server-side cooldowns and quotas
+- **Mux spend guardrails** — `mux-video` now enforces cooldowns, per-user upload caps, and a global kill switch
+- **Codemagic iOS pipeline repaired** — prebuild + CocoaPods install + generated workspace build path fixed for current Expo SDK 54 setup
 
 ---
 
 ## 12. Known Gaps / Next Priorities
 
-- **Deploy `trusted-coin` to Supabase** — daily gift cap code is written but the function must be re-deployed (`npx supabase functions deploy trusted-coin`) for it to take effect in production
-- **Scroll-to-comments on post detail** — user tapping "X comments" could auto-scroll to the comments section
 - **No Android build pipeline** — Codemagic is iOS only; Android not yet configured
 - **No automated tests for UI** — only unit tests in `lib/__tests__/` via `npm test`
+- **Client-side write audit still incomplete** — some write paths remain outside `trusted-*` functions and should be migrated to fully match the architecture rule
+- **Platform/community system still needs product refinement** — the generic discussion/platform spaces are in, but taxonomy and follow/discovery UX will likely need another pass
+- **Composer/device smoke testing** — latest create-post search fix is verified by tests/export build, but still needs manual device validation across discussion/review/image/clip flows
 
 ---
 
