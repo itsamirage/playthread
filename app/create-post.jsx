@@ -153,7 +153,7 @@ export default function CreatePostScreen() {
   const footerPaddingBottom = Math.max(insets.bottom, theme.spacing.md);
   const scrollBottomPadding =
     footerHeight + footerPaddingBottom + theme.spacing.xl + (Platform.OS === "android" ? keyboardHeight : 0);
-  const { filteredGames: searchedGames, isLoading: isSearchingGames } = useBrowseGames({
+  const { games: searchedGames, isLoading: isSearchingGames, isDebouncing: isSearchingDebounced } = useBrowseGames({
     query: gameSearch,
     selectedGenre: "All",
   });
@@ -186,9 +186,15 @@ export default function CreatePostScreen() {
         };
       }
 
+      const searchedGame = searchedGames.find((game) => game.id === selectedGameId);
+
+      if (searchedGame) {
+        return searchedGame;
+      }
+
       return null;
     },
-    [followedGames, initialGameId, routeCommunity, routeContextTitle, routeGame, selectedGameId]
+    [followedGames, initialGameId, routeCommunity, routeContextTitle, routeGame, searchedGames, selectedGameId]
   );
 
   const selectableGames = useMemo(() => {
@@ -205,16 +211,23 @@ export default function CreatePostScreen() {
     return [...byId.values()];
   }, [followedGames, routeGame]);
   const visibleSearchGames = useMemo(() => {
+    if (!gameSearch.trim()) {
+      return selectableGames.slice(0, 8);
+    }
+
     const uniqueGames = new Map();
 
-    for (const game of [...selectableGames, ...searchedGames]) {
+    for (const game of searchedGames) {
       if (game?.id) {
         uniqueGames.set(game.id, game);
       }
     }
 
-    return [...uniqueGames.values()].slice(0, gameSearch.trim() ? 12 : 8);
+    return [...uniqueGames.values()].slice(0, 12);
   }, [gameSearch, searchedGames, selectableGames]);
+  const searchHelperText = gameSearch.trim()
+    ? "Pick a game from the results below."
+    : "Search for a game to attach this post to.";
 
   const handleSubmit = async () => {
     Keyboard.dismiss();
@@ -389,31 +402,69 @@ export default function CreatePostScreen() {
                       style={styles.input}
                       value={gameSearch}
                     />
-                    <View style={styles.chipWrap}>
-                      {visibleSearchGames.map((game) => {
-                        const isActive = game.id === selectedGameId;
-
-                        return (
-                          <Pressable
-                            key={game.id}
-                            onPress={() => setSelectedGameId(game.id)}
-                            style={[styles.chip, isActive ? styles.chipActive : null]}
-                          >
-                            <Text style={[styles.chipText, isActive ? styles.chipTextActive : null]}>
-                              {game.title}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                    {isSearchingGames ? (
+                    {isSearchingGames || isSearchingDebounced ? (
                       <Text style={styles.helperText}>Searching games...</Text>
                     ) : null}
-                    {!visibleSearchGames.length ? (
-                      <Text style={styles.helperText}>
-                        Search for a game to attach this post to.
-                      </Text>
-                    ) : null}
+                    {visibleSearchGames.length ? (
+                      <ScrollView
+                        nestedScrollEnabled
+                        keyboardShouldPersistTaps="handled"
+                        style={styles.searchResults}
+                        contentContainerStyle={styles.searchResultsContent}
+                      >
+                        {visibleSearchGames.map((game) => {
+                          const isActive = game.id === selectedGameId;
+                          const platformLabel = (game.platforms ?? [])
+                            .filter(Boolean)
+                            .slice(0, 3)
+                            .join(" • ");
+
+                          return (
+                            <Pressable
+                              key={game.id}
+                              onPress={() => setSelectedGameId(game.id)}
+                              style={[styles.searchResultCard, isActive ? styles.searchResultCardActive : null]}
+                            >
+                              <View style={styles.searchResultMedia}>
+                                {game.coverUrl ? (
+                                  <Image source={{ uri: game.coverUrl }} style={styles.searchResultCover} />
+                                ) : (
+                                  <View style={styles.searchResultCoverFallback}>
+                                    <Text style={styles.searchResultCoverFallbackText}>
+                                      {game.title?.slice(0, 1)?.toUpperCase() ?? "?"}
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
+                              <View style={styles.searchResultText}>
+                                <Text
+                                  numberOfLines={1}
+                                  style={[
+                                    styles.searchResultTitle,
+                                    isActive ? styles.searchResultTitleActive : null,
+                                  ]}
+                                >
+                                  {game.title}
+                                </Text>
+                                {platformLabel ? (
+                                  <Text
+                                    numberOfLines={1}
+                                    style={[
+                                      styles.searchResultMeta,
+                                      isActive ? styles.searchResultMetaActive : null,
+                                    ]}
+                                  >
+                                    {platformLabel}
+                                  </Text>
+                                ) : null}
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+                      </ScrollView>
+                    ) : (
+                      <Text style={styles.helperText}>{searchHelperText}</Text>
+                    )}
                   </>
                 ) : null}
               </View>
@@ -746,11 +797,6 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.md,
     lineHeight: 22,
   },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing.sm,
-  },
   gamePickerBlock: {
     gap: theme.spacing.sm,
   },
@@ -782,26 +828,68 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.bold,
   },
-  chip: {
-    backgroundColor: "rgba(255,255,255,0.03)",
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.pill,
-    borderWidth: theme.borders.width,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
+  searchResults: {
+    maxHeight: 300,
   },
-  chipActive: {
+  searchResultsContent: {
+    gap: theme.spacing.sm,
+  },
+  searchResultCard: {
+    alignItems: "center",
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    flexDirection: "row",
+    gap: theme.spacing.md,
+    padding: theme.spacing.sm,
+  },
+  searchResultCardActive: {
     backgroundColor: theme.colors.accent,
     borderColor: theme.colors.accent,
   },
-  chipText: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSizes.sm,
-    fontWeight: theme.fontWeights.medium,
+  searchResultMedia: {
+    flexShrink: 0,
   },
-  chipTextActive: {
-    color: theme.colors.background,
+  searchResultCover: {
+    width: 52,
+    height: 70,
+    borderRadius: theme.radius.sm,
+    backgroundColor: theme.colors.card,
+  },
+  searchResultCoverFallback: {
+    alignItems: "center",
+    backgroundColor: theme.colors.cardElevated ?? theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    borderWidth: theme.borders.width,
+    height: 70,
+    justifyContent: "center",
+    width: 52,
+  },
+  searchResultCoverFallbackText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.lg,
     fontWeight: theme.fontWeights.bold,
+  },
+  searchResultText: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  searchResultTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.md,
+    fontWeight: theme.fontWeights.bold,
+  },
+  searchResultTitleActive: {
+    color: theme.colors.background,
+  },
+  searchResultMeta: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+  },
+  searchResultMetaActive: {
+    color: theme.colors.background,
   },
   typeRow: {
     flexDirection: "row",
