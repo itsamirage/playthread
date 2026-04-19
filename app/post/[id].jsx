@@ -1,6 +1,17 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useEffect, useRef, useState } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import BottomNavBar from "../../components/BottomNavBar";
 import PostCard from "../../components/PostCard";
@@ -16,6 +27,7 @@ export default function PostDetailScreen() {
   const { id, scrollTo } = useLocalSearchParams();
   const router = useRouter();
   const { session } = useAuth();
+  const insets = useSafeAreaInsets();
   const { post, isLoading, error, reload } = useEditablePost(typeof id === "string" ? id : null, true);
   const [reactingPostId, setReactingPostId] = useState(null);
   const [optimisticReaction, setOptimisticReaction] = useState(null);
@@ -104,77 +116,83 @@ export default function PostDetailScreen() {
 
   return (
     <View style={styles.screenWrapper}>
-      <ScrollView
-      ref={scrollRef}
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>PlayThread</Text>
-        <Text style={styles.title}>Post thread</Text>
-        <Text style={styles.subtitle}>A shareable thread view with the full conversation attached.</Text>
-        <View style={styles.heroActions}>
-          <Pressable onPress={() => goBackOrFallback(router, `/game/${post.gameId}`)} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Back</Text>
-          </Pressable>
-          <Pressable onPress={() => router.push(`/game/${post.gameId}`)} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Game</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <PostCard
-        post={displayPost}
-        isReacting={reactingPostId === post.id}
-        onAuthorPress={() => router.push(`/user/${post.userId}`)}
-        onGamePress={() => router.push(`/game/${post.gameId}`)}
-        onOpenComments={handleScrollToComments}
-        onReact={handleReact}
-        onDelete={
-          session?.user?.id === post.userId
-            ? async () => {
-                Alert.alert("Delete post", "This will permanently remove the post.", [
-                  { text: "Cancel", style: "cancel" },
-                  {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                      await deletePost({ postId: post.id });
-                      router.replace(`/game/${post.gameId}`);
-                    },
-                  },
-                ]);
-              }
-            : null
-        }
-        onEdit={
-          session?.user?.id === post.userId
-            ? () => router.push({ pathname: "/create-post", params: { gameId: String(post.gameId), postId: post.id } })
-            : null
-        }
-      />
-
-      <View
-        onLayout={(event) => {
-          conversationOffsetRef.current = event.nativeEvent.layout.y;
-          if (shouldScrollToComments && !hasAutoScrolledRef.current) {
-            hasAutoScrolledRef.current = true;
-            requestAnimationFrame(() => {
-              handleScrollToComments();
-            });
-          }
-        }}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Math.max(insets.bottom, 12)}
+        style={styles.screen}
       >
-        <SectionCard title="Conversation" eyebrow="Replies">
-        <PostCommentsThread
-          isEmbedded
-          onAuthorPress={(userId) => router.push(`/user/${userId}`)}
-          post={post}
-        />
-        </SectionCard>
-      </View>
-    </ScrollView>
+        <ScrollView
+          ref={scrollRef}
+          style={styles.screen}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.hero}>
+            <Text style={styles.eyebrow}>PlayThread</Text>
+            <Text style={styles.title}>Post thread</Text>
+            <Text style={styles.subtitle}>A shareable thread view with the full conversation attached.</Text>
+            <View style={styles.heroActions}>
+              <Pressable onPress={() => goBackOrFallback(router, `/game/${post.gameId}`)} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Back</Text>
+              </Pressable>
+              <Pressable onPress={() => router.push(`/game/${post.gameId}`)} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Game</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <PostCard
+            post={displayPost}
+            isReacting={reactingPostId === post.id}
+            onAuthorPress={() => router.push(`/user/${post.userId}`)}
+            onGamePress={() => router.push(`/game/${post.gameId}`)}
+            onOpenComments={handleScrollToComments}
+            onReact={handleReact}
+            onDelete={
+              session?.user?.id === post.userId
+                ? async () => {
+                    Alert.alert("Delete post", "This will permanently remove the post.", [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Delete",
+                        style: "destructive",
+                        onPress: async () => {
+                          await deletePost({ postId: post.id });
+                          router.replace(`/game/${post.gameId}`);
+                        },
+                      },
+                    ]);
+                  }
+                : null
+            }
+            onEdit={
+              session?.user?.id === post.userId
+                ? () => router.push({ pathname: "/create-post", params: { gameId: String(post.gameId), postId: post.id } })
+                : null
+            }
+          />
+
+          <View
+            onLayout={(event) => {
+              conversationOffsetRef.current = event.nativeEvent.layout.y;
+              if (shouldScrollToComments && !hasAutoScrolledRef.current) {
+                hasAutoScrolledRef.current = true;
+                requestAnimationFrame(() => {
+                  handleScrollToComments();
+                });
+              }
+            }}
+          >
+            <SectionCard title="Conversation" eyebrow="Replies">
+              <PostCommentsThread
+                isEmbedded
+                onAuthorPress={(userId) => router.push(`/user/${userId}`)}
+                post={post}
+              />
+            </SectionCard>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
       <BottomNavBar />
     </View>
   );

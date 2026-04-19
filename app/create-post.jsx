@@ -26,6 +26,7 @@ import { describeIntegrityError } from "../lib/integrity";
 import { goBackOrFallback } from "../lib/navigation";
 import { pickPostImages } from "../lib/postMedia";
 import { createPost, updatePost, useEditablePost } from "../lib/posts";
+import { useRecentGames } from "../lib/recentGames";
 import { theme } from "../lib/theme";
 
 const postTypes = ["discussion", "review", "guide", "tip", "screenshot", "clip"];
@@ -94,6 +95,7 @@ export default function CreatePostScreen() {
   const [hasLoadedEditValues, setHasLoadedEditValues] = useState(false);
   const isEditing = Boolean(editPostId);
   const availablePostTypes = allowedPostTypes.length > 0 ? postTypes.filter((type) => allowedPostTypes.includes(type)) : postTypes;
+  const { recentGames } = useRecentGames(3);
 
   useEffect(() => {
     if (!availablePostTypes.includes(postType)) {
@@ -204,15 +206,19 @@ export default function CreatePostScreen() {
       byId.set(routeGame.id, routeGame);
     }
 
+    for (const game of recentGames) {
+      byId.set(game.id, game);
+    }
+
     for (const game of followedGames) {
       byId.set(game.id, game);
     }
 
     return [...byId.values()];
-  }, [followedGames, routeGame]);
+  }, [followedGames, recentGames, routeGame]);
   const visibleSearchGames = useMemo(() => {
     if (!gameSearch.trim()) {
-      return selectableGames.slice(0, 8);
+      return selectableGames.slice(0, 4);
     }
 
     const uniqueGames = new Map();
@@ -227,7 +233,7 @@ export default function CreatePostScreen() {
   }, [gameSearch, searchedGames, selectableGames]);
   const searchHelperText = gameSearch.trim()
     ? "Pick a game from the results below."
-    : "Search for a game to attach this post to.";
+    : "Search for a game to attach this post to. Your last 3 visited games appear below.";
 
   const handleSubmit = async () => {
     Keyboard.dismiss();
@@ -404,6 +410,14 @@ export default function CreatePostScreen() {
                     />
                     {isSearchingGames || isSearchingDebounced ? (
                       <Text style={styles.helperText}>Searching games...</Text>
+                    ) : null}
+                    {!gameSearch.trim() && recentGames.length > 0 ? (
+                      <View style={styles.recentGamesBlock}>
+                        <Text style={styles.recentGamesLabel}>Recent games</Text>
+                        <Text style={styles.helperText}>
+                          Jump back into one of the last games you viewed.
+                        </Text>
+                      </View>
                     ) : null}
                     {visibleSearchGames.length ? (
                       <ScrollView
@@ -830,6 +844,15 @@ const styles = StyleSheet.create({
   },
   searchResults: {
     maxHeight: 300,
+  },
+  recentGamesBlock: {
+    gap: theme.spacing.xs,
+    paddingTop: theme.spacing.xs,
+  },
+  recentGamesLabel: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
   },
   searchResultsContent: {
     gap: theme.spacing.sm,

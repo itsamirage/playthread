@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import CoinGiftSheet from "./CoinGiftSheet";
 import { sendCoinGift } from "../lib/admin";
@@ -43,6 +44,7 @@ export default function PostCommentsThread({
   onAuthorPress,
 }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const { comments, isLoading, error, reload } = usePostComments(post?.id, Boolean(post?.id));
   const [draft, setDraft] = useState("");
@@ -379,7 +381,7 @@ export default function PostCommentsThread({
         </View>
       </Container>
 
-      <View style={styles.composer}>
+      <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, theme.spacing.sm) }]}>
         {editingCommentId ? (
           <View style={styles.editingBanner}>
             <Text style={styles.editingBannerText}>Editing comment</Text>

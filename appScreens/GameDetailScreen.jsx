@@ -43,6 +43,7 @@ import {
   useGamePosts,
 } from "../lib/posts";
 import { Image as ExpoImage } from "expo-image";
+import { recordRecentGameVisit } from "../lib/recentGames";
 import { getMetacriticColor, theme } from "../lib/theme";
 
 const THREAD_PREFERENCE_STORAGE_KEY = "playthread:game-thread-preferences";
@@ -114,6 +115,18 @@ export default function GameDetailScreen() {
   useEffect(() => {
     setShowSpoilers(shouldRevealSpoilersForStatus(followStatus));
   }, [followStatus]);
+
+  useEffect(() => {
+    if (!game?.id) {
+      return;
+    }
+
+    void recordRecentGameVisit({
+      id: game.id,
+      title: game.title,
+      coverUrl: game.coverUrl,
+    });
+  }, [game?.coverUrl, game?.id, game?.title]);
 
   useEffect(() => {
     let isMounted = true;

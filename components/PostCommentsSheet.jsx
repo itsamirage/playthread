@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import PostCommentsThread from "./PostCommentsThread";
 import { theme } from "../lib/theme";
@@ -18,6 +19,8 @@ export default function PostCommentsSheet({
   onCommentCountChange,
   onAuthorPress,
 }) {
+  const insets = useSafeAreaInsets();
+
   return (
     <Modal
       animationType="slide"
@@ -26,7 +29,8 @@ export default function PostCommentsSheet({
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "android" ? "height" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Math.max(insets.bottom, 12)}
         style={styles.modalBackdrop}
       >
         <View style={styles.modalCard}>

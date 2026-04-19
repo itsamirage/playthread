@@ -151,7 +151,6 @@ function isMatureAgeRating(
   ageRatings: Array<{ category?: number; rating?: number }> = [],
   themes: Array<{ id?: number; name?: string }> = [],
 ) {
-  // IGDB theme 42 = Erotic, theme 1 = Action (just a check for adult themes)
   const hasAdultTheme = themes.some((t) => Number(t?.id) === 42);
   if (hasAdultTheme) return true;
 
@@ -160,15 +159,23 @@ function isMatureAgeRating(
     const rating = Number(item?.rating ?? 0);
 
     if (category === 1) {
-      return rating === 6 || rating === 7; // ESRB M or AO
+      return rating === 7; // ESRB AO
     }
 
     if (category === 2) {
-      return rating >= 4; // PEGI 16 or 18
+      return rating >= 5; // PEGI 18
     }
 
     if (category === 3) {
-      return rating >= 4; // USK 18
+      return rating >= 5; // CERO Z
+    }
+
+    if (category === 4) {
+      return rating >= 5; // USK 18
+    }
+
+    if (category === 7) {
+      return rating >= 4; // ACB R18+
     }
 
     return false;

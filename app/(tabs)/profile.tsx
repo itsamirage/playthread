@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Alert,
@@ -26,7 +27,7 @@ import {
   PROFILE_STORE_ITEMS,
   redeemProfileStoreItem,
 } from "../../lib/admin";
-import { logoutUser } from "../../lib/auth";
+import { isValidEmail, logoutUser, requestPasswordReset, updateEmail } from "../../lib/auth";
 import { getFollowStatusLabel, useFollows } from "../../lib/follows";
 import { useNowPlaying } from "../../lib/nowPlaying";
 import { formatModerationWarning } from "../../lib/moderation";
@@ -49,7 +50,14 @@ import {
   useSteamShowcaseCatalog,
 } from "../../lib/profileShowcase";
 import { getProfileNameColor } from "../../lib/profileAppearance";
-import { useMyReviewCount, useMyReviewsByGame, useUserActivity, useUserFollows } from "../../lib/userSocial";
+import {
+  useMyReviewCount,
+  useMyReviewsByGame,
+  useUserActivity,
+  useUserCommentHistory,
+  useUserFollows,
+  useUserReviews,
+} from "../../lib/userSocial";
 import { getProfileTitleOption, PROFILE_TITLE_OPTIONS } from "../../lib/titles";
 import { useTabReselectScroll } from "../../lib/tabReselect";
 import { theme } from "../../lib/theme";
@@ -59,6 +67,7 @@ const BANNER_STYLES = {
   obsidian: ["#10131c", "#1d2230", "#31394f"],
   sunset: ["#3d1822", "#7a3140", "#d4874d"],
 };
+const PROFILE_STATS_STORAGE_KEY = "playthread:profile-stats-expanded";
 
 function normalizeSearchValue(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -173,6 +182,16 @@ export default function ProfileScreen() {
       matches: (game) => game.playStatus === "completed",
       emptyText: "No completed games yet. Mark a game as completed from its game page.",
     },
+    currently_playing: {
+      label: "Currently playing",
+      matches: (game) => nowPlayingIds.includes(Number(game.id)),
+      emptyText: "You have not marked any games as currently playing yet.",
+    },
+    reviewed: {
+      label: "Reviewed",
+      matches: (game) => reviewsByGameId.has(String(game.id)) || reviewsByGameId.has(game.id),
+      emptyText: "You have not reviewed any games yet.",
+    },
   };
   const GAME_SORT_OPTIONS = {
     recent: "Recently played",
@@ -196,7 +215,10 @@ export default function ProfileScreen() {
   const [gameSort, setGameSort] = useState("recent");
   const [showcaseSearch, setShowcaseSearch] = useState("");
   const [activeStatFilterKey, setActiveStatFilterKey] = useState(null);
-  const [isStatsExpanded, setIsStatsExpanded] = useState(false);
+  const [isStatsExpanded, setIsStatsExpanded] = useState(true);
+  const [statSearchQuery, setStatSearchQuery] = useState("");
+  const [emailDraft, setEmailDraft] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
   const [identityDraft, setIdentityDraft] = useState({
     displayName: "",
     bio: "",
@@ -210,6 +232,9 @@ export default function ProfileScreen() {
   const { friendCount, incomingRequestUserIds } = useUserFollows(session?.user?.id);
   const { reviewCount, avgRating, reload: reloadReviews } = useMyReviewCount(session?.user?.id);
   const { reviewsByGameId } = useMyReviewsByGame(session?.user?.id);
+  const { reviews: reviewHistory, reload: reloadReviewHistory } = useUserReviews(
+    session?.user?.id,
+  );
   const {
     posts: myPosts,
     isLoading: myPostsLoading,
@@ -218,6 +243,14 @@ export default function ProfileScreen() {
     reload: reloadMyPosts,
     loadMore: loadMoreMyPosts,
   } = useUserActivity(session?.user?.id, { limit: 10 });
+  const {
+    comments: myComments,
+    isLoading: myCommentsLoading,
+    isLoadingMore: myCommentsLoadingMore,
+    hasMore: myCommentsHasMore,
+    reload: reloadMyComments,
+    loadMore: loadMoreMyComments,
+  } = useUserCommentHistory(session?.user?.id, { limit: 10 });
   const { profile, reload: reloadProfile } = useCurrentProfile();
   const { accountsByProvider, isLoading: accountsLoading, reloadAccounts } = useConnectedAccounts();
   const {
@@ -234,10 +267,40 @@ export default function ProfileScreen() {
 
   const completedCount = followedGames.filter((game) => game.playStatus === "completed").length;
   const backlogCount = followedGames.filter((game) => game.playStatus === "have_not_played").length;
-const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey] : null;
-  const filteredStatGames = activeStatFilter
-    ? followedGames.filter((game) => activeStatFilter.matches(game))
-    : [];
+  const currentlyPlayingCount = followedGames.filter((game) => nowPlayingIds.includes(Number(game.id))).length;
+  const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey] : null;
+  const filteredStatGames = useMemo(() => {
+    const searchValue = normalizeSearchValue(statSearchQuery);
+    const baseGames =
+      activeStatFilterKey === "reviewed"
+        ? reviewHistory.map((review) => {
+            const followedGame = followedGames.find((game) => String(game.id) === String(review.gameId));
+
+            return {
+              id: review.gameId,
+              title: review.title,
+              coverUrl: review.coverUrl ?? followedGame?.coverUrl ?? null,
+              genre: followedGame?.genre ?? "",
+              studio: followedGame?.studio ?? "",
+              platforms: followedGame?.platforms ?? [],
+              playStatus: followedGame?.playStatus ?? "reviewed",
+              followedAt: followedGame?.followedAt ?? review.createdAt,
+            };
+          })
+        : activeStatFilter
+          ? followedGames.filter((game) => activeStatFilter.matches(game))
+          : [];
+
+    if (!searchValue) {
+      return baseGames;
+    }
+
+    return baseGames.filter((game) =>
+      normalizeSearchValue(
+        [game.title, game.genre, game.studio, ...(game.platforms ?? [])].filter(Boolean).join(" "),
+      ).includes(searchValue),
+    );
+  }, [activeStatFilter, activeStatFilterKey, followedGames, reviewHistory, statSearchQuery]);
   const availableCoins = getAvailableCoins({
     coinsFromPosts: profile?.coins_from_posts,
     coinsFromComments: profile?.coins_from_comments,
@@ -266,6 +329,38 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
       avatarUrl: profile?.avatar_url ?? "",
     });
   }, [profile?.avatar_url, profile?.bio, profile?.display_name, profile?.username]);
+
+  useEffect(() => {
+    setEmailDraft(session?.user?.email ?? "");
+  }, [session?.user?.email]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadStatsPreference = async () => {
+      try {
+        const rawValue = await AsyncStorage.getItem(PROFILE_STATS_STORAGE_KEY);
+
+        if (!isMounted || rawValue == null) {
+          return;
+        }
+
+        setIsStatsExpanded(rawValue === "true");
+      } catch {
+        // Ignore local preference failures.
+      }
+    };
+
+    loadStatsPreference();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(PROFILE_STATS_STORAGE_KEY, isStatsExpanded ? "true" : "false").catch(() => {});
+  }, [isStatsExpanded]);
   const sortedSteamShowcaseGameGroups = useMemo(() => {
     const nextGroups = [...steamShowcaseGameGroups];
 
@@ -329,7 +424,9 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
       void reloadShowcase?.();
       void reloadCatalog?.();
       void reloadReviews?.();
+      void reloadReviewHistory?.();
       void reloadMyPosts?.();
+      void reloadMyComments?.();
     },
   });
 
@@ -347,6 +444,55 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
       Alert.alert("Error", "Something went wrong while logging out.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveEmail = async () => {
+    if (!emailDraft.trim()) {
+      Alert.alert("Missing email", "Enter the email address you want to use.");
+      return;
+    }
+
+    if (!isValidEmail(emailDraft)) {
+      Alert.alert("Invalid email", "Enter a valid email address.");
+      return;
+    }
+
+    try {
+      setSavingEmail(true);
+      const { error } = await updateEmail(emailDraft);
+
+      if (error) {
+        throw error;
+      }
+
+      Alert.alert(
+        "Email update started",
+        "Check your inbox for the confirmation email to finish changing your address.",
+      );
+    } catch (error) {
+      Alert.alert("Email update failed", error instanceof Error ? error.message : "Could not update your email.");
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
+  const handleRequestPasswordReset = async () => {
+    if (!session?.user?.email) {
+      Alert.alert("Missing email", "No account email is available for this session.");
+      return;
+    }
+
+    try {
+      const { error } = await requestPasswordReset(session.user.email);
+
+      if (error) {
+        throw error;
+      }
+
+      Alert.alert("Reset email sent", `A password reset link was sent to ${session.user.email}.`);
+    } catch (error) {
+      Alert.alert("Reset failed", error instanceof Error ? error.message : "Could not send the reset email.");
     }
   };
 
@@ -732,50 +878,81 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
       </View>
 
       <SectionCard title="Stats" eyebrow="Overview">
-        <View style={styles.statGrid}>
-          <Pressable
-            onPress={() => setActiveStatFilterKey("following")}
-            style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
-          >
-            <Text style={styles.statValue}>{followedCount}</Text>
-            <Text style={styles.statLabel} numberOfLines={1}>Following</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => router.push("/friends")}
-            style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
-          >
-            <Text style={styles.statValue}>{friendCount}</Text>
-            <Text style={styles.statLabel} numberOfLines={1}>Friends</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setActiveStatFilterKey("backlog")}
-            style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
-          >
-            <Text style={styles.statValue}>{backlogCount}</Text>
-            <Text style={styles.statLabel} numberOfLines={1}>Backlog</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setActiveStatFilterKey("completed")}
-            style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
-          >
-            <Text style={styles.statValue}>{completedCount}</Text>
-            <Text style={styles.statLabel} numberOfLines={1}>Completed</Text>
-          </Pressable>
-          <View style={[styles.statBox, styles.statBoxFullRow]}>
-            <Text style={styles.statValue}>{reviewCount}</Text>
-            {avgRating ? (
-              <Text style={styles.statSubValue}>{avgRating} avg</Text>
-            ) : null}
-            <Text style={styles.statLabel} numberOfLines={1}>Reviewed</Text>
-          </View>
-        </View>
-        <Text style={styles.helperText}>Tap Following, Backlog, or Completed to browse those games. Tap Friends to manage your social list.</Text>
+        {isStatsExpanded ? (
+          <>
+            <View style={styles.statGrid}>
+              <Pressable
+                onPress={() => {
+                  setStatSearchQuery("");
+                  setActiveStatFilterKey("following");
+                }}
+                style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
+              >
+                <Text style={styles.statValue}>{followedCount}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>Following</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => router.push("/friends")}
+                style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
+              >
+                <Text style={styles.statValue}>{friendCount}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>Friends</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setStatSearchQuery("");
+                  setActiveStatFilterKey("backlog");
+                }}
+                style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
+              >
+                <Text style={styles.statValue}>{backlogCount}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>Backlog</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setStatSearchQuery("");
+                  setActiveStatFilterKey("completed");
+                }}
+                style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
+              >
+                <Text style={styles.statValue}>{completedCount}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>Completed</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setStatSearchQuery("");
+                  setActiveStatFilterKey("currently_playing");
+                }}
+                style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
+              >
+                <Text style={styles.statValue}>{currentlyPlayingCount}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>Currently playing</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setStatSearchQuery("");
+                  setActiveStatFilterKey("reviewed");
+                }}
+                style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
+              >
+                <Text style={styles.statValue}>{reviewCount}</Text>
+                {avgRating ? (
+                  <Text style={styles.statSubValue}>{avgRating} avg</Text>
+                ) : null}
+                <Text style={styles.statLabel} numberOfLines={1}>Reviewed</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.helperText}>
+              Tap Following, Backlog, Completed, Currently playing, or Reviewed to open searchable lists.
+            </Text>
+          </>
+        ) : null}
         <Pressable
           onPress={() => setIsStatsExpanded((v) => !v)}
           style={styles.expandToggle}
         >
           <Text style={styles.expandToggleText}>
-            {isStatsExpanded ? "Coin stats ▲" : "Coin stats ▼"}
+            {isStatsExpanded ? "Hide stats ▲" : "Show stats ▼"}
           </Text>
         </Pressable>
         {isStatsExpanded ? (
@@ -1491,7 +1668,7 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
         )}
       </SectionCard>
 
-      <SectionCard title="Recent activity" eyebrow="Your posts">
+      <SectionCard title="Post history" eyebrow="Your posts">
         {myPostsLoading ? (
           <ActivityIndicator color={theme.colors.accent} />
         ) : myPosts.length > 0 ? (
@@ -1532,7 +1709,83 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
         )}
       </SectionCard>
 
-      <SectionCard title="Account actions" eyebrow="Settings">
+      <SectionCard title="Comment history" eyebrow="Your replies">
+        {myCommentsLoading ? (
+          <ActivityIndicator color={theme.colors.accent} />
+        ) : myComments.length > 0 ? (
+          <View style={styles.feedList}>
+            {myComments.map((comment) => (
+              <Pressable
+                key={comment.id}
+                onPress={() =>
+                  router.push({ pathname: "/post/[id]", params: { id: comment.postId, scrollTo: "comments" } })
+                }
+                style={({ pressed }) => [styles.commentHistoryCard, pressed ? styles.buttonPressed : null]}
+              >
+                <Text style={styles.commentHistoryTitle}>{comment.postTitle}</Text>
+                {comment.gameTitle ? <Text style={styles.commentHistoryMeta}>{comment.gameTitle}</Text> : null}
+                <Text numberOfLines={3} style={styles.bodyText}>{comment.body || "Image comment"}</Text>
+              </Pressable>
+            ))}
+            {myCommentsHasMore ? (
+              <Pressable
+                disabled={myCommentsLoadingMore}
+                onPress={loadMoreMyComments}
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  myCommentsLoadingMore ? styles.buttonDisabled : null,
+                  pressed && !myCommentsLoadingMore ? styles.buttonPressed : null,
+                ]}
+              >
+                {myCommentsLoadingMore ? (
+                  <ActivityIndicator color={theme.colors.accent} size="small" />
+                ) : (
+                  <Text style={styles.secondaryButtonText}>Load more</Text>
+                )}
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
+          <Text style={styles.bodyText}>You have not left any comments yet.</Text>
+        )}
+      </SectionCard>
+
+      <SectionCard title="Settings" eyebrow="Account">
+        <View style={styles.inlineFieldGroup}>
+          <Text style={styles.securityTitle}>Email</Text>
+          <TextInput
+            autoCapitalize="none"
+            keyboardType="email-address"
+            onChangeText={setEmailDraft}
+            placeholder="Email address"
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.textInput}
+            value={emailDraft}
+          />
+          <Pressable
+            disabled={savingEmail}
+            onPress={handleSaveEmail}
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              savingEmail ? styles.buttonDisabled : null,
+              pressed && !savingEmail ? styles.buttonPressed : null,
+            ]}
+          >
+            <Text style={styles.secondaryButtonText}>{savingEmail ? "Saving..." : "Change email"}</Text>
+          </Pressable>
+        </View>
+        <View style={styles.inlineFieldGroup}>
+          <Text style={styles.securityTitle}>Password</Text>
+          <Text style={styles.helperText}>
+            Send a password reset email and finish the update from the secure reset screen.
+          </Text>
+          <Pressable
+            onPress={handleRequestPasswordReset}
+            style={({ pressed }) => [styles.secondaryButton, pressed ? styles.buttonPressed : null]}
+          >
+            <Text style={styles.secondaryButtonText}>Change password</Text>
+          </Pressable>
+        </View>
         {canOpenAdmin ? (
           <Pressable
             onPress={() => router.push("/admin")}
@@ -1567,7 +1820,10 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
         animationType="slide"
         transparent
         visible={Boolean(activeStatFilter)}
-        onRequestClose={() => setActiveStatFilterKey(null)}
+        onRequestClose={() => {
+          setActiveStatFilterKey(null);
+          setStatSearchQuery("");
+        }}
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -1576,11 +1832,25 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
                 <Text style={styles.eyebrow}>Your games</Text>
                 <Text style={styles.modalTitle}>{activeStatFilter?.label ?? "Games"}</Text>
               </View>
-              <Pressable onPress={() => setActiveStatFilterKey(null)} style={styles.closeButton}>
+              <Pressable
+                onPress={() => {
+                  setActiveStatFilterKey(null);
+                  setStatSearchQuery("");
+                }}
+                style={styles.closeButton}
+              >
                 <Text style={styles.closeButtonText}>Close</Text>
               </Pressable>
             </View>
 
+            <TextInput
+              autoCapitalize="none"
+              onChangeText={setStatSearchQuery}
+              placeholder={`Search ${activeStatFilter?.label?.toLowerCase() ?? "games"}`}
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.textInput}
+              value={statSearchQuery}
+            />
             <ScrollView contentContainerStyle={styles.modalList}>
               {filteredStatGames.length > 0 ? (
                 filteredStatGames.map((game) => (
@@ -1588,6 +1858,7 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
                     key={`${activeStatFilterKey}:${game.id}`}
                     onPress={() => {
                       setActiveStatFilterKey(null);
+                      setStatSearchQuery("");
                       router.push(`/game/${game.id}`);
                     }}
                     style={({ pressed }) => [
@@ -1607,12 +1878,17 @@ const activeStatFilter = activeStatFilterKey ? STAT_FILTERS[activeStatFilterKey]
                     <View style={styles.modalGameText}>
                       <Text style={styles.modalGameTitle}>{game.title}</Text>
                       <Text style={styles.modalGameMeta}>
-                        {getFollowStatusLabel(game.playStatus)} | Followed{" "}
+                        {activeStatFilterKey === "reviewed"
+                          ? "Reviewed"
+                          : getFollowStatusLabel(game.playStatus)}{" "}
+                        |{" "}
+                        {activeStatFilterKey === "reviewed" ? "Updated" : "Followed"}{" "}
                         {new Date(game.followedAt).toLocaleDateString()}
                       </Text>
-                      {activeStatFilterKey === "completed" && reviewsByGameId.has(game.id) ? (
+                      {["completed", "reviewed"].includes(activeStatFilterKey ?? "") &&
+                      reviewsByGameId.has(String(game.id)) ? (
                         <Text style={styles.modalGameRating}>
-                          ★ {reviewsByGameId.get(game.id)} / 10
+                          ★ {reviewsByGameId.get(String(game.id))} / 10
                         </Text>
                       ) : null}
                     </View>
@@ -1980,6 +2256,11 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.fontSizes.sm,
   },
+  modalGameRating: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
   loadingState: {
     alignItems: "center",
     gap: theme.spacing.sm,
@@ -2200,6 +2481,23 @@ const styles = StyleSheet.create({
   },
   followList: {
     gap: theme.spacing.md,
+  },
+  commentHistoryCard: {
+    gap: theme.spacing.xs,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    padding: theme.spacing.md,
+  },
+  commentHistoryTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.md,
+    fontWeight: theme.fontWeights.bold,
+  },
+  commentHistoryMeta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.sm,
   },
   followCard: {
     gap: theme.spacing.sm,
