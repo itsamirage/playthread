@@ -1,4 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import SectionCard from "../components/SectionCard";
@@ -10,7 +11,29 @@ export default function PlatformsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const query = String(params.q ?? "");
+  const [draftQuery, setDraftQuery] = useState(query);
   const platforms = searchPlatformCommunities(query);
+
+  useEffect(() => {
+    setDraftQuery(query);
+  }, [query]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      const normalizedDraft = draftQuery.trim();
+      const normalizedQuery = query.trim();
+
+      if (normalizedDraft === normalizedQuery) {
+        return;
+      }
+
+      router.replace({ pathname: "/platforms", params: normalizedDraft ? { q: normalizedDraft } : {} });
+    }, 250);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [draftQuery, query, router]);
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -27,9 +50,9 @@ export default function PlatformsScreen() {
 
       <SectionCard title="Search" eyebrow="Browse platforms">
         <TextInput
-          value={query}
-          onChangeText={(nextValue) => router.replace({ pathname: "/platforms", params: nextValue ? { q: nextValue } : {} })}
-          placeholder="Search Xbox, PlayStation, Nintendo, PC..."
+          value={draftQuery}
+          onChangeText={setDraftQuery}
+          placeholder="Search Nintendo, Switch, N64, PSP, Steam Deck..."
           placeholderTextColor={theme.colors.textMuted}
           style={styles.input}
         />
