@@ -1,6 +1,15 @@
+import { useDeferredValue, useMemo, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
 import BottomNavBar from "../../components/BottomNavBar";
 import PostCard from "../../components/PostCard";
@@ -19,7 +28,9 @@ import {
   usePublicProfile,
   usePublicReviewCount,
   useUserActivity,
+  useUserCommentHistory,
   useUserFollows,
+  useUserReviews,
 } from "../../lib/userSocial";
 
 export default function PublicProfileScreen() {
@@ -35,11 +46,59 @@ export default function PublicProfileScreen() {
     hasMore: activityHasMore,
     reload: reloadActivity,
     loadMore: loadMoreActivity,
-  } = useUserActivity(userId);
+  } = useUserActivity(userId, { limit: 10 });
+  const {
+    comments,
+    isLoading: commentsLoading,
+    isLoadingMore: commentsLoadingMore,
+    hasMore: commentsHasMore,
+    loadMore: loadMoreComments,
+  } = useUserCommentHistory(userId, { limit: 10 });
   const { friendCount, friends, getFriendshipStatus, reload: reloadFollows } = useUserFollows(userId);
   const { reviewCount, avgRating: reviewAvgRating } = usePublicReviewCount(userId);
+  const { reviews, isLoading: reviewsLoading } = useUserReviews(userId);
   const [isSavingFollow, setIsSavingFollow] = useState(false);
   const [optimisticStatus, setOptimisticStatus] = useState(null);
+  const [activitySearch, setActivitySearch] = useState("");
+  const [commentSearch, setCommentSearch] = useState("");
+  const [reviewSearch, setReviewSearch] = useState("");
+  const deferredActivitySearch = useDeferredValue(activitySearch);
+  const deferredCommentSearch = useDeferredValue(commentSearch);
+  const deferredReviewSearch = useDeferredValue(reviewSearch);
+
+  const filteredPosts = useMemo(() => {
+    const query = deferredActivitySearch.trim().toLowerCase();
+
+    if (!query) {
+      return posts;
+    }
+
+    return posts.filter((post) =>
+      [post.title, post.body, post.gameTitle, post.author].join(" ").toLowerCase().includes(query),
+    );
+  }, [deferredActivitySearch, posts]);
+
+  const filteredComments = useMemo(() => {
+    const query = deferredCommentSearch.trim().toLowerCase();
+
+    if (!query) {
+      return comments;
+    }
+
+    return comments.filter((comment) =>
+      [comment.body, comment.postTitle, comment.gameTitle, comment.author].join(" ").toLowerCase().includes(query),
+    );
+  }, [comments, deferredCommentSearch]);
+
+  const filteredReviews = useMemo(() => {
+    const query = deferredReviewSearch.trim().toLowerCase();
+
+    if (!query) {
+      return reviews;
+    }
+
+    return reviews.filter((review) => review.title.toLowerCase().includes(query));
+  }, [deferredReviewSearch, reviews]);
 
   if (isLoading) {
     return (
@@ -149,147 +208,230 @@ export default function PublicProfileScreen() {
 
   return (
     <View style={styles.screenWrapper}>
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <View style={styles.hero}>
-        <View style={styles.heroActions}>
-          <Pressable onPress={() => goBackOrFallback(router, "/(tabs)/browse")} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Back</Text>
-          </Pressable>
-          <Pressable onPress={() => router.push("/(tabs)/browse")} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Browse</Text>
-          </Pressable>
-        </View>
-        <View style={styles.avatarWrap}>
-          {profile.avatarUrl ? (
-            <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatarFallback}>
-              <Text style={styles.avatarFallbackText}>{profile.displayName.charAt(0).toUpperCase()}</Text>
+      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+        <View style={styles.hero}>
+          <View style={styles.heroActions}>
+            <Pressable onPress={() => goBackOrFallback(router, "/(tabs)/browse")} style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>Back</Text>
+            </Pressable>
+          </View>
+          <View style={styles.avatarWrap}>
+            {profile.avatarUrl ? (
+              <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarFallback}>
+                <Text style={styles.avatarFallbackText}>{profile.displayName.charAt(0).toUpperCase()}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={[styles.nameText, { color: nameColor }]}>{profile.displayName}</Text>
+          <Text style={styles.usernameText}>@{profile.username}</Text>
+          {title.key !== "none" ? <Text style={styles.titleBadge}>{title.label}</Text> : null}
+          {profile.developerGameIds?.length > 0 ? <Text style={styles.developerBadge}>Verified developer</Text> : null}
+          {profile.bio ? <Text style={styles.bioText}>{profile.bio}</Text> : null}
+          <View style={styles.statRow}>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{friendCount}</Text>
+              <Text style={styles.statLabel}>Friends</Text>
             </View>
-          )}
-        </View>
-        <Text style={[styles.nameText, { color: nameColor }]}>{profile.displayName}</Text>
-        <Text style={styles.usernameText}>@{profile.username}</Text>
-        {title.key !== "none" ? <Text style={styles.titleBadge}>{title.label}</Text> : null}
-        {profile.bio ? <Text style={styles.bioText}>{profile.bio}</Text> : null}
-        <View style={styles.statRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{friendCount}</Text>
-            <Text style={styles.statLabel}>Friends</Text>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{posts.length}</Text>
+              <Text style={styles.statLabel}>Posts</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{reviewCount}</Text>
+              {reviewAvgRating ? (
+                <Text style={styles.statSubValue}>{reviewAvgRating} avg</Text>
+              ) : null}
+              <Text style={styles.statLabel}>Reviewed</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{comments.length}</Text>
+              <Text style={styles.statLabel}>Comments</Text>
+            </View>
           </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{posts.length}</Text>
-            <Text style={styles.statLabel}>Posts</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{reviewCount}</Text>
-            {reviewAvgRating ? (
-              <Text style={styles.statSubValue}>{reviewAvgRating} avg</Text>
-            ) : null}
-            <Text style={styles.statLabel}>Reviewed</Text>
-          </View>
-        </View>
-        {canFollow ? (
-          <View style={styles.friendActionRow}>
-            <Pressable
-              onPress={handleFollowToggle}
-              style={[
-                styles.followButton,
-                displayStatus === "friends" || displayStatus === "outgoing"
-                  ? styles.followButtonMuted
-                  : null,
-              ]}
-            >
-              <Text
+          {canFollow ? (
+            <View style={styles.friendActionRow}>
+              <Pressable
+                onPress={handleFollowToggle}
                 style={[
-                  styles.followButtonText,
+                  styles.followButton,
                   displayStatus === "friends" || displayStatus === "outgoing"
-                    ? styles.followButtonTextMuted
+                    ? styles.followButtonMuted
                     : null,
                 ]}
               >
-                {isSavingFollow ? "Saving..." : primaryFriendActionLabel}
-              </Text>
-            </Pressable>
-            {secondaryFriendActionLabel ? (
-              <Pressable onPress={handleSecondaryFriendAction} style={styles.secondaryFriendButton}>
-                <Text style={styles.secondaryFriendButtonText}>
-                  {isSavingFollow ? "Saving..." : secondaryFriendActionLabel}
+                <Text
+                  style={[
+                    styles.followButtonText,
+                    displayStatus === "friends" || displayStatus === "outgoing"
+                      ? styles.followButtonTextMuted
+                      : null,
+                  ]}
+                >
+                  {isSavingFollow ? "Saving..." : primaryFriendActionLabel}
                 </Text>
               </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
+              {secondaryFriendActionLabel ? (
+                <Pressable onPress={handleSecondaryFriendAction} style={styles.secondaryFriendButton}>
+                  <Text style={styles.secondaryFriendButtonText}>
+                    {isSavingFollow ? "Saving..." : secondaryFriendActionLabel}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
 
-      <SectionCard title="Friends" eyebrow={`${friendCount} connected`}>
-        {friends.length > 0 ? (
-          <View style={styles.friendList}>
-            {friends.map((friend) => (
-              <Pressable
-                key={friend.id}
-                onPress={() => router.push(`/user/${friend.id}`)}
-                style={styles.friendRow}
-              >
-                {friend.avatarUrl ? (
-                  <Image source={{ uri: friend.avatarUrl }} style={styles.friendAvatar} />
-                ) : (
-                  <View style={styles.friendAvatarFallback}>
-                    <Text style={styles.friendAvatarFallbackText}>
-                      {friend.displayName.charAt(0).toUpperCase()}
-                    </Text>
+        <SectionCard title="Friends" eyebrow={`${friendCount} connected`}>
+          {friends.length > 0 ? (
+            <View style={styles.friendList}>
+              {friends.map((friend) => (
+                <Pressable
+                  key={friend.id}
+                  onPress={() => router.push(`/user/${friend.id}`)}
+                  style={styles.friendRow}
+                >
+                  {friend.avatarUrl ? (
+                    <Image source={{ uri: friend.avatarUrl }} style={styles.friendAvatar} />
+                  ) : (
+                    <View style={styles.friendAvatarFallback}>
+                      <Text style={styles.friendAvatarFallbackText}>
+                        {friend.displayName.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.friendCopy}>
+                    <Text style={styles.friendName}>{friend.displayName}</Text>
+                    <Text style={styles.friendUsername}>@{friend.username}</Text>
                   </View>
-                )}
-                <View style={styles.friendCopy}>
-                  <Text style={styles.friendName}>{friend.displayName}</Text>
-                  <Text style={styles.friendUsername}>@{friend.username}</Text>
-                </View>
-              </Pressable>
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.bodyText}>No friends listed on this profile yet.</Text>
-        )}
-      </SectionCard>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.bodyText}>No friends listed on this profile yet.</Text>
+          )}
+        </SectionCard>
 
-      <SectionCard title="Recent activity" eyebrow="Profile feed">
-        {activityLoading ? (
-          <View style={styles.loadingState}>
-            <ActivityIndicator color={theme.colors.accent} />
-          </View>
-        ) : posts.length > 0 ? (
-          <View style={styles.feedList}>
-            {posts.map((post) => (
-              <PostCard
-                key={post.id}
-                onAuthorPress={() => router.push(`/user/${post.userId}`)}
-                onOpenComments={() =>
-                  router.push({ pathname: "/post/[id]", params: { id: post.id, scrollTo: "comments" } })
-                }
-                onPress={() => router.push(`/post/${post.id}`)}
-                post={post}
-              />
-            ))}
-            {activityHasMore ? (
-              <Pressable
-                disabled={activityLoadingMore}
-                onPress={loadMoreActivity}
-                style={[styles.secondaryButton, activityLoadingMore ? { opacity: 0.5 } : null]}
-              >
-                {activityLoadingMore ? (
-                  <ActivityIndicator color={theme.colors.accent} size="small" />
-                ) : (
-                  <Text style={styles.secondaryButtonText}>Load more</Text>
-                )}
-              </Pressable>
-            ) : null}
-          </View>
-        ) : (
-          <Text style={styles.bodyText}>No public posts from this player yet.</Text>
-        )}
-      </SectionCard>
-    </ScrollView>
-    <BottomNavBar />
+        <SectionCard title="Recent activity" eyebrow="Profile feed">
+          <TextInput
+            onChangeText={setActivitySearch}
+            placeholder="Search posts"
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.searchInput}
+            value={activitySearch}
+          />
+          {activityLoading ? (
+            <View style={styles.loadingState}>
+              <ActivityIndicator color={theme.colors.accent} />
+            </View>
+          ) : filteredPosts.length > 0 ? (
+            <View style={styles.feedList}>
+              {filteredPosts.map((post) => (
+                <PostCard
+                  key={post.id}
+                  onAuthorPress={() => router.push(`/user/${post.userId}`)}
+                  onOpenComments={() =>
+                    router.push({ pathname: "/post/[id]", params: { id: post.id, scrollTo: "comments" } })
+                  }
+                  onPress={() => router.push(`/post/${post.id}`)}
+                  post={post}
+                />
+              ))}
+              {activityHasMore ? (
+                <Pressable
+                  disabled={activityLoadingMore}
+                  onPress={loadMoreActivity}
+                  style={[styles.secondaryButton, activityLoadingMore ? { opacity: 0.5 } : null]}
+                >
+                  {activityLoadingMore ? (
+                    <ActivityIndicator color={theme.colors.accent} size="small" />
+                  ) : (
+                    <Text style={styles.secondaryButtonText}>Load more</Text>
+                  )}
+                </Pressable>
+              ) : null}
+            </View>
+          ) : (
+            <Text style={styles.bodyText}>No public posts from this player yet.</Text>
+          )}
+        </SectionCard>
+
+        <SectionCard title="Reviews" eyebrow="Searchable">
+          <TextInput
+            onChangeText={setReviewSearch}
+            placeholder="Search reviews"
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.searchInput}
+            value={reviewSearch}
+          />
+          {reviewsLoading ? (
+            <View style={styles.loadingState}>
+              <ActivityIndicator color={theme.colors.accent} />
+            </View>
+          ) : filteredReviews.length > 0 ? (
+            <View style={styles.reviewList}>
+              {filteredReviews.map((review) => (
+                <Pressable
+                  key={`${review.gameId}:${review.createdAt}`}
+                  onPress={() => router.push(`/game/${review.gameId}`)}
+                  style={styles.reviewRow}
+                >
+                  <Text style={styles.reviewTitle}>{review.title}</Text>
+                  <Text style={styles.reviewMeta}>{review.rating}/10</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.bodyText}>No public reviews from this player yet.</Text>
+          )}
+        </SectionCard>
+
+        <SectionCard title="Comment history" eyebrow="Searchable">
+          <TextInput
+            onChangeText={setCommentSearch}
+            placeholder="Search comments"
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.searchInput}
+            value={commentSearch}
+          />
+          {commentsLoading ? (
+            <View style={styles.loadingState}>
+              <ActivityIndicator color={theme.colors.accent} />
+            </View>
+          ) : filteredComments.length > 0 ? (
+            <View style={styles.commentList}>
+              {filteredComments.map((comment) => (
+                <Pressable
+                  key={comment.id}
+                  onPress={() => router.push(`/post/${comment.postId}`)}
+                  style={styles.commentRow}
+                >
+                  <Text style={styles.commentPostTitle}>{comment.postTitle}</Text>
+                  <Text style={styles.commentBody} numberOfLines={3}>{comment.body}</Text>
+                  <Text style={styles.commentMeta}>{comment.gameTitle}</Text>
+                </Pressable>
+              ))}
+              {commentsHasMore ? (
+                <Pressable
+                  disabled={commentsLoadingMore}
+                  onPress={loadMoreComments}
+                  style={[styles.secondaryButton, commentsLoadingMore ? { opacity: 0.5 } : null]}
+                >
+                  {commentsLoadingMore ? (
+                    <ActivityIndicator color={theme.colors.accent} size="small" />
+                  ) : (
+                    <Text style={styles.secondaryButtonText}>Load more</Text>
+                  )}
+                </Pressable>
+              ) : null}
+            </View>
+          ) : (
+            <Text style={styles.bodyText}>No public comments from this player yet.</Text>
+          )}
+        </SectionCard>
+      </ScrollView>
+      <BottomNavBar />
     </View>
   );
 }
@@ -373,6 +515,13 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.bold,
   },
+  developerBadge: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
   bioText: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSizes.md,
@@ -382,6 +531,8 @@ const styles = StyleSheet.create({
   statRow: {
     flexDirection: "row",
     gap: theme.spacing.md,
+    flexWrap: "wrap",
+    justifyContent: "center",
   },
   statBox: {
     minWidth: 92,
@@ -494,6 +645,61 @@ const styles = StyleSheet.create({
   },
   feedList: {
     gap: theme.spacing.md,
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.surface,
+    color: theme.colors.text,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  reviewList: {
+    gap: theme.spacing.sm,
+  },
+  reviewRow: {
+    borderWidth: theme.borders.width,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.card,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  reviewTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.md,
+    fontWeight: theme.fontWeights.bold,
+  },
+  reviewMeta: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  commentList: {
+    gap: theme.spacing.sm,
+  },
+  commentRow: {
+    borderWidth: theme.borders.width,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.card,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  commentPostTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  commentBody: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: 20,
+  },
+  commentMeta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
   },
   bodyText: {
     color: theme.colors.textPrimary,

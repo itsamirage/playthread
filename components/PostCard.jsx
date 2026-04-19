@@ -94,7 +94,7 @@ export default function PostCard({
           ) : null}
           {post.isDeveloperPost ? (
             <View style={styles.developerPill}>
-              <Text style={styles.developerPillText}>Developer</Text>
+              <Text style={styles.developerPillText}>Verified developer</Text>
             </View>
           ) : null}
           {post.isPinned ? (

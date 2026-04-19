@@ -1,6 +1,6 @@
 # Playthread — Codex Handover Document
 
-**Last updated:** 2026-04-17 (later session)  
+**Last updated:** 2026-04-18 (latest session)  
 **Repo:** https://github.com/itsamirage/playthread  
 **Branch model:** single `main` branch, push directly, no PRs  
 **App Store ID:** 6762104334
@@ -258,6 +258,90 @@ All styling uses `lib/theme.js` — never hardcode colors, spacing, or font size
 ## 8. Post Types
 
 `discussion` | `review` | `screenshot` | `guide` | `tip` | `clip`
+
+---
+
+## 9. Latest Session Notes (2026-04-18)
+
+### Already pushed earlier in this cycle
+
+- `5209b30` — `Improve tab persistence, profile history, and search UX`
+- `b60b264` — `Fix search results for platforms, remakes, and multi-image posts`
+
+### New local changes made this session
+
+- Added `app/settings.jsx`
+  - Dedicated settings screen for:
+    - email change
+    - password reset trigger
+    - NSFW toggle
+    - logout
+- Updated `app/(tabs)/profile.tsx`
+  - Added a Settings button in the profile hero
+  - Shows `Verified developer` chip when `developer_game_ids` exist
+- Reworked `app/user/[id].jsx`
+  - Public profiles now include:
+    - searchable recent activity / posts
+    - searchable review list
+    - searchable comment history
+    - verified developer label
+  - Removed the extra `Browse` button from the public-profile header so the flow relies on back navigation
+- Added shared normalization helpers:
+  - `lib/postNormalization.js`
+  - `lib/postNormalization.mjs`
+  - test: `lib/__tests__/postNormalization.test.mjs`
+  - shared parsing now handles:
+    - serialized `image_urls`
+    - Postgres array strings
+    - string/array `developer_game_ids`
+- Updated `lib/posts.js`
+  - now uses shared post normalization helpers
+- Updated `components/PostCard.jsx`
+  - developer badge label now reads `Verified developer`
+- Updated `lib/userSocial.js`
+  - public profile fetch now includes `developer_game_ids`
+- Updated `lib/profile.js`
+  - current profile fetch now includes `developer_game_ids`
+- Updated search logic:
+  - `lib/gameSearch.js`
+    - alias-aware matching for shorthand queries like `re2`, `ff7r`
+  - `lib/__tests__/gamesSearch.test.mjs`
+    - regression coverage added for shorthand queries
+- Updated `lib/games.js`
+  - removed client-side live search result caching so new announcements surface faster
+- Updated `supabase/functions/igdb-proxy/index.ts`
+  - `discover`, `search`, and `catalog` are no longer cached
+  - `starter`, `detail`, and `covers` still use TTL caching
+- Added release QA doc:
+  - `docs/release-smoke-checklist.md`
+
+### Verification status
+
+- `npm.cmd test` passed
+- `npm.cmd run build:web` passed
+
+### Deployment state
+
+- `igdb-proxy` was deployed manually after these cache/freshness changes
+- User is using Codemagic only for iOS builds/uploads
+- Do not start or rely on EAS production uploads for release flow
+
+### Important operational notes
+
+- The new app-side changes from this session are intended to be committed and pushed together with this note update
+- Before next TestFlight validation, build a fresh Codemagic iOS build from the updated `main` branch after pushing
+- External TestFlight submission previously failed because App Store Connect was missing:
+  - `Beta App Description`
+- The new release checklist in `docs/release-smoke-checklist.md` should be used before external submission
+
+### Answer to the developer-tag question
+
+- There is already a real developer-post permission path
+  - admin can assign `developer_game_ids`
+  - posts in those assigned game communities render the developer badge
+- Current limitation:
+  - assignment is still admin-driven and game-ID based
+  - there is not yet a polished self-serve or search-based admin UX for assigning developer verification
 
 - `review` posts have a `rating` field (1–10, stored halved in DB)
 - `clip` posts use Mux for video (fields: `video_provider`, `video_upload_id`, `video_asset_id`, `video_playback_id`, `video_status`, `video_thumbnail_url`, `video_duration_seconds`)

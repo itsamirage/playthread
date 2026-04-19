@@ -824,7 +824,9 @@ export default function ProfileScreen() {
         ]}
       >
         <View style={styles.heroTopRow}>
-          <View style={styles.heroTopSpacer} />
+          <Pressable onPress={() => router.push("/settings")} style={styles.heroActionButton}>
+            <Text style={styles.heroActionButtonText}>Settings</Text>
+          </Pressable>
           <NotificationInboxButton />
         </View>
         <View style={styles.avatar}>
@@ -859,6 +861,11 @@ export default function ProfileScreen() {
           {profile?.integrity_exempt ? (
             <View style={styles.heroChip}>
               <Text style={styles.heroChipText}>Integrity exempt</Text>
+            </View>
+          ) : null}
+          {(profile?.developer_game_ids ?? []).length > 0 ? (
+            <View style={styles.heroChip}>
+              <Text style={styles.heroChipText}>Verified developer</Text>
             </View>
           ) : null}
         </View>
@@ -1928,6 +1935,21 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "space-between",
     width: "100%",
+  },
+  heroActionButton: {
+    minHeight: 40,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroActionButtonText: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: "800",
   },
   heroTopSpacer: {
     flex: 1,

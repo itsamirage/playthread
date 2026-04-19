@@ -1,8 +1,10 @@
 const IGDB_API_URL = "https://api.igdb.com/v4";
 const COVER_SIZE = "t_cover_big";
 const SCREENSHOT_SIZE = "t_screenshot_big";
-const CACHE_TTL_MS = 1000 * 60 * 5;
 const GAME_BATCH_SIZE = 100;
+const STARTER_CACHE_TTL_MS = 1000 * 60 * 5;
+const DETAIL_CACHE_TTL_MS = 1000 * 60 * 5;
+const COVERS_CACHE_TTL_MS = 1000 * 60 * 30;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -260,14 +262,22 @@ function getCachedValue<T>(cacheKey: string) {
   return cachedEntry.value as T;
 }
 
-function setCachedValue(cacheKey: string, value: unknown) {
+function setCachedValue(cacheKey: string, value: unknown, ttlMs: number) {
+  if (ttlMs <= 0) {
+    return;
+  }
+
   responseCache.set(cacheKey, {
     value,
-    expiresAt: Date.now() + CACHE_TTL_MS,
+    expiresAt: Date.now() + ttlMs,
   });
 }
 
-async function getOrLoadCachedValue<T>(cacheKey: string, loader: () => Promise<T>) {
+async function getOrLoadCachedValue<T>(cacheKey: string, ttlMs: number, loader: () => Promise<T>) {
+  if (ttlMs <= 0) {
+    return loader();
+  }
+
   const cachedValue = getCachedValue<T>(cacheKey);
 
   if (cachedValue) {
@@ -275,7 +285,7 @@ async function getOrLoadCachedValue<T>(cacheKey: string, loader: () => Promise<T
   }
 
   const nextValue = await loader();
-  setCachedValue(cacheKey, nextValue);
+  setCachedValue(cacheKey, nextValue, ttlMs);
   return nextValue;
 }
 
@@ -511,7 +521,7 @@ Deno.serve(async (request) => {
     if (action === "discover") {
       const limit = Math.min(Math.max(Number(body.limit ?? 60), 1), 100);
       const offset = Math.max(Number(body.offset ?? 0), 0);
-      const games = await getOrLoadCachedValue(`discover:${limit}:${offset}`, async () => {
+      const games = await getOrLoadCachedValue(`discover:${limit}:${offset}`, 0, async () => {
         const response = await igdbRequest("games", discoverQuery(limit, offset));
         return response.map(normalizeIgdbGame);
       });
@@ -520,7 +530,7 @@ Deno.serve(async (request) => {
 
     if (action === "starter") {
       const limit = Math.min(Math.max(Number(body.limit ?? 10), 1), 25);
-      const games = await getOrLoadCachedValue(`starter:${limit}`, async () => {
+      const games = await getOrLoadCachedValue(`starter:${limit}`, STARTER_CACHE_TTL_MS, async () => {
         const response = await igdbRequest("games", starterQuery(limit));
         return response.map(normalizeIgdbGame);
       });
@@ -534,7 +544,7 @@ Deno.serve(async (request) => {
         return jsonResponse({ error: "A valid gameId is required." }, 400);
       }
 
-      const game = await getOrLoadCachedValue(`detail:${gameId}`, async () => {
+      const game = await getOrLoadCachedValue(`detail:${gameId}`, DETAIL_CACHE_TTL_MS, async () => {
         const response = await igdbRequest("games", detailQuery(gameId));
         return response[0] ? normalizeIgdbGame(response[0]) : null;
       });
@@ -552,6 +562,7 @@ Deno.serve(async (request) => {
 
       const games = await getOrLoadCachedValue(
         `search:${query.toLowerCase()}:${limit}:${offset}`,
+        0,
         async () => {
           // Run keyword search and name-contains search in parallel.
           // Keyword search handles full-word relevance; name-contains catches
@@ -589,6 +600,7 @@ Deno.serve(async (request) => {
 
       const covers = await getOrLoadCachedValue(
         `covers:${gameIds.sort((a, b) => a - b).join(",")}`,
+        COVERS_CACHE_TTL_MS,
         async () => {
           const response = await igdbRequest("games", coversQuery(gameIds));
           return response.map((game: any) => ({
@@ -613,7 +625,7 @@ Deno.serve(async (request) => {
       }
 
       const cacheKey = `catalog:${facet}:${value.toLowerCase()}:${sortBy}:${limit}`;
-      const games = await getOrLoadCachedValue(cacheKey, async () => {
+      const games = await getOrLoadCachedValue(cacheKey, 0, async () => {
         if (facet === "year") {
           const numericYear = Number(value);
 
