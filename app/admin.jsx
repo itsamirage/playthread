@@ -46,6 +46,7 @@ import {
   formatActionType,
   paginateItems,
 } from "../lib/adminInsights";
+import { useBrowseGames } from "../lib/games";
 import { describeImageModerationDetails } from "../lib/imageModerationPresentation";
 import { getProfileNameColor } from "../lib/profileAppearance";
 import { theme } from "../lib/theme";
@@ -89,6 +90,8 @@ export default function AdminScreen() {
   const [selectedIntegrityEvent, setSelectedIntegrityEvent] = useState(null);
   const [selectedAction, setSelectedAction] = useState(null);
   const [workingKey, setWorkingKey] = useState(null);
+  const [activeDeveloperMemberId, setActiveDeveloperMemberId] = useState(null);
+  const [developerSearchQuery, setDeveloperSearchQuery] = useState("");
   const [retentionDraft, setRetentionDraft] = useState({
     integrityRetentionDays: "90",
     moderationActionRetentionDays: "365",
@@ -127,6 +130,37 @@ export default function AdminScreen() {
     () => buildIntegrityOverview(integrityReport.dailySummary, integrityReport.blockedSummary),
     [integrityReport.blockedSummary, integrityReport.dailySummary]
   );
+  const { games: developerSearchGames, isLoading: developerSearchLoading } = useBrowseGames({
+    query: activeDeveloperMemberId ? developerSearchQuery : "",
+    selectedGenre: "All",
+  });
+
+  const appendDeveloperGameId = (memberId, game) => {
+    if (!game?.id) {
+      return;
+    }
+
+    setDeveloperDrafts((current) => {
+      const currentIds = parseGameIds(current[memberId] ?? "");
+      const nextIds = Array.from(new Set([...currentIds, Number(game.id)]));
+
+      return {
+        ...current,
+        [memberId]: nextIds.join(","),
+      };
+    });
+  };
+
+  const removeDeveloperGameId = (memberId, gameId) => {
+    setDeveloperDrafts((current) => {
+      const currentIds = parseGameIds(current[memberId] ?? "");
+
+      return {
+        ...current,
+        [memberId]: currentIds.filter((value) => value !== Number(gameId)).join(","),
+      };
+    });
+  };
 
   useEffect(() => {
     if (!integritySettings) {
@@ -951,6 +985,43 @@ export default function AdminScreen() {
                     style={styles.textInput}
                     value={developerDrafts[member.id] ?? (member.developerGameIds ?? []).join(",")}
                   />
+                  <TextInput
+                    onChangeText={setDeveloperSearchQuery}
+                    onFocus={() => setActiveDeveloperMemberId(member.id)}
+                    placeholder="Search games to add developer verification"
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={styles.textInput}
+                    value={activeDeveloperMemberId === member.id ? developerSearchQuery : ""}
+                  />
+                  {parseGameIds(developerDrafts[member.id] ?? (member.developerGameIds ?? []).join(",")).length > 0 ? (
+                    <View style={styles.inlineRow}>
+                      {parseGameIds(developerDrafts[member.id] ?? (member.developerGameIds ?? []).join(",")).map((gameId) => (
+                        <Pressable
+                          key={`${member.id}:developer:${gameId}`}
+                          onPress={() => removeDeveloperGameId(member.id, gameId)}
+                          style={styles.secondaryButton}
+                        >
+                          <Text style={styles.secondaryButtonText}>Remove #{gameId}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
+                  {activeDeveloperMemberId === member.id && developerSearchQuery.trim().length >= 2 ? (
+                    <View style={styles.cardList}>
+                      {developerSearchLoading ? (
+                        <Text style={styles.helperText}>Searching games...</Text>
+                      ) : developerSearchGames.slice(0, 6).map((game) => (
+                        <Pressable
+                          key={`${member.id}:developer-result:${game.id}`}
+                          onPress={() => appendDeveloperGameId(member.id, game)}
+                          style={styles.card}
+                        >
+                          <Text style={styles.cardTitle}>{game.title}</Text>
+                          <Text style={styles.cardMeta}>Add IGDB #{game.id}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
                   <Pressable onPress={() => handleSetDeveloperGames(member)} style={styles.secondaryButton}>
                     <Text style={styles.secondaryButtonText}>
                       {workingKey === `developer:${member.id}` ? "Saving..." : "Save developer games"}

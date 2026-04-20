@@ -25,6 +25,7 @@ import { useBrowseGames, useGameDetail } from "../lib/games";
 import { describeIntegrityError } from "../lib/integrity";
 import { goBackOrFallback } from "../lib/navigation";
 import { pickPostImages } from "../lib/postMedia";
+import { clearPostComposerDraft, loadPostComposerDraft, savePostComposerDraft } from "../lib/postComposerDrafts";
 import { createPost, updatePost, useEditablePost } from "../lib/posts";
 import { useRecentGames } from "../lib/recentGames";
 import { theme } from "../lib/theme";
@@ -93,7 +94,10 @@ export default function CreatePostScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [footerHeight, setFooterHeight] = useState(0);
   const [hasLoadedEditValues, setHasLoadedEditValues] = useState(false);
+  const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
+  const [draftRecoveredAt, setDraftRecoveredAt] = useState(null);
   const isEditing = Boolean(editPostId);
+  const draftContextKey = launchedFromGamePage ? `game:${initialGameId}` : "global";
   const availablePostTypes = allowedPostTypes.length > 0 ? postTypes.filter((type) => allowedPostTypes.includes(type)) : postTypes;
   const { recentGames } = useRecentGames(3);
 
@@ -125,6 +129,65 @@ export default function CreatePostScreen() {
     setSpoilerTag(editablePost.spoilerTag ?? "");
     setHasLoadedEditValues(true);
   }, [editablePost, hasLoadedEditValues, isEditing]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (isEditing || hasRestoredDraft) {
+      return undefined;
+    }
+
+    const restoreDraft = async () => {
+      const draft = await loadPostComposerDraft(draftContextKey);
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (draft) {
+        setSelectedGameId(draft.selectedGameId ?? null);
+        setPostType(draft.postType ?? initialType);
+        setTitle(draft.title ?? "");
+        setBody(draft.body ?? "");
+        setRating(draft.rating ?? "8");
+        setIsSpoiler(Boolean(draft.isSpoiler));
+        setSpoilerTag(draft.spoilerTag ?? "");
+        setGameSearch(draft.gameSearch ?? "");
+        setDraftRecoveredAt(draft.updatedAt ?? null);
+      }
+
+      setHasRestoredDraft(true);
+    };
+
+    restoreDraft();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [draftContextKey, hasRestoredDraft, initialType, isEditing]);
+
+  useEffect(() => {
+    if (isEditing || !hasRestoredDraft) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      void savePostComposerDraft(draftContextKey, {
+        selectedGameId,
+        postType,
+        title,
+        body,
+        rating,
+        isSpoiler,
+        spoilerTag,
+        gameSearch,
+      });
+    }, 300);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [body, draftContextKey, gameSearch, hasRestoredDraft, isEditing, isSpoiler, postType, rating, selectedGameId, spoilerTag, title]);
 
   useEffect(() => {
     const handleShow = (event) => {
@@ -234,6 +297,35 @@ export default function CreatePostScreen() {
   const searchHelperText = gameSearch.trim()
     ? "Pick a game from the results below."
     : "Search for a game to attach this post to. Your last 3 visited games appear below.";
+  const validationNotes = useMemo(() => {
+    const notes = [];
+
+    if (!selectedGame) {
+      notes.push("Pick a game or community before publishing.");
+    }
+
+    if (!body.trim() && postType !== "clip") {
+      notes.push("Add body text so the post is not empty.");
+    }
+
+    if (postType === "review" && !rating) {
+      notes.push("Choose a review score.");
+    }
+
+    if (postType === "clip" && !selectedClip && !isEditing) {
+      notes.push("Add a clip before publishing a clip post.");
+    }
+
+    if (postType === "screenshot" && selectedImages.length === 0) {
+      notes.push("Add images if you want this to publish as a screenshot post.");
+    }
+
+    if (isSpoiler && !spoilerTag.trim()) {
+      notes.push("Optional: add a spoiler label so readers know what is being spoiled.");
+    }
+
+    return notes;
+  }, [body, isEditing, isSpoiler, postType, rating, selectedClip, selectedGame, selectedImages.length, spoilerTag]);
 
   const handleSubmit = async () => {
     Keyboard.dismiss();
@@ -250,6 +342,16 @@ export default function CreatePostScreen() {
 
     if (!body.trim() && postType !== "clip") {
       Alert.alert("Write something", "Add some text before posting.");
+      return;
+    }
+
+    if (postType === "clip" && !selectedClip && !isEditing) {
+      Alert.alert("Add a clip", "Choose a clip before publishing a clip post.");
+      return;
+    }
+
+    if (postType === "screenshot" && selectedImages.length === 0) {
+      Alert.alert("Add images", "Choose at least one image before publishing a screenshot post.");
       return;
     }
 
@@ -292,6 +394,7 @@ export default function CreatePostScreen() {
         );
       }
 
+      await clearPostComposerDraft(draftContextKey);
       router.replace(`/game/${selectedGame.id}`);
     } finally {
       setIsSubmitting(false);
@@ -527,6 +630,33 @@ export default function CreatePostScreen() {
           </SectionCard>
 
           <SectionCard title="Post details" eyebrow="Write it">
+            {draftRecoveredAt ? (
+              <View style={styles.draftBanner}>
+                <Text style={styles.draftBannerText}>
+                  Restored a saved draft{draftRecoveredAt ? ` from ${new Date(draftRecoveredAt).toLocaleString()}` : ""}.
+                </Text>
+                <Pressable
+                  onPress={async () => {
+                    setTitle("");
+                    setBody("");
+                    setRating("8");
+                    setIsSpoiler(false);
+                    setSpoilerTag("");
+                    setSelectedImages([]);
+                    setSelectedClip(null);
+                    setGameSearch("");
+                    setDraftRecoveredAt(null);
+                    await clearPostComposerDraft(draftContextKey);
+                  }}
+                  style={({ pressed }) => [
+                    styles.inlineLinkButton,
+                    pressed ? styles.buttonPressed : null,
+                  ]}
+                >
+                  <Text style={styles.inlineLinkText}>Discard draft</Text>
+                </Pressable>
+              </View>
+            ) : null}
             <TextInput
               blurOnSubmit
               onChangeText={setTitle}
@@ -603,6 +733,14 @@ export default function CreatePostScreen() {
               <Text style={styles.helperText}>
                 Clip captions are optional. Upload a video and add context if you want it.
               </Text>
+            ) : null}
+            {validationNotes.length > 0 ? (
+              <View style={styles.validationCard}>
+                <Text style={styles.validationTitle}>Before you publish</Text>
+                {validationNotes.map((note) => (
+                  <Text key={note} style={styles.validationNote}>- {note}</Text>
+                ))}
+              </View>
             ) : null}
           </SectionCard>
 
@@ -967,6 +1105,37 @@ const styles = StyleSheet.create({
     color: theme.colors.accent,
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.bold,
+  },
+  draftBanner: {
+    gap: theme.spacing.xs,
+    backgroundColor: "rgba(0,229,255,0.08)",
+    borderColor: "rgba(0,229,255,0.26)",
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    padding: theme.spacing.md,
+  },
+  draftBannerText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: 20,
+  },
+  validationCard: {
+    gap: theme.spacing.xs,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    padding: theme.spacing.md,
+  },
+  validationTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  validationNote: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: 20,
   },
   imageCard: {
     gap: theme.spacing.md,

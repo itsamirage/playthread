@@ -17,7 +17,12 @@ import GameCard from "../../components/GameCard";
 import PostCard from "../../components/PostCard";
 import NotificationInboxButton from "../../components/NotificationInboxButton";
 import SectionCard from "../../components/SectionCard";
-import { searchPlatformCommunities } from "../../lib/communityHubs";
+import {
+  GENERAL_DISCUSSION,
+  getFeaturedCommunities,
+  PLATFORM_FAMILIES,
+  searchPlatformCommunities,
+} from "../../lib/communityHubs";
 import { useContentPreferences } from "../../lib/contentPreferences";
 import { useFollows } from "../../lib/follows";
 import { useBrowseGames } from "../../lib/games";
@@ -196,6 +201,7 @@ export default function BrowseScreen() {
   const [query, setQuery] = useState("");
   const [searchMode, setSearchMode] = useState("game");
   const [activePlatformFilter, setActivePlatformFilter] = useState<string | null>(null);
+  const [activePlatformFamily, setActivePlatformFamily] = useState("All");
   const [activeRatingFilter, setActiveRatingFilter] = useState<string | null>(null);
   const [gameSort, setGameSort] = useState("popular");
   const scrollRef = useRef(null);
@@ -208,6 +214,7 @@ export default function BrowseScreen() {
     hideMatureGames: preferences.hideMatureGames,
   });
   const cleanQuery = query.trim().toLowerCase();
+  const featuredCommunities = getFeaturedCommunities(5);
   const { results: playerResults, isLoading: playersLoading } = useCreatorSearch(
     searchMode === "player" ? query : ""
   );
@@ -218,6 +225,7 @@ export default function BrowseScreen() {
     setQuery("");
     setSearchMode("game");
     setActivePlatformFilter(null);
+    setActivePlatformFamily("All");
     setActiveRatingFilter(null);
     setGameSort("popular");
   };
@@ -246,13 +254,14 @@ export default function BrowseScreen() {
     ? searchPlatformCommunities(cleanQuery).map((platform) => ({
         key: platform.slug,
         label: platform.title,
+        family: platform.family,
         count: null,
         hint: platform.subtitle,
         route: {
           pathname: "/platforms",
           params: { q: platform.title },
         },
-      }))
+      })).filter((platform) => activePlatformFamily === "All" || platform.family === activePlatformFamily)
     : buildFacetResults(games, searchMode, cleanQuery);
   const titleForMode =
     searchMode === "game"
@@ -431,12 +440,31 @@ export default function BrowseScreen() {
           </View>
         ) : null}
         {searchMode === "platform" ? (
-          <Pressable
-            onPress={() => router.push({ pathname: "/platforms", params: cleanQuery ? { q: query.trim() } : {} })}
-            style={styles.platformJumpButton}
-          >
-            <Text style={styles.platformJumpButtonText}>Open platform pages</Text>
-          </Pressable>
+          <View style={styles.filterSection}>
+            <View style={styles.filterRow}>
+              {PLATFORM_FAMILIES.map((family) => {
+                const isActive = activePlatformFamily === family;
+
+                return (
+                  <Pressable
+                    key={family}
+                    onPress={() => setActivePlatformFamily(family)}
+                    style={[styles.filterChip, isActive ? styles.filterChipActive : null]}
+                  >
+                    <Text style={[styles.filterChipText, isActive ? styles.filterChipTextActive : null]}>
+                      {family}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable
+              onPress={() => router.push({ pathname: "/platforms", params: cleanQuery ? { q: query.trim() } : {} })}
+              style={styles.platformJumpButton}
+            >
+              <Text style={styles.platformJumpButtonText}>Open platform pages</Text>
+            </Pressable>
+          </View>
         ) : null}
 
         <View style={styles.toolbarRow}>
@@ -465,6 +493,37 @@ export default function BrowseScreen() {
           </Text>
         ) : null}
       </SectionCard>
+
+          {!cleanQuery && (searchMode === "game" || searchMode === "platform") ? (
+            <SectionCard title="Jump in fast" eyebrow="Communities">
+              <Text style={styles.emptyText}>
+                Start broad with a gaming hub, then narrow into a platform or game once you know where the thread belongs.
+              </Text>
+              <View style={styles.featuredCommunityList}>
+                <Pressable
+                  onPress={() => router.push(`/game/${GENERAL_DISCUSSION.id}`)}
+                  style={({ pressed }) => [styles.facetCard, pressed ? styles.pressedCard : null]}
+                >
+                  <Text style={styles.facetTitle}>{GENERAL_DISCUSSION.title}</Text>
+                  <Text style={styles.facetMeta}>Community hub</Text>
+                  <Text style={styles.facetHint}>{GENERAL_DISCUSSION.subtitle}</Text>
+                </Pressable>
+                {featuredCommunities
+                  .filter((community) => community.id !== GENERAL_DISCUSSION.id)
+                  .map((community) => (
+                    <Pressable
+                      key={community.id}
+                      onPress={() => router.push(`/game/${community.id}`)}
+                      style={({ pressed }) => [styles.facetCard, pressed ? styles.pressedCard : null]}
+                    >
+                      <Text style={styles.facetTitle}>{community.title}</Text>
+                      <Text style={styles.facetMeta}>{community.eyebrow}</Text>
+                      <Text style={styles.facetHint}>{community.subtitle}</Text>
+                    </Pressable>
+                  ))}
+              </View>
+            </SectionCard>
+          ) : null}
 
           <View style={styles.resultsHeader}>
             <View style={styles.resultsText}>
@@ -792,6 +851,9 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   postResultsList: {
+    gap: theme.spacing.md,
+  },
+  featuredCommunityList: {
     gap: theme.spacing.md,
   },
   facetCard: {

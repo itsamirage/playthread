@@ -1,6 +1,6 @@
 # Playthread — Codex Handover Document
 
-**Last updated:** 2026-04-18 (latest session)  
+**Last updated:** 2026-04-19 (latest session)  
 **Repo:** https://github.com/itsamirage/playthread  
 **Branch model:** single `main` branch, push directly, no PRs  
 **App Store ID:** 6762104334
@@ -155,6 +155,8 @@ npx supabase db push
 ```
 The most recent migration is `202604162200_add_now_playing_game_ids.sql`.
 
+`Core memory:` do not treat `db push` or manual Supabase deploys as part of the normal release flow. The only approved deployment path for shipped app releases is Codemagic.
+
 ### Edge Functions
 Deploy all functions with:
 ```bash
@@ -168,6 +170,8 @@ npx supabase functions deploy trusted-coin
 ---
 
 ## 5. Build & TestFlight Pipeline (Codemagic)
+
+`Core memory:` Codemagic is the only deployment path to use for PlayThread releases. Do not switch the release flow to EAS submit/upload or any other deployment system unless the user explicitly changes that decision.
 
 Pushes to `main` do **not** auto-trigger a build. Builds are triggered manually in the Codemagic dashboard.
 
@@ -323,8 +327,9 @@ All styling uses `lib/theme.js` — never hardcode colors, spacing, or font size
 ### Deployment state
 
 - `igdb-proxy` was deployed manually after these cache/freshness changes
-- User is using Codemagic only for iOS builds/uploads
+- User is using Codemagic as the only approved release/deployment path
 - Do not start or rely on EAS production uploads for release flow
+- Do not treat manual Supabase deploy steps as routine release instructions; only mention them when the user explicitly asks for backend rollout work
 
 ### Important operational notes
 

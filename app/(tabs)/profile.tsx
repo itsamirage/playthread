@@ -416,6 +416,13 @@ export default function ProfileScreen() {
   const selectedShowcaseItems = selectedShowcaseIds
     .map((id) => selectedCatalogItems.find((item) => item.id === id))
     .filter(Boolean);
+  const verifiedDeveloperGames = useMemo(
+    () =>
+      followedGames.filter((game) =>
+        (profile?.developer_game_ids ?? []).includes(Number(game.id)),
+      ),
+    [followedGames, profile?.developer_game_ids],
+  );
   const scrollHandlers = useTabReselectScroll("profile", {
     scrollRef,
     onRefresh: () => {
@@ -539,12 +546,7 @@ export default function ProfileScreen() {
     }
 
     try {
-      const { error } = await saveProfileTitle(session.user.id, titleKey);
-
-      if (error) {
-        throw error;
-      }
-
+      await saveProfileTitle(session.user.id, titleKey);
       await reloadProfile?.();
     } catch (error) {
       Alert.alert("Title update failed", error instanceof Error ? error.message : "Could not save that title.");
@@ -1282,6 +1284,7 @@ export default function ProfileScreen() {
           <View style={styles.showcaseList}>
             {showcaseItems.slice(0, 3).map((item) => (
               <View key={item.id} style={styles.showcaseCard}>
+                {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.showcaseImage} /> : null}
                 <View style={styles.showcaseTextBlock}>
                   <Text style={styles.showcaseTitle}>{item.title}</Text>
                   <Text style={styles.showcaseMeta}>
@@ -1595,6 +1598,36 @@ export default function ProfileScreen() {
         ) : null}
       </SectionCard>
 
+      {(profile?.developer_game_ids ?? []).length > 0 ? (
+        <SectionCard title="Developer verification" eyebrow="Verified">
+          <Text style={styles.accountDescription}>
+            This account is verified for {(profile?.developer_game_ids ?? []).length} game communities.
+          </Text>
+          {verifiedDeveloperGames.length > 0 ? (
+            <View style={styles.nowPlayingList}>
+              {verifiedDeveloperGames.slice(0, 6).map((game) => (
+                <Pressable
+                  key={`developer:${game.id}`}
+                  onPress={() => router.push(`/game/${game.id}`)}
+                  style={({ pressed }) => [styles.nowPlayingCard, pressed ? styles.buttonPressed : null]}
+                >
+                  {game.coverUrl ? (
+                    <Image source={{ uri: game.coverUrl }} style={styles.nowPlayingCover} />
+                  ) : (
+                    <View style={[styles.nowPlayingCover, styles.nowPlayingFallbackCover]}>
+                      <Text style={styles.followFallbackText}>{game.title.charAt(0).toUpperCase()}</Text>
+                    </View>
+                  )}
+                  <Text style={styles.nowPlayingTitle} numberOfLines={2}>{game.title}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.bodyText}>Follow one of your verified games to surface quick links here.</Text>
+          )}
+        </SectionCard>
+      ) : null}
+
       {nowPlayingIds.length > 0 ? (
         <SectionCard title="Currently playing" eyebrow="Now playing">
           <View style={styles.nowPlayingList}>
@@ -1614,6 +1647,11 @@ export default function ProfileScreen() {
                     </View>
                   )}
                   <Text style={styles.nowPlayingTitle} numberOfLines={2}>{game.title}</Text>
+                  {reviewsByGameId.has(String(game.id)) ? (
+                    <Text style={styles.nowPlayingMeta}>
+                      Your rating: {reviewsByGameId.get(String(game.id))}/10
+                    </Text>
+                  ) : null}
                 </Pressable>
               ))}
           </View>
@@ -2299,13 +2337,22 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   showcaseCard: {
+    flexDirection: "row",
+    gap: theme.spacing.md,
     backgroundColor: "rgba(255,255,255,0.03)",
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     borderWidth: theme.borders.width,
     padding: theme.spacing.md,
   },
+  showcaseImage: {
+    width: 56,
+    height: 56,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
   showcaseTextBlock: {
+    flex: 1,
     gap: theme.spacing.xs,
   },
   showcaseTitle: {
@@ -2499,6 +2546,11 @@ const styles = StyleSheet.create({
   nowPlayingTitle: {
     color: theme.colors.textSecondary,
     fontSize: 11,
+    textAlign: "center",
+  },
+  nowPlayingMeta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
     textAlign: "center",
   },
   followList: {
