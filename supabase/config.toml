@@ -33,3 +33,9 @@ verify_jwt = false
 
 [functions.trusted-follow]
 verify_jwt = false
+
+[functions.trusted-user]
+verify_jwt = false
+
+[functions.integrity-retention]
+verify_jwt = false

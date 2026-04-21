@@ -265,7 +265,126 @@ All styling uses `lib/theme.js` — never hardcode colors, spacing, or font size
 
 ---
 
-## 9. Latest Session Notes (2026-04-18)
+## 9. Latest Session Notes (2026-04-21)
+
+### Engineering priorities completed
+
+- Client-side write audit was completed for the remaining high-risk viewer-owned write paths.
+- Added `trusted-user` Edge Function for:
+  - game follow / unfollow / play-status updates
+  - followed-game cover backfills
+  - game ratings
+  - notification preferences
+  - notification read / mark-all-read
+- Updated app helpers to use `trusted-user`:
+  - `lib/follows.js`
+  - `lib/gameRatings.js`
+  - `lib/notifications.js`
+- Disabled the old client-side `moderation_flags` insert fallback in `lib/moderation.js`; moderation flag creation should stay on trusted server paths.
+- Added `integrity-retention` Edge Function for scheduled retention/reporting operations.
+- Added retention operations docs:
+  - `docs/retention-operations.md`
+- Added scheduled-retention migration:
+  - `supabase/migrations/202604210900_schedule_integrity_retention.sql`
+
+### Live deployment state
+
+- `trusted-user` deployed to Supabase project `zippqumynxivnhhmvblc`.
+- `integrity-retention` deployed to Supabase project `zippqumynxivnhhmvblc`.
+- Retention secrets set in Supabase Edge Function secrets:
+  - `RETENTION_CRON_SECRET`
+  - `INTEGRITY_RETENTION_DAYS=90`
+  - `MODERATION_ACTION_RETENTION_DAYS=365`
+  - `INTEGRITY_REPORT_DAYS=14`
+- Matching cron secret stored in Supabase Vault as `retention_cron_secret`.
+- Daily DB cron job is live:
+  - job name: `playthread-integrity-retention-daily`
+  - schedule: `17 8 * * *` UTC
+  - target: `https://zippqumynxivnhhmvblc.supabase.co/functions/v1/integrity-retention`
+- Live `pg_net` smoke invocation returned HTTP `200` and confirmed:
+  - retention ran successfully
+  - zero rows deleted at the time of the smoke test
+  - recent `integrity_daily_summary` rows returned
+
+### Verification status
+
+- `npm.cmd test` passed
+- `npm.cmd run build:web` passed after the trusted-user and retention changes
+- Final local test rerun after scheduler setup passed: 83 tests
+- Broad client mutation scan now only reports trusted server-side helper writes in `lib/trustedAdminService.*`
+
+### Operational notes
+
+- The known legacy Supabase migration ledger issue still applies. If `db push` reports remote shorthand migrations, use:
+
+```powershell
+npm.cmd exec supabase -- migration repair --status reverted 20260408 20260410 20260411
+npm.cmd exec supabase -- db push --include-all
+```
+
+- This repair was used successfully before applying `202604210900_schedule_integrity_retention.sql`.
+- Do not commit or document the actual retention secret value.
+- `trusted-user` is now required for production app builds that include the updated client helpers.
+
+### Previous Session Notes (2026-04-19)
+
+### Latest pushed commit
+
+- `a97ef50` - `Improve composer, discovery, verification, and profiles`
+
+### New work pushed in `a97ef50`
+
+- Composer:
+  - Added local draft autosave / restore via `lib/postComposerDrafts.js`
+  - `app/create-post.jsx` now shows a recovered-draft banner, discard action, and publish-readiness checklist
+  - Clip posts now require a clip before publish; screenshot posts now require at least one image
+- Trusted profile writes:
+  - `trusted-profile` now supports `select_title`, `repair_username`, and `update_showcase`
+  - `saveProfileTitle` and username repair moved off direct client table updates
+  - `saveProfileShowcase` now uses `trusted-profile` instead of direct delete/insert to `profile_showcase_items`
+  - Added tests for profile title selection, username repair, and trusted profile service paths
+- Community discovery:
+  - Browse now includes a `Jump in fast` community entry section
+  - Platform search now supports platform-family filtering through `PLATFORM_FAMILIES`
+  - `lib/communityHubs.js` now exposes `getFeaturedCommunities`
+- Developer verification:
+  - Admin screen can search games and add/remove developer verification game IDs without manually typing every ID
+  - Verified profiles now have a dedicated profile section showing followed verified games when available
+- Profile depth:
+  - Showcase cards now render artwork when available
+  - Currently-playing cards show the viewer's own rating when available
+
+### Verification status
+
+- `npm.cmd test` passed
+- `npm.cmd run build:web` passed
+
+### Deployment state
+
+- User is using Codemagic as the only approved release/deployment path
+- Do not start or rely on EAS production uploads for release flow
+- Do not treat manual Supabase deploy steps as routine release instructions; only mention them when the user explicitly asks for backend rollout work
+- New `trusted-profile` behavior is in the repo and pushed; production availability depends on the user's Codemagic/backend release process
+
+### Important operational notes
+
+- Before next TestFlight validation, build a fresh Codemagic iOS build from the updated `main` branch after pushing
+- External TestFlight submission previously failed because App Store Connect was missing:
+  - `Beta App Description`
+- The release checklist in `docs/release-smoke-checklist.md` should be used before external submission
+
+### Developer verification state
+
+- There is already a real developer-post permission path
+  - admin can assign `developer_game_ids`
+  - posts in those assigned game communities render the developer badge
+- Current admin UX:
+  - admin can search games while editing a member and add/remove developer-game IDs
+  - assignment remains admin-driven and game-ID based
+- Current limitation:
+  - there is not yet self-serve developer verification or external proof review
+
+### Previous Session Notes (2026-04-18)
 
 ### Already pushed earlier in this cycle
 
@@ -424,7 +543,7 @@ All of this is committed and live on `main` (latest commit in this session: `3be
 
 - **No Android build pipeline** — Codemagic is iOS only; Android not yet configured
 - **No automated tests for UI** — only unit tests in `lib/__tests__/` via `npm test`
-- **Client-side write audit still incomplete** — some write paths remain outside `trusted-*` functions and should be migrated to fully match the architecture rule
+- **UI/device smoke coverage still needed** — trusted-user write flows and composer/media flows should be validated on a real iPhone/TestFlight build
 - **Platform/community system still needs product refinement** — the generic discussion/platform spaces are in, but taxonomy and follow/discovery UX will likely need another pass
 - **Composer/device smoke testing** — latest create-post search fix is verified by tests/export build, but still needs manual device validation across discussion/review/image/clip flows
 
