@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
@@ -452,11 +453,16 @@ export default function PostCommentsThread({
           </Pressable>
           {!editingCommentId ? (
             <Pressable
+              accessibilityLabel="Attach image"
               disabled={isSubmitting}
               onPress={handlePickImage}
-              style={styles.imagePickerButton}
+              style={({ pressed }) => [
+                styles.imagePickerButton,
+                pressed && !isSubmitting ? styles.buttonPressed : null,
+                isSubmitting ? styles.imagePickerButtonDisabled : null,
+              ]}
             >
-              <Text style={styles.imagePickerButtonText}>Image</Text>
+              <FontAwesome color={theme.colors.accent} name="image" size={16} />
             </Pressable>
           ) : null}
           <Pressable
@@ -730,9 +736,9 @@ const styles = StyleSheet.create({
   },
   composerFooter: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   counterText: {
     color: theme.colors.textMuted,
@@ -799,7 +805,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderWidth: theme.borders.width,
   },
-  imagePickerButtonText: {
-    fontSize: 16,
+  imagePickerButtonDisabled: {
+    opacity: 0.6,
   },
 });
