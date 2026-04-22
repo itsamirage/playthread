@@ -1,4 +1,5 @@
 import { BlurView } from "expo-blur";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Image as ExpoImage } from "expo-image";
 import { useRef, useState } from "react";
 import {
@@ -346,9 +347,18 @@ export default function PostCard({
                   event.stopPropagation?.();
                   handleSavePost?.(post);
                 }}
-                style={({ pressed }) => [styles.commentButton, pressed ? styles.cardPressed : null]}
+                style={({ pressed }) => [
+                  styles.footerIconAction,
+                  isPostSaved ? styles.footerIconActionSaved : null,
+                  pressed ? styles.cardPressed : null,
+                ]}
               >
-                <Text style={[styles.footerText, styles.commentButtonText]}>
+                <FontAwesome
+                  color={isPostSaved ? theme.colors.background : theme.colors.accent}
+                  name={isPostSaved ? "bookmark" : "bookmark-o"}
+                  size={13}
+                />
+                <Text style={[styles.footerText, styles.commentButtonText, isPostSaved ? styles.savedButtonText : null]}>
                   {isPostSaved ? "Saved" : "Save"}
                 </Text>
               </Pressable>
@@ -649,9 +659,15 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   imageCaption: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    borderWidth: theme.borders.width,
     color: theme.colors.textSecondary,
     fontSize: theme.fontSizes.sm,
     lineHeight: 20,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
   },
   fillImage: {
     width: "100%",
@@ -830,8 +846,27 @@ const styles = StyleSheet.create({
   commentButton: {
     alignItems: "flex-end",
   },
+  footerIconAction: {
+    alignItems: "center",
+    borderColor: "rgba(0,229,255,0.32)",
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    flexDirection: "row",
+    gap: theme.spacing.xs,
+    minHeight: 32,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  footerIconActionSaved: {
+    backgroundColor: theme.colors.accent,
+    borderColor: theme.colors.accent,
+  },
   commentButtonText: {
     color: theme.colors.accent,
+  },
+  savedButtonText: {
+    color: theme.colors.background,
+    fontWeight: theme.fontWeights.bold,
   },
   reportButtonText: {
     color: "#ff8a8a",

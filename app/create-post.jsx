@@ -857,7 +857,12 @@ export default function CreatePostScreen() {
                 <View style={styles.imagePreviewGrid}>
                   {selectedImages.map((image, index) => (
                     <View key={`${image.uri}:${index}`} style={styles.imagePreviewTile}>
-                      <Image source={{ uri: image.uri }} style={styles.imagePreview} />
+                      <View style={styles.imagePreviewFrame}>
+                        <Image source={{ uri: image.uri }} style={styles.imagePreview} />
+                        <View style={styles.imagePreviewBadge}>
+                          <Text style={styles.imagePreviewBadgeText}>{index + 1}</Text>
+                        </View>
+                      </View>
                       <TextInput
                         onChangeText={(value) =>
                           setImageCaptions((currentValue) => {
@@ -1231,13 +1236,33 @@ const styles = StyleSheet.create({
     width: "48%",
     gap: theme.spacing.xs,
   },
+  imagePreviewFrame: {
+    position: "relative",
+  },
   imagePreview: {
     width: "100%",
     aspectRatio: 1,
     borderRadius: theme.radius.md,
     backgroundColor: "rgba(255,255,255,0.03)",
   },
+  imagePreviewBadge: {
+    alignItems: "center",
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.pill,
+    height: 24,
+    justifyContent: "center",
+    position: "absolute",
+    right: theme.spacing.xs,
+    top: theme.spacing.xs,
+    width: 24,
+  },
+  imagePreviewBadgeText: {
+    color: theme.colors.background,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+  },
   captionInput: {
+    backgroundColor: "rgba(255,255,255,0.03)",
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     borderWidth: theme.borders.width,

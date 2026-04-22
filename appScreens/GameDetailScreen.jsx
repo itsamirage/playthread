@@ -67,6 +67,30 @@ const THREAD_PRESETS = [
   { key: "guides", label: "Guides", sort: "top", types: ["guide", "tip"] },
 ];
 
+const RESOURCE_KIND_OPTIONS = [
+  { key: "guide", label: "Guide" },
+  { key: "faq", label: "FAQ" },
+  { key: "tip", label: "Tip" },
+  { key: "build", label: "Build" },
+  { key: "link", label: "Link" },
+];
+
+function getResourceHost(url) {
+  if (!url) {
+    return "";
+  }
+
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function getResourceKindLabel(kind) {
+  return RESOURCE_KIND_OPTIONS.find((option) => option.key === kind)?.label ?? "Resource";
+}
+
 export default function GameDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -108,6 +132,8 @@ export default function GameDetailScreen() {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [resourceTitle, setResourceTitle] = useState("");
   const [resourceUrl, setResourceUrl] = useState("");
+  const [resourceBody, setResourceBody] = useState("");
+  const [resourceKind, setResourceKind] = useState("guide");
   const reactingRef = useRef(false);
 
   const followStatus = getFollowStatus(params.id);
@@ -631,12 +657,23 @@ export default function GameDetailScreen() {
             {resources.map((resource) => (
               <Pressable
                 key={resource.id}
+                disabled={!resource.url}
                 onPress={() => resource.url ? Linking.openURL(resource.url) : null}
-                style={styles.resourceCard}
+                style={({ pressed }) => [styles.resourceCard, pressed ? styles.buttonPressed : null]}
               >
-                <Text style={styles.resourceTitle}>{resource.title}</Text>
-                <Text style={styles.resourceMeta}>{resource.kind} | @{resource.author}</Text>
+                <View style={styles.resourceHeader}>
+                  <View style={styles.resourceTitleBlock}>
+                    <Text style={styles.resourceTitle}>{resource.title}</Text>
+                    <Text style={styles.resourceMeta}>
+                      @{resource.author}{getResourceHost(resource.url) ? ` | ${getResourceHost(resource.url)}` : ""}
+                    </Text>
+                  </View>
+                  <View style={styles.resourceKindPill}>
+                    <Text style={styles.resourceKindText}>{getResourceKindLabel(resource.kind)}</Text>
+                  </View>
+                </View>
                 {resource.body ? <Text style={styles.resourceBody} numberOfLines={2}>{resource.body}</Text> : null}
+                {resource.url ? <Text style={styles.resourceLinkText}>Open resource</Text> : null}
               </Pressable>
             ))}
           </View>
@@ -659,12 +696,52 @@ export default function GameDetailScreen() {
               style={styles.resourceInput}
               value={resourceUrl}
             />
+            <TextInput
+              multiline
+              onChangeText={setResourceBody}
+              placeholder="Optional note"
+              placeholderTextColor={theme.colors.textMuted}
+              style={[styles.resourceInput, styles.resourceBodyInput]}
+              value={resourceBody}
+            />
+            <View style={styles.resourceKindRow}>
+              {RESOURCE_KIND_OPTIONS.map((option) => {
+                const isActive = resourceKind === option.key;
+                return (
+                  <Pressable
+                    key={option.key}
+                    onPress={() => setResourceKind(option.key)}
+                    style={({ pressed }) => [
+                      styles.resourceKindChoice,
+                      isActive ? styles.resourceKindChoiceActive : null,
+                      pressed ? styles.buttonPressed : null,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.resourceKindChoiceText,
+                        isActive ? styles.resourceKindChoiceTextActive : null,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             <Pressable
               onPress={async () => {
                 try {
-                  await addResource({ title: resourceTitle, url: resourceUrl, kind: "guide" });
+                  await addResource({
+                    title: resourceTitle,
+                    url: resourceUrl,
+                    body: resourceBody,
+                    kind: resourceKind,
+                  });
                   setResourceTitle("");
                   setResourceUrl("");
+                  setResourceBody("");
+                  setResourceKind("guide");
                 } catch (nextError) {
                   Alert.alert("Resource not added", nextError?.message ?? "Could not add that resource.");
                 }
@@ -1299,8 +1376,18 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     borderWidth: theme.borders.width,
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
     padding: theme.spacing.md,
+  },
+  resourceHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    justifyContent: "space-between",
+  },
+  resourceTitleBlock: {
+    flex: 1,
+    gap: 2,
   },
   resourceTitle: {
     color: theme.colors.textPrimary,
@@ -1308,6 +1395,20 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeights.bold,
   },
   resourceMeta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+    textTransform: "uppercase",
+  },
+  resourceKindPill: {
+    backgroundColor: "rgba(0,229,255,0.12)",
+    borderColor: "rgba(0,229,255,0.32)",
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+  },
+  resourceKindText: {
     color: theme.colors.accent,
     fontSize: theme.fontSizes.xs,
     fontWeight: theme.fontWeights.bold,
@@ -1318,8 +1419,14 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.sm,
     lineHeight: 20,
   },
+  resourceLinkText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
   resourceComposer: {
     gap: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
   },
   resourceInput: {
     borderWidth: theme.borders.width,
@@ -1329,6 +1436,34 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
+  },
+  resourceBodyInput: {
+    minHeight: 76,
+    textAlignVertical: "top",
+  },
+  resourceKindRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  resourceKindChoice: {
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  resourceKindChoiceActive: {
+    backgroundColor: theme.colors.accent,
+    borderColor: theme.colors.accent,
+  },
+  resourceKindChoiceText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  resourceKindChoiceTextActive: {
+    color: theme.colors.background,
   },
   communityChip: {
     backgroundColor: "rgba(255,255,255,0.03)",

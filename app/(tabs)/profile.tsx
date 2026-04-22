@@ -1780,9 +1780,11 @@ export default function ProfileScreen() {
           <View style={styles.feedList}>
             {savedPosts.map((post) => (
               <View key={`saved:${post.id}`} style={styles.savedPostWrap}>
-                <Text style={styles.savedCollectionLabel}>
-                  {savedCollectionByPostId.get(String(post.id)) ?? "General"}
-                </Text>
+                <View style={styles.savedCollectionPill}>
+                  <Text style={styles.savedCollectionLabel}>
+                    Saved in {savedCollectionByPostId.get(String(post.id)) ?? "General"}
+                  </Text>
+                </View>
                 <PostCard
                   isSaved
                   onAuthorPress={() => router.push(`/user/${post.userId}`)}
@@ -2266,8 +2268,16 @@ const styles = StyleSheet.create({
   savedPostWrap: {
     gap: theme.spacing.xs,
   },
-  savedCollectionLabel: {
+  savedCollectionPill: {
     alignSelf: "flex-start",
+    backgroundColor: "rgba(0,229,255,0.12)",
+    borderColor: "rgba(0,229,255,0.32)",
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+  },
+  savedCollectionLabel: {
     color: theme.colors.accent,
     fontSize: theme.fontSizes.xs,
     fontWeight: theme.fontWeights.bold,
