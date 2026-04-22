@@ -204,7 +204,20 @@ function getAgeRatingValue(ageRating: IgdbAgeRating): number {
 }
 
 function getAgeRatingLabel(ageRatings: IgdbAgeRating[] = []): string | null {
-  const ratingsWithLabels = ageRatings
+  const ratingsWithLabels = getValidAgeRatingLabels(ageRatings);
+
+  for (const organization of AGE_RATING_ORGANIZATION_PRIORITY) {
+    const rating = ratingsWithLabels.find((item) => item.organization === organization);
+    if (rating) {
+      return rating.label;
+    }
+  }
+
+  return ratingsWithLabels[0]?.label ?? null;
+}
+
+function getValidAgeRatingLabels(ageRatings: IgdbAgeRating[] = []) {
+  return ageRatings
     .map((ageRating) => {
       const organization = getAgeRatingOrganization(ageRating);
       const ratingValue = getAgeRatingValue(ageRating);
@@ -220,15 +233,6 @@ function getAgeRatingLabel(ageRatings: IgdbAgeRating[] = []): string | null {
       };
     })
     .filter(Boolean) as Array<{ label: string; organization: number }>;
-
-  for (const organization of AGE_RATING_ORGANIZATION_PRIORITY) {
-    const rating = ratingsWithLabels.find((item) => item.organization === organization);
-    if (rating) {
-      return rating.label;
-    }
-  }
-
-  return ratingsWithLabels[0]?.label ?? null;
 }
 
 function isMatureAgeRating(
@@ -241,32 +245,9 @@ function isMatureAgeRating(
   });
   if (hasAdultTheme) return true;
 
-  return ageRatings.some((item) => {
-    const category = getAgeRatingOrganization(item);
-    const rating = getAgeRatingValue(item);
-
-    if (category === 1) {
-      return rating === 12; // ESRB AO
-    }
-
-    if (category === 2) {
-      return rating >= 5; // PEGI 18
-    }
-
-    if (category === 3) {
-      return rating === 17; // CERO Z
-    }
-
-    if (category === 4) {
-      return rating === 22; // USK 18
-    }
-
-    if (category === 7) {
-      return rating >= 38; // ACB R18+ or RC
-    }
-
-    return false;
-  });
+  return getValidAgeRatingLabels(ageRatings).some((item) =>
+    ["ESRB AO", "PEGI 18", "CERO Z", "USK 18", "ACB R18+", "ACB RC", "GRAC 18", "ClassInd 18"].includes(item.label)
+  );
 }
 
 function getGameModes(gameModes: Array<{ name?: string }> = []): string[] {
