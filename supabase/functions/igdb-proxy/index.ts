@@ -131,37 +131,118 @@ function getPrimaryGenre(genres: Array<{ name?: string }> = []) {
   return genres[0]?.name ?? "Unknown";
 }
 
-// IGDB age_ratings: category 1=ESRB, 2=PEGI, 3=CERO, 4=USK, 7=ACB
-const ESRB_LABELS: Record<number, string> = { 1: "RP", 2: "EC", 3: "E", 4: "E10+", 5: "T", 6: "M", 7: "AO" };
-const PEGI_LABELS: Record<number, string> = { 1: "3", 2: "7", 3: "12", 4: "16", 5: "18" };
+type IgdbAgeRating = {
+  category?: number;
+  organization?: number;
+  rating?: number;
+  rating_category?: number | { organization?: number; rating?: number };
+};
 
-function getAgeRatingLabel(ageRatings: Array<{ category?: number; rating?: number }> = []): string | null {
-  const esrb = ageRatings.find((r) => Number(r?.category) === 1);
-  if (esrb) {
-    const label = ESRB_LABELS[Number(esrb.rating)];
-    return label ? `ESRB ${label}` : null;
+// IGDB age_ratings: organization/category 1=ESRB, 2=PEGI, 3=CERO, 4=USK, 5=GRAC, 6=CLASS_IND, 7=ACB.
+// The deprecated `rating` field uses a single global enum, not values scoped per board.
+const AGE_RATING_LABELS: Record<number, { organization: number; label: string }> = {
+  1: { organization: 2, label: "PEGI 3" },
+  2: { organization: 2, label: "PEGI 7" },
+  3: { organization: 2, label: "PEGI 12" },
+  4: { organization: 2, label: "PEGI 16" },
+  5: { organization: 2, label: "PEGI 18" },
+  6: { organization: 1, label: "ESRB RP" },
+  7: { organization: 1, label: "ESRB EC" },
+  8: { organization: 1, label: "ESRB E" },
+  9: { organization: 1, label: "ESRB E10+" },
+  10: { organization: 1, label: "ESRB T" },
+  11: { organization: 1, label: "ESRB M" },
+  12: { organization: 1, label: "ESRB AO" },
+  13: { organization: 3, label: "CERO A" },
+  14: { organization: 3, label: "CERO B" },
+  15: { organization: 3, label: "CERO C" },
+  16: { organization: 3, label: "CERO D" },
+  17: { organization: 3, label: "CERO Z" },
+  18: { organization: 4, label: "USK 0" },
+  19: { organization: 4, label: "USK 6" },
+  20: { organization: 4, label: "USK 12" },
+  21: { organization: 4, label: "USK 16" },
+  22: { organization: 4, label: "USK 18" },
+  23: { organization: 5, label: "GRAC All" },
+  24: { organization: 5, label: "GRAC 12" },
+  25: { organization: 5, label: "GRAC 15" },
+  26: { organization: 5, label: "GRAC 18" },
+  27: { organization: 5, label: "GRAC Testing" },
+  28: { organization: 6, label: "ClassInd L" },
+  29: { organization: 6, label: "ClassInd 10" },
+  30: { organization: 6, label: "ClassInd 12" },
+  31: { organization: 6, label: "ClassInd 14" },
+  32: { organization: 6, label: "ClassInd 16" },
+  33: { organization: 6, label: "ClassInd 18" },
+  34: { organization: 7, label: "ACB G" },
+  35: { organization: 7, label: "ACB PG" },
+  36: { organization: 7, label: "ACB M" },
+  37: { organization: 7, label: "ACB MA15+" },
+  38: { organization: 7, label: "ACB R18+" },
+  39: { organization: 7, label: "ACB RC" },
+};
+
+const AGE_RATING_ORGANIZATION_PRIORITY = [1, 2, 3, 4, 7, 5, 6];
+
+function getAgeRatingOrganization(ageRating: IgdbAgeRating): number {
+  const ratingCategory = ageRating?.rating_category;
+  if (ratingCategory && typeof ratingCategory === "object") {
+    return Number(ratingCategory.organization ?? ageRating.organization ?? ageRating.category ?? 0);
   }
-  const pegi = ageRatings.find((r) => Number(r?.category) === 2);
-  if (pegi) {
-    const label = PEGI_LABELS[Number(pegi.rating)];
-    return label ? `PEGI ${label}` : null;
+
+  return Number(ageRating.organization ?? ageRating.category ?? 0);
+}
+
+function getAgeRatingValue(ageRating: IgdbAgeRating): number {
+  const ratingCategory = ageRating?.rating_category;
+  if (ratingCategory && typeof ratingCategory === "object") {
+    return Number(ratingCategory.rating ?? ageRating.rating ?? 0);
   }
-  return null;
+
+  return Number(ageRating.rating ?? ratingCategory ?? 0);
+}
+
+function getAgeRatingLabel(ageRatings: IgdbAgeRating[] = []): string | null {
+  const ratingsWithLabels = ageRatings
+    .map((ageRating) => {
+      const organization = getAgeRatingOrganization(ageRating);
+      const ratingValue = getAgeRatingValue(ageRating);
+      const ratingLabel = AGE_RATING_LABELS[ratingValue];
+
+      if (!ratingLabel) {
+        return null;
+      }
+
+      return {
+        label: ratingLabel.label,
+        organization: organization || ratingLabel.organization,
+      };
+    })
+    .filter(Boolean) as Array<{ label: string; organization: number }>;
+
+  for (const organization of AGE_RATING_ORGANIZATION_PRIORITY) {
+    const rating = ratingsWithLabels.find((item) => item.organization === organization);
+    if (rating) {
+      return rating.label;
+    }
+  }
+
+  return ratingsWithLabels[0]?.label ?? null;
 }
 
 function isMatureAgeRating(
-  ageRatings: Array<{ category?: number; rating?: number }> = [],
+  ageRatings: IgdbAgeRating[] = [],
   themes: Array<{ id?: number; name?: string }> = [],
 ) {
   const hasAdultTheme = themes.some((t) => Number(t?.id) === 42);
   if (hasAdultTheme) return true;
 
   return ageRatings.some((item) => {
-    const category = Number(item?.category ?? 0);
-    const rating = Number(item?.rating ?? 0);
+    const category = getAgeRatingOrganization(item);
+    const rating = getAgeRatingValue(item);
 
     if (category === 1) {
-      return rating === 7; // ESRB AO
+      return rating === 12; // ESRB AO
     }
 
     if (category === 2) {
@@ -169,15 +250,15 @@ function isMatureAgeRating(
     }
 
     if (category === 3) {
-      return rating >= 5; // CERO Z
+      return rating === 17; // CERO Z
     }
 
     if (category === 4) {
-      return rating >= 5; // USK 18
+      return rating === 22; // USK 18
     }
 
     if (category === 7) {
-      return rating >= 4; // ACB R18+
+      return rating >= 38; // ACB R18+ or RC
     }
 
     return false;
@@ -290,7 +371,7 @@ async function getOrLoadCachedValue<T>(cacheKey: string, ttlMs: number, loader: 
 }
 
 function gameFields() {
-  return "fields name,summary,first_release_date,aggregated_rating,aggregated_rating_count,total_rating,total_rating_count,follows,hypes,cover.image_id,screenshots.image_id,genres.name,platforms.name,age_ratings.category,age_ratings.rating,game_modes.name,themes.id,themes.name,involved_companies.developer,involved_companies.publisher,involved_companies.company.name;";
+  return "fields name,summary,first_release_date,aggregated_rating,aggregated_rating_count,total_rating,total_rating_count,follows,hypes,cover.image_id,screenshots.image_id,genres.name,platforms.name,age_ratings.category,age_ratings.organization,age_ratings.rating,age_ratings.rating_category.organization,age_ratings.rating_category.rating,game_modes.name,themes.id,themes.name,involved_companies.developer,involved_companies.publisher,involved_companies.company.name;";
 }
 
 function discoverQuery(limit: number, offset: number) {
