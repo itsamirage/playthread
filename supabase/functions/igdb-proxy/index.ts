@@ -135,7 +135,7 @@ type IgdbAgeRating = {
   category?: number;
   organization?: number;
   rating?: number;
-  rating_category?: number | { organization?: number; rating?: number };
+  rating_category?: number | { organization?: number; rating?: number | string };
 };
 
 // IGDB age_ratings: organization/category 1=ESRB, 2=PEGI, 3=CERO, 4=USK, 5=GRAC, 6=CLASS_IND, 7=ACB.
@@ -150,6 +150,15 @@ const AGE_RATING_LABELS_BY_ORGANIZATION: Record<number, Record<number, string>> 
 };
 
 const AGE_RATING_ORGANIZATION_PRIORITY = [1, 2, 3, 4, 7, 5, 6];
+const AGE_RATING_ORGANIZATION_LABELS: Record<number, string> = {
+  1: "ESRB",
+  2: "PEGI",
+  3: "CERO",
+  4: "USK",
+  5: "GRAC",
+  6: "ClassInd",
+  7: "ACB",
+};
 
 function getAgeRatingOrganization(ageRating: IgdbAgeRating): number {
   const ratingCategory = ageRating?.rating_category;
@@ -160,13 +169,47 @@ function getAgeRatingOrganization(ageRating: IgdbAgeRating): number {
   return Number(ageRating.organization ?? ageRating.category ?? 0);
 }
 
-function getAgeRatingValue(ageRating: IgdbAgeRating): number {
+function getAgeRatingValue(ageRating: IgdbAgeRating): number | string {
   const ratingCategory = ageRating?.rating_category;
   if (ratingCategory && typeof ratingCategory === "object") {
-    return Number(ratingCategory.rating ?? ageRating.rating ?? 0);
+    return ratingCategory.rating ?? Number(ageRating.rating ?? 0);
   }
 
   return Number(ageRating.rating ?? 0);
+}
+
+function normalizeAgeRatingText(organization: number, ratingValue: string) {
+  const cleanValue = ratingValue.trim().replace(/_/g, " ");
+  const normalizedValue = cleanValue.toLowerCase();
+  const numericWords: Record<string, string> = {
+    three: "3",
+    seven: "7",
+    twelve: "12",
+    fifteen: "15",
+    sixteen: "16",
+    eighteen: "18",
+    ten: "10",
+    fourteen: "14",
+  };
+  const labelPrefix = AGE_RATING_ORGANIZATION_LABELS[organization];
+
+  if (!labelPrefix || !cleanValue) {
+    return null;
+  }
+
+  if (organization === 1 && normalizedValue === "e10") {
+    return "ESRB E10+";
+  }
+
+  if (organization === 2 && numericWords[normalizedValue]) {
+    return `PEGI ${numericWords[normalizedValue]}`;
+  }
+
+  if (organization === 6 && normalizedValue === "l") {
+    return "ClassInd L";
+  }
+
+  return `${labelPrefix} ${cleanValue}`;
 }
 
 function getAgeRatingLabel(ageRatings: IgdbAgeRating[] = []): string | null {
@@ -187,6 +230,11 @@ function getValidAgeRatingLabels(ageRatings: IgdbAgeRating[] = []) {
     .map((ageRating) => {
       const organization = getAgeRatingOrganization(ageRating);
       const ratingValue = getAgeRatingValue(ageRating);
+      if (typeof ratingValue === "string") {
+        const label = normalizeAgeRatingText(organization, ratingValue);
+        return label ? { label, organization } : null;
+      }
+
       const label = AGE_RATING_LABELS_BY_ORGANIZATION[organization]?.[ratingValue];
 
       if (!label) {
