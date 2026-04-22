@@ -135,51 +135,18 @@ type IgdbAgeRating = {
   category?: number;
   organization?: number;
   rating?: number;
-  rating_category?: number | { organization?: number; rating?: number };
+  rating_category?: number | { organization?: number };
 };
 
 // IGDB age_ratings: organization/category 1=ESRB, 2=PEGI, 3=CERO, 4=USK, 5=GRAC, 6=CLASS_IND, 7=ACB.
-// The deprecated `rating` field uses a single global enum, not values scoped per board.
-const AGE_RATING_LABELS: Record<number, { organization: number; label: string }> = {
-  1: { organization: 2, label: "PEGI 3" },
-  2: { organization: 2, label: "PEGI 7" },
-  3: { organization: 2, label: "PEGI 12" },
-  4: { organization: 2, label: "PEGI 16" },
-  5: { organization: 2, label: "PEGI 18" },
-  6: { organization: 1, label: "ESRB RP" },
-  7: { organization: 1, label: "ESRB EC" },
-  8: { organization: 1, label: "ESRB E" },
-  9: { organization: 1, label: "ESRB E10+" },
-  10: { organization: 1, label: "ESRB T" },
-  11: { organization: 1, label: "ESRB M" },
-  12: { organization: 1, label: "ESRB AO" },
-  13: { organization: 3, label: "CERO A" },
-  14: { organization: 3, label: "CERO B" },
-  15: { organization: 3, label: "CERO C" },
-  16: { organization: 3, label: "CERO D" },
-  17: { organization: 3, label: "CERO Z" },
-  18: { organization: 4, label: "USK 0" },
-  19: { organization: 4, label: "USK 6" },
-  20: { organization: 4, label: "USK 12" },
-  21: { organization: 4, label: "USK 16" },
-  22: { organization: 4, label: "USK 18" },
-  23: { organization: 5, label: "GRAC All" },
-  24: { organization: 5, label: "GRAC 12" },
-  25: { organization: 5, label: "GRAC 15" },
-  26: { organization: 5, label: "GRAC 18" },
-  27: { organization: 5, label: "GRAC Testing" },
-  28: { organization: 6, label: "ClassInd L" },
-  29: { organization: 6, label: "ClassInd 10" },
-  30: { organization: 6, label: "ClassInd 12" },
-  31: { organization: 6, label: "ClassInd 14" },
-  32: { organization: 6, label: "ClassInd 16" },
-  33: { organization: 6, label: "ClassInd 18" },
-  34: { organization: 7, label: "ACB G" },
-  35: { organization: 7, label: "ACB PG" },
-  36: { organization: 7, label: "ACB M" },
-  37: { organization: 7, label: "ACB MA15+" },
-  38: { organization: 7, label: "ACB R18+" },
-  39: { organization: 7, label: "ACB RC" },
+const AGE_RATING_LABELS_BY_ORGANIZATION: Record<number, Record<number, string>> = {
+  1: { 1: "ESRB RP", 2: "ESRB EC", 3: "ESRB E", 4: "ESRB E10+", 5: "ESRB T", 6: "ESRB M", 7: "ESRB AO" },
+  2: { 1: "PEGI 3", 2: "PEGI 7", 3: "PEGI 12", 4: "PEGI 16", 5: "PEGI 18" },
+  3: { 1: "CERO A", 2: "CERO B", 3: "CERO C", 4: "CERO D", 5: "CERO Z" },
+  4: { 1: "USK 0", 2: "USK 6", 3: "USK 12", 4: "USK 16", 5: "USK 18" },
+  5: { 1: "GRAC All", 2: "GRAC 12", 3: "GRAC 15", 4: "GRAC 18" },
+  6: { 1: "ClassInd L", 2: "ClassInd 10", 3: "ClassInd 12", 4: "ClassInd 14", 5: "ClassInd 16", 6: "ClassInd 18" },
+  7: { 1: "ACB G", 2: "ACB PG", 3: "ACB M", 4: "ACB MA15+", 5: "ACB R18+", 6: "ACB RC" },
 };
 
 const AGE_RATING_ORGANIZATION_PRIORITY = [1, 2, 3, 4, 7, 5, 6];
@@ -194,12 +161,11 @@ function getAgeRatingOrganization(ageRating: IgdbAgeRating): number {
 }
 
 function getAgeRatingValue(ageRating: IgdbAgeRating): number {
-  const ratingCategory = ageRating?.rating_category;
-  if (ratingCategory && typeof ratingCategory === "object") {
-    return Number(ratingCategory.rating ?? ageRating.rating ?? 0);
-  }
+  return Number(ageRating.rating ?? 0);
+}
 
-  return Number(ageRating.rating ?? ratingCategory ?? 0);
+function getAgeRatingLabelForOrganization(organization: number, ratingValue: number): string | null {
+  return AGE_RATING_LABELS_BY_ORGANIZATION[organization]?.[ratingValue] ?? null;
 }
 
 function getAgeRatingLabel(ageRatings: IgdbAgeRating[] = []): string | null {
@@ -207,15 +173,15 @@ function getAgeRatingLabel(ageRatings: IgdbAgeRating[] = []): string | null {
     .map((ageRating) => {
       const organization = getAgeRatingOrganization(ageRating);
       const ratingValue = getAgeRatingValue(ageRating);
-      const ratingLabel = AGE_RATING_LABELS[ratingValue];
+      const label = getAgeRatingLabelForOrganization(organization, ratingValue);
 
-      if (!ratingLabel) {
+      if (!label) {
         return null;
       }
 
       return {
-        label: ratingLabel.label,
-        organization: organization || ratingLabel.organization,
+        label,
+        organization,
       };
     })
     .filter(Boolean) as Array<{ label: string; organization: number }>;
@@ -245,7 +211,7 @@ function isMatureAgeRating(
     const rating = getAgeRatingValue(item);
 
     if (category === 1) {
-      return rating === 12; // ESRB AO
+      return rating === 7; // ESRB AO
     }
 
     if (category === 2) {
@@ -253,15 +219,15 @@ function isMatureAgeRating(
     }
 
     if (category === 3) {
-      return rating === 17; // CERO Z
+      return rating === 5; // CERO Z
     }
 
     if (category === 4) {
-      return rating === 22; // USK 18
+      return rating === 5; // USK 18
     }
 
     if (category === 7) {
-      return rating >= 38; // ACB R18+ or RC
+      return rating >= 5; // ACB R18+ or RC
     }
 
     return false;
@@ -374,7 +340,7 @@ async function getOrLoadCachedValue<T>(cacheKey: string, ttlMs: number, loader: 
 }
 
 function gameFields() {
-  return "fields name,summary,first_release_date,aggregated_rating,aggregated_rating_count,total_rating,total_rating_count,follows,hypes,cover.image_id,screenshots.image_id,genres.name,platforms.name,age_ratings.category,age_ratings.organization,age_ratings.rating,age_ratings.rating_category.organization,age_ratings.rating_category.rating,game_modes.name,themes.id,themes.name,involved_companies.developer,involved_companies.publisher,involved_companies.company.name;";
+  return "fields name,summary,first_release_date,aggregated_rating,aggregated_rating_count,total_rating,total_rating_count,follows,hypes,cover.image_id,screenshots.image_id,genres.name,platforms.name,age_ratings.category,age_ratings.organization,age_ratings.rating,age_ratings.rating_category.organization,game_modes.name,themes.id,themes.name,involved_companies.developer,involved_companies.publisher,involved_companies.company.name;";
 }
 
 function discoverQuery(limit: number, offset: number) {
