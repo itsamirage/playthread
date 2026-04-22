@@ -48,6 +48,7 @@ type RequestBody = {
   body?: string;
   imageUrl?: string | null;
   imageUrls?: string[] | null;
+  imageCaptions?: string[] | null;
   imageMetadata?: {
     mimeType?: string | null;
     extension?: string | null;
@@ -108,6 +109,16 @@ function normalizeImageUrls(value: RequestBody["imageUrls"], fallbackImageUrl: s
   }
 
   return fallbackImageUrl ? [fallbackImageUrl] : [];
+}
+
+function normalizeImageCaptions(value: RequestBody["imageCaptions"], imageCount: number) {
+  if (!Array.isArray(value) || imageCount <= 0) {
+    return [];
+  }
+
+  return value
+    .slice(0, imageCount)
+    .map((item) => String(item ?? "").trim().slice(0, 160));
 }
 
 function readNumberEnv(name: string, fallback: number, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
@@ -401,6 +412,7 @@ Deno.serve(async (request) => {
     const imageMetadata = normalizeImageMetadata(body.imageMetadata);
     const fallbackImageUrl = String(body.imageUrl ?? "").trim() || null;
     const imageUrls = normalizeImageUrls(body.imageUrls, fallbackImageUrl);
+    const imageCaptions = normalizeImageCaptions(body.imageCaptions, imageUrls.length);
     const videoUploadId = String(body.videoUploadId ?? "").trim() || null;
     const videoUploadToken = String(body.videoUploadToken ?? "").trim() || null;
     const gameId = Number(body.gameId);
@@ -455,6 +467,7 @@ Deno.serve(async (request) => {
         body: textBody,
         image_url: imageUrls[0] ?? fallbackImageUrl,
         image_urls: imageUrls,
+        image_captions: imageCaptions,
         video_provider: postType === "clip" ? "mux" : null,
         video_upload_id: postType === "clip" ? videoUploadId : null,
         video_upload_token: postType === "clip" ? videoUploadToken : null,

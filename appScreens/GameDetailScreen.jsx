@@ -4,10 +4,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 
@@ -30,6 +32,7 @@ import {
 } from "../lib/follows";
 import { GAME_RATING_OPTIONS, saveGameRating, useGameRating } from "../lib/gameRatings";
 import { formatDisplayRating } from "../lib/gameRatingMath";
+import { useCommunityResources } from "../lib/communityResources";
 import { useGameDetail } from "../lib/games";
 import { goBackOrFallback } from "../lib/navigation";
 import {
@@ -56,6 +59,14 @@ const postTypeLabels = {
   clip: "Clips",
 };
 
+const THREAD_PRESETS = [
+  { key: "hot", label: "Hot", sort: "rising", types: POST_TYPE_OPTIONS },
+  { key: "new", label: "New", sort: "new", types: POST_TYPE_OPTIONS },
+  { key: "images", label: "Images", sort: "new", types: ["screenshot"] },
+  { key: "clips", label: "Clips", sort: "new", types: ["clip"] },
+  { key: "guides", label: "Guides", sort: "top", types: ["guide", "tip"] },
+];
+
 export default function GameDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -67,6 +78,11 @@ export default function GameDetailScreen() {
   });
   const { isFollowingGame, getFollowStatus, setFollowStatus, unfollowGame } = useFollows();
   const { posts, isLoading: postsLoading, isLoadingMore, hasMore, error: postsError, reload: reloadPosts, loadMore, updatePostReaction } = useGamePosts(params.id);
+  const {
+    resources,
+    isLoading: resourcesLoading,
+    addResource,
+  } = useCommunityResources(params.id, game?.title ?? "");
   const {
     myRating,
     averageRating,
@@ -90,6 +106,8 @@ export default function GameDetailScreen() {
   const [developerOnly, setDeveloperOnly] = useState(false);
   const [moderatingPostId, setModeratingPostId] = useState(null);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [resourceTitle, setResourceTitle] = useState("");
+  const [resourceUrl, setResourceUrl] = useState("");
   const reactingRef = useRef(false);
 
   const followStatus = getFollowStatus(params.id);
@@ -112,6 +130,11 @@ export default function GameDetailScreen() {
   );
   const hasDeveloperPosts = posts.some((post) => post.isDeveloperPost);
   const canModeratePosts = ["moderator", "admin", "owner"].includes(staffProfile?.accountRole ?? "");
+  const activeThreadPreset = THREAD_PRESETS.find((preset) =>
+    preset.sort === threadSort &&
+    preset.types.length === selectedThreadTypes.length &&
+    preset.types.every((type) => selectedThreadTypes.includes(type))
+  )?.key ?? null;
   useEffect(() => {
     setShowSpoilers(shouldRevealSpoilersForStatus(followStatus));
   }, [followStatus]);
@@ -600,6 +623,60 @@ export default function GameDetailScreen() {
         </View>
       ) : null}
 
+      <SectionCard title="Resources" eyebrow="Community wiki">
+        {resourcesLoading ? (
+          <ActivityIndicator color={theme.colors.accent} />
+        ) : resources.length > 0 ? (
+          <View style={styles.resourceList}>
+            {resources.map((resource) => (
+              <Pressable
+                key={resource.id}
+                onPress={() => resource.url ? Linking.openURL(resource.url) : null}
+                style={styles.resourceCard}
+              >
+                <Text style={styles.resourceTitle}>{resource.title}</Text>
+                <Text style={styles.resourceMeta}>{resource.kind} | @{resource.author}</Text>
+                {resource.body ? <Text style={styles.resourceBody} numberOfLines={2}>{resource.body}</Text> : null}
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.subtitle}>No community resources have been added for this game yet.</Text>
+        )}
+        {session?.user?.id ? (
+          <View style={styles.resourceComposer}>
+            <TextInput
+              onChangeText={setResourceTitle}
+              placeholder="Resource title"
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.resourceInput}
+              value={resourceTitle}
+            />
+            <TextInput
+              onChangeText={setResourceUrl}
+              placeholder="Optional URL"
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.resourceInput}
+              value={resourceUrl}
+            />
+            <Pressable
+              onPress={async () => {
+                try {
+                  await addResource({ title: resourceTitle, url: resourceUrl, kind: "guide" });
+                  setResourceTitle("");
+                  setResourceUrl("");
+                } catch (nextError) {
+                  Alert.alert("Resource not added", nextError?.message ?? "Could not add that resource.");
+                }
+              }}
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>Add resource</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </SectionCard>
+
       <SectionCard title="Threads" eyebrow="Community">
         {!postsLoading && posts.length === 0 ? (
           <Pressable
@@ -615,6 +692,28 @@ export default function GameDetailScreen() {
           <Text style={styles.filtersToggleLabel}>Filters</Text>
           <Text style={styles.filtersToggleArrow}>{isFiltersOpen ? "▲" : "▼"}</Text>
         </Pressable>
+        <View style={styles.communityToolbar}>
+          {THREAD_PRESETS.map((preset) => {
+            const isActive = activeThreadPreset === preset.key;
+            return (
+              <Pressable
+                key={preset.key}
+                onPress={() => {
+                  setThreadSort(preset.sort);
+                  setSelectedThreadTypes(preset.types);
+                  if (preset.sort === "top") {
+                    setThreadTopPeriod("all");
+                  }
+                }}
+                style={[styles.communityChip, isActive ? styles.communityChipActive : null]}
+              >
+                <Text style={[styles.communityChipText, isActive ? styles.communityChipTextActive : null]}>
+                  {preset.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
         {isFiltersOpen ? (
           <>
             <View style={styles.communityToolbar}>
@@ -1191,6 +1290,45 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: theme.spacing.sm,
+  },
+  resourceList: {
+    gap: theme.spacing.sm,
+  },
+  resourceCard: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    gap: theme.spacing.xs,
+    padding: theme.spacing.md,
+  },
+  resourceTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.md,
+    fontWeight: theme.fontWeights.bold,
+  },
+  resourceMeta: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+    textTransform: "uppercase",
+  },
+  resourceBody: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: 20,
+  },
+  resourceComposer: {
+    gap: theme.spacing.sm,
+  },
+  resourceInput: {
+    borderWidth: theme.borders.width,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface,
+    color: theme.colors.textPrimary,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
   },
   communityChip: {
     backgroundColor: "rgba(255,255,255,0.03)",

@@ -85,6 +85,7 @@ create table if not exists public.posts (
   rating numeric(2,1),
   image_url text,
   image_urls text[] not null default '{}',
+  image_captions text[] not null default '{}',
   spoiler boolean not null default false,
   spoiler_tag text,
   likes_count integer not null default 0,

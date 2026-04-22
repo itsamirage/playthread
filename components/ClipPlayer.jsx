@@ -29,8 +29,10 @@ export default function ClipPlayer({ playbackId, thumbnailUrl, status }) {
         </Text>
         <Text style={styles.placeholderText}>
           {status === "errored"
-            ? "This upload did not finish processing."
-            : "Playback will appear here as soon as Mux finishes preparing the stream."}
+            ? "This upload did not finish processing. Delete and re-upload the clip from the post actions."
+            : status === "uploading"
+              ? "Upload received. Processing will start as soon as Mux confirms the asset."
+              : "Playback will appear here as soon as Mux finishes preparing the stream."}
         </Text>
         <View style={styles.modeBadge}>
           <Text style={styles.modeBadgeText}>Streaming only</Text>

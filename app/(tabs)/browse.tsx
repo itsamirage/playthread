@@ -26,6 +26,7 @@ import {
 import { useContentPreferences } from "../../lib/contentPreferences";
 import { useFollows } from "../../lib/follows";
 import { useBrowseGames } from "../../lib/games";
+import { stripAgeRatingQueryTerms } from "../../lib/gameSearch";
 import { usePostSearch } from "../../lib/posts";
 import { useTabReselectScroll } from "../../lib/tabReselect";
 import { theme } from "../../lib/theme";
@@ -57,6 +58,14 @@ const RATING_FILTERS = [
   { key: "ESRB T", label: "T" },
   { key: "ESRB M", label: "M" },
   { key: "ESRB AO", label: "AO" },
+];
+
+const RATING_QUERY_ALIASES = [
+  { key: "ESRB E10+", aliases: ["e10", "e10+", "everyone 10", "everyone 10 plus", "rated e10"] },
+  { key: "ESRB AO", aliases: ["ao", "adult only", "adults only", "rated ao"] },
+  { key: "ESRB M", aliases: ["m", "mature", "rated m", "esrb m"] },
+  { key: "ESRB T", aliases: ["t", "teen", "rated t", "esrb t"] },
+  { key: "ESRB E", aliases: ["e", "everyone", "rated e", "esrb e"] },
 ];
 
 const GAME_SORT_OPTIONS = [
@@ -91,6 +100,53 @@ function matchesFacetQuery(value, query) {
   }
 
   return normalizedValue.includes(normalizedQuery);
+}
+
+function getRatingFilterFromQuery(query) {
+  const normalizedQuery = normalizeSearchValue(query);
+  const queryTerms = normalizedQuery.split(" ").filter(Boolean);
+
+  if (queryTerms.length <= 1) {
+    return null;
+  }
+
+  return RATING_QUERY_ALIASES.find((entry) =>
+    entry.aliases.some((alias) => {
+      const normalizedAlias = normalizeSearchValue(alias);
+      return normalizedAlias.length <= 3
+        ? queryTerms.includes(normalizedAlias)
+        : normalizedQuery.includes(normalizedAlias);
+    })
+  )?.key ?? null;
+}
+
+function buildGameMatchTags(game, query, ratingFilter) {
+  const cleanQuery = stripAgeRatingQueryTerms(query);
+  const normalizedQuery = normalizeSearchValue(cleanQuery);
+  const tags = [];
+
+  if (ratingFilter && game.ageRatingLabel === ratingFilter) {
+    tags.push(game.ageRatingLabel);
+  } else if (game.ageRatingLabel) {
+    tags.push(game.ageRatingLabel);
+  }
+
+  if (normalizedQuery && normalizeSearchValue(game.title).includes(normalizedQuery)) {
+    tags.push("Title match");
+  }
+
+  if (normalizedQuery && normalizeSearchValue(game.studio).includes(normalizedQuery)) {
+    tags.push(game.studio);
+  }
+
+  const genre = [game.genre, ...(game.genres ?? [])].find((item) =>
+    normalizedQuery && normalizeSearchValue(item).includes(normalizedQuery)
+  );
+  if (genre) {
+    tags.push(genre);
+  }
+
+  return [...new Set(tags)];
 }
 
 function buildFacetResults(games, mode, query) {
@@ -204,16 +260,20 @@ export default function BrowseScreen() {
   const [activePlatformFamily, setActivePlatformFamily] = useState("All");
   const [activeRatingFilter, setActiveRatingFilter] = useState<string | null>(null);
   const [gameSort, setGameSort] = useState("popular");
+  const [compareGameIds, setCompareGameIds] = useState<number[]>([]);
   const scrollRef = useRef(null);
   const { followedCount, isFollowingGame, getFollowStatus, setFollowStatus, unfollowGame } =
     useFollows();
   const { preferences } = useContentPreferences();
+  const cleanQuery = query.trim().toLowerCase();
+  const inferredRatingFilter = searchMode === "game" ? getRatingFilterFromQuery(query) : null;
+  const effectiveRatingFilter = activeRatingFilter ?? inferredRatingFilter;
+  const gameQuery = searchMode === "game" ? stripAgeRatingQueryTerms(query) : query;
   const { games, filteredGames, isLoading, isLoadingMore, hasMore, loadMore, error, isDebouncing, source } = useBrowseGames({
-    query,
+    query: gameQuery,
     selectedGenre: "All",
     hideMatureGames: preferences.hideMatureGames,
   });
-  const cleanQuery = query.trim().toLowerCase();
   const featuredCommunities = getFeaturedCommunities(5);
   const { results: playerResults, isLoading: playersLoading } = useCreatorSearch(
     searchMode === "player" ? query : ""
@@ -228,13 +288,14 @@ export default function BrowseScreen() {
     setActivePlatformFamily("All");
     setActiveRatingFilter(null);
     setGameSort("popular");
+    setCompareGameIds([]);
   };
-  const hasActiveFilters = cleanQuery.length > 0 || searchMode !== "game" || activePlatformFilter !== null || activeRatingFilter !== null || gameSort !== "popular";
+  const hasActiveFilters = cleanQuery.length > 0 || searchMode !== "game" || activePlatformFilter !== null || effectiveRatingFilter !== null || gameSort !== "popular";
 
   const displayedGames = filteredGames
     .filter((game) => {
       if (!matchesPlatformFilter(game, activePlatformFilter)) return false;
-      if (activeRatingFilter && game.ageRatingLabel !== activeRatingFilter) return false;
+      if (effectiveRatingFilter && game.ageRatingLabel !== effectiveRatingFilter) return false;
       return true;
     })
     .sort((a, b) => {
@@ -246,6 +307,9 @@ export default function BrowseScreen() {
       }
       return 0; // "popular" keeps original order from IGDB
     });
+  const comparedGames = compareGameIds
+    .map((gameId) => displayedGames.find((game) => game.id === gameId) ?? games.find((game) => game.id === gameId))
+    .filter(Boolean);
   const scrollHandlers = useTabReselectScroll("browse", {
     scrollRef,
     onRefresh: hasActiveFilters ? handleClearFilters : undefined,
@@ -421,7 +485,7 @@ export default function BrowseScreen() {
             </View>
             <View style={styles.filterRow}>
               {RATING_FILTERS.map((f) => {
-                const isActive = activeRatingFilter === f.key;
+                const isActive = effectiveRatingFilter === f.key;
                 return (
                   <Pressable
                     key={f.key}
@@ -535,6 +599,20 @@ export default function BrowseScreen() {
         </View>
         <Text style={styles.resultsCount}>{resultCount} results</Text>
           </View>
+          {comparedGames.length > 0 ? (
+            <SectionCard title="Compare" eyebrow={`${comparedGames.length}/2 selected`}>
+              <View style={styles.compareGrid}>
+                {comparedGames.map((game) => (
+                  <View key={`compare:${game.id}`} style={styles.compareCard}>
+                    <Text style={styles.compareTitle}>{game.title}</Text>
+                    <Text style={styles.compareMeta}>{game.ageRatingLabel ?? "Unrated"} | {game.genre}</Text>
+                    <Text style={styles.compareValue}>{game.metacritic ?? 0} critic</Text>
+                    <Text style={styles.compareMeta}>{game.platforms?.slice(0, 4).join(", ")}</Text>
+                  </View>
+                ))}
+              </View>
+            </SectionCard>
+          ) : null}
 
           <View style={styles.resultsList}>
         {isLoading || (searchMode === "player" && playersLoading) || (searchMode === "post" && postsSearchLoading) ? (
@@ -599,6 +677,15 @@ export default function BrowseScreen() {
                 onSelectStatus={(status) => handleSelectStatus(game, status)}
                 onUnfollow={() => handleUnfollow(game)}
                 onAddToBacklog={() => handleSelectStatus(game, "have_not_played")}
+                onCompare={() =>
+                  setCompareGameIds((currentValue) =>
+                    currentValue.includes(game.id)
+                      ? currentValue.filter((id) => id !== game.id)
+                      : [game.id, ...currentValue].slice(0, 2)
+                  )
+                }
+                isCompared={compareGameIds.includes(game.id)}
+                matchTags={buildGameMatchTags(game, query, effectiveRatingFilter)}
               />
             ))}
             {isLoadingMore ? (
@@ -849,6 +936,35 @@ const styles = StyleSheet.create({
   },
   resultsList: {
     gap: theme.spacing.md,
+  },
+  compareGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  compareCard: {
+    flex: 1,
+    minWidth: 150,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    gap: theme.spacing.xs,
+    padding: theme.spacing.md,
+  },
+  compareTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.md,
+    fontWeight: theme.fontWeights.bold,
+  },
+  compareValue: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.lg,
+    fontWeight: theme.fontWeights.bold,
+  },
+  compareMeta: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
   },
   postResultsList: {
     gap: theme.spacing.md,

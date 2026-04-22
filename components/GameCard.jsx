@@ -17,6 +17,9 @@ export default function GameCard({
   onSelectStatus,
   onUnfollow,
   onAddToBacklog,
+  onCompare,
+  isCompared = false,
+  matchTags = [],
 }) {
   const [isStatusPickerOpen, setIsStatusPickerOpen] = useState(false);
   const coverLetter = game.title.charAt(0).toUpperCase();
@@ -74,6 +77,15 @@ export default function GameCard({
               </View>
             ) : null}
           </View>
+          {matchTags.length > 0 ? (
+            <View style={styles.matchTagRow}>
+              {matchTags.slice(0, 4).map((tag) => (
+                <View key={tag} style={styles.matchTag}>
+                  <Text style={styles.matchTagText}>{tag}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
           <Text style={styles.subMeta}>
             {game.members} members | {game.starRating} stars
           </Text>
@@ -118,6 +130,20 @@ export default function GameCard({
             {isInBacklog ? "In Backlog" : "+ Backlog"}
           </Text>
         </Pressable>
+        {onCompare ? (
+          <Pressable
+            onPress={onCompare}
+            style={({ pressed }) => [
+              styles.compareButton,
+              isCompared ? styles.compareButtonActive : null,
+              pressed ? styles.buttonPressed : null,
+            ]}
+          >
+            <Text style={[styles.compareButtonText, isCompared ? styles.compareButtonTextActive : null]}>
+              {isCompared ? "Compare" : "+ Compare"}
+            </Text>
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={() => setIsStatusPickerOpen((currentValue) => !currentValue)}
           style={[
@@ -260,6 +286,24 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.xs,
     fontWeight: theme.fontWeights.bold,
   },
+  matchTagRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.xs,
+  },
+  matchTag: {
+    backgroundColor: "rgba(0,229,255,0.08)",
+    borderColor: "rgba(0,229,255,0.28)",
+    borderRadius: theme.radius.sm,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  matchTagText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+  },
   subMeta: {
     color: theme.colors.textMuted,
     fontSize: theme.fontSizes.xs,
@@ -308,6 +352,27 @@ const styles = StyleSheet.create({
   },
   backlogButtonTextActive: {
     color: theme.colors.accent,
+  },
+  compareButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+  },
+  compareButtonActive: {
+    backgroundColor: "rgba(255,204,51,0.12)",
+    borderColor: "rgba(255,204,51,0.45)",
+  },
+  compareButtonText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  compareButtonTextActive: {
+    color: "#ffcc33",
   },
   buttonPressed: {
     opacity: 0.8,

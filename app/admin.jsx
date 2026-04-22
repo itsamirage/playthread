@@ -1070,7 +1070,19 @@ export default function AdminScreen() {
               </Text>
               <Text style={styles.bodyText}>{selectedFlag.reason}</Text>
               <Text style={styles.helperText}>Media kind {selectedFlag.mediaKind}</Text>
-              {selectedFlag.mediaUrl ? (
+              {selectedFlag.mediaUrls?.length > 0 ? (
+                <View style={styles.flagPreviewGrid}>
+                  {selectedFlag.mediaUrls.map((mediaUrl, index) => (
+                    <Pressable
+                      key={`${selectedFlag.id}:media:${index}`}
+                      onPress={() => Linking.openURL(mediaUrl)}
+                      style={styles.flagPreviewTile}
+                    >
+                      <Image source={{ uri: mediaUrl }} style={styles.flagPreviewImage} />
+                    </Pressable>
+                  ))}
+                </View>
+              ) : selectedFlag.mediaUrl ? (
                 <Image source={{ uri: selectedFlag.mediaUrl }} style={styles.flagPreviewImage} />
               ) : null}
               {selectedFlag.evidence?.post_type === "clip" ? (
@@ -1344,6 +1356,14 @@ const styles = StyleSheet.create({
     aspectRatio: 16 / 9,
     borderRadius: theme.radius.md,
     backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  flagPreviewGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  flagPreviewTile: {
+    width: "48%",
   },
   inlineRow: {
     flexDirection: "row",

@@ -78,6 +78,19 @@ export default function PublicProfileScreen() {
     );
   }, [deferredActivitySearch, posts]);
 
+  const mediaPosts = useMemo(
+    () => posts.filter((post) => (post.imageUrls?.length ?? 0) > 0 || post.type === "clip").slice(0, 12),
+    [posts],
+  );
+  const reputationBadges = useMemo(() => {
+    const badges = [];
+    if (posts.filter((post) => post.type === "guide" || post.type === "tip").length >= 3) badges.push("Helpful guide maker");
+    if (posts.filter((post) => post.type === "review").length >= 3) badges.push("Reviewer");
+    if (mediaPosts.length >= 3) badges.push("Media creator");
+    if (comments.length >= 10) badges.push("Conversation starter");
+    return badges;
+  }, [comments.length, mediaPosts.length, posts]);
+
   const filteredComments = useMemo(() => {
     const query = deferredCommentSearch.trim().toLowerCase();
 
@@ -229,6 +242,15 @@ export default function PublicProfileScreen() {
           {title.key !== "none" ? <Text style={styles.titleBadge}>{title.label}</Text> : null}
           {profile.developerGameIds?.length > 0 ? <Text style={styles.developerBadge}>Verified developer</Text> : null}
           {profile.bio ? <Text style={styles.bioText}>{profile.bio}</Text> : null}
+          {reputationBadges.length > 0 ? (
+            <View style={styles.badgeRow}>
+              {reputationBadges.map((badge) => (
+                <View key={badge} style={styles.reputationBadge}>
+                  <Text style={styles.reputationBadgeText}>{badge}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
           <View style={styles.statRow}>
             <View style={styles.statBox}>
               <Text style={styles.statValue}>{friendCount}</Text>
@@ -310,6 +332,34 @@ export default function PublicProfileScreen() {
             </View>
           ) : (
             <Text style={styles.bodyText}>No friends listed on this profile yet.</Text>
+          )}
+        </SectionCard>
+
+        <SectionCard title="Media" eyebrow="Screenshots and clips">
+          {mediaPosts.length > 0 ? (
+            <View style={styles.mediaGrid}>
+              {mediaPosts.map((post) => {
+                const imageUrl = post.imageUrls?.[0] ?? post.imageUrl ?? post.videoThumbnailUrl ?? null;
+                return (
+                  <Pressable
+                    key={`media:${post.id}`}
+                    onPress={() => router.push(`/post/${post.id}`)}
+                    style={styles.mediaTile}
+                  >
+                    {imageUrl ? (
+                      <Image source={{ uri: imageUrl }} style={styles.mediaTileImage} />
+                    ) : (
+                      <View style={styles.mediaTileFallback}>
+                        <Text style={styles.mediaTileFallbackText}>Clip</Text>
+                      </View>
+                    )}
+                    <Text numberOfLines={1} style={styles.mediaTileLabel}>{post.gameTitle}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={styles.bodyText}>Screenshots and clips from this player will appear here.</Text>
           )}
         </SectionCard>
 
@@ -528,6 +578,25 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: "center",
   },
+  badgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    justifyContent: "center",
+  },
+  reputationBadge: {
+    backgroundColor: "rgba(255,204,51,0.12)",
+    borderColor: "rgba(255,204,51,0.38)",
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+  },
+  reputationBadgeText: {
+    color: "#ffcc33",
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+  },
   statRow: {
     flexDirection: "row",
     gap: theme.spacing.md,
@@ -640,6 +709,40 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeights.bold,
   },
   friendUsername: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
+  },
+  mediaGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  mediaTile: {
+    width: "31%",
+    gap: theme.spacing.xs,
+  },
+  mediaTileImage: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  mediaTileFallback: {
+    width: "100%",
+    aspectRatio: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  mediaTileFallbackText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  mediaTileLabel: {
     color: theme.colors.textMuted,
     fontSize: theme.fontSizes.xs,
   },

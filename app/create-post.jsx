@@ -53,6 +53,17 @@ const ratingOptions = [
   "10",
 ];
 
+const POST_TEMPLATES = {
+  review: { title: "Review: ", body: "What worked:\n\nWhat did not:\n\nWho should play it:\n" },
+  guide: { title: "Guide: ", body: "Goal:\n\nSteps:\n1. \n2. \n3. \n\nNotes:\n" },
+  tip: { title: "Quick tip: ", body: "Tip:\n\nWhy it helps:\n" },
+  screenshot: { title: "Screenshot dump: ", body: "Context:\n\nWhat to look for:\n" },
+  clip: { title: "Clip: ", body: "Context:\n\nWhat happened:\n" },
+  discussion: { title: "Discussion: ", body: "Question:\n\nMy take:\n" },
+};
+
+const SPOILER_ZONE_OPTIONS = ["Early game", "Mid game", "Ending", "Boss", "DLC"];
+
 export default function CreatePostScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
@@ -86,16 +97,19 @@ export default function CreatePostScreen() {
   const [isSpoiler, setIsSpoiler] = useState(false);
   const [spoilerTag, setSpoilerTag] = useState("");
   const [selectedImages, setSelectedImages] = useState([]);
+  const [imageCaptions, setImageCaptions] = useState([]);
   const [selectedClip, setSelectedClip] = useState(null);
   const [gameSearch, setGameSearch] = useState("");
   const [showAlternateGamePicker, setShowAlternateGamePicker] = useState(!launchedFromGamePage);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitProgress, setSubmitProgress] = useState(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [footerHeight, setFooterHeight] = useState(0);
   const [hasLoadedEditValues, setHasLoadedEditValues] = useState(false);
   const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
   const [draftRecoveredAt, setDraftRecoveredAt] = useState(null);
+  const [draftMediaSummary, setDraftMediaSummary] = useState("");
   const isEditing = Boolean(editPostId);
   const draftContextKey = launchedFromGamePage ? `game:${initialGameId}` : "global";
   const availablePostTypes = allowedPostTypes.length > 0 ? postTypes.filter((type) => allowedPostTypes.includes(type)) : postTypes;
@@ -154,6 +168,7 @@ export default function CreatePostScreen() {
         setSpoilerTag(draft.spoilerTag ?? "");
         setGameSearch(draft.gameSearch ?? "");
         setDraftRecoveredAt(draft.updatedAt ?? null);
+        setDraftMediaSummary(draft.hadMedia ? draft.mediaSummary || "Media from the previous draft must be reselected." : "");
       }
 
       setHasRestoredDraft(true);
@@ -181,13 +196,19 @@ export default function CreatePostScreen() {
         isSpoiler,
         spoilerTag,
         gameSearch,
+        hadMedia: selectedImages.length > 0 || Boolean(selectedClip),
+        mediaSummary: selectedClip
+          ? "Clip from the previous draft must be reselected."
+          : selectedImages.length > 0
+            ? `${selectedImages.length} ${selectedImages.length === 1 ? "image" : "images"} from the previous draft must be reselected.`
+            : "",
       });
     }, 300);
 
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [body, draftContextKey, gameSearch, hasRestoredDraft, isEditing, isSpoiler, postType, rating, selectedGameId, spoilerTag, title]);
+  }, [body, draftContextKey, gameSearch, hasRestoredDraft, isEditing, isSpoiler, postType, rating, selectedClip, selectedGameId, selectedImages.length, spoilerTag, title]);
 
   useEffect(() => {
     const handleShow = (event) => {
@@ -357,6 +378,7 @@ export default function CreatePostScreen() {
 
     try {
       setIsSubmitting(true);
+      setSubmitProgress(isEditing ? { label: "Saving changes" } : { label: "Preparing upload" });
 
       const { error, moderation } = isEditing
         ? await updatePost({
@@ -378,7 +400,9 @@ export default function CreatePostScreen() {
             spoiler: isSpoiler,
             spoilerTag,
             imageAssets: selectedImages,
+            imageCaptions,
             clipAsset: selectedClip,
+            onProgress: setSubmitProgress,
           });
 
       if (error) {
@@ -398,6 +422,7 @@ export default function CreatePostScreen() {
       router.replace(`/game/${selectedGame.id}`);
     } finally {
       setIsSubmitting(false);
+      setSubmitProgress(null);
     }
   };
 
@@ -407,6 +432,7 @@ export default function CreatePostScreen() {
 
       if (assets.length > 0) {
         setSelectedImages(assets);
+        setImageCaptions(assets.map((_, index) => imageCaptions[index] ?? ""));
         setSelectedClip(null);
       }
     } catch (error) {
@@ -424,6 +450,7 @@ export default function CreatePostScreen() {
       if (asset) {
         setSelectedClip(asset);
         setSelectedImages([]);
+        setImageCaptions([]);
       }
     } catch (error) {
       Alert.alert(
@@ -635,6 +662,9 @@ export default function CreatePostScreen() {
                 <Text style={styles.draftBannerText}>
                   Restored a saved draft{draftRecoveredAt ? ` from ${new Date(draftRecoveredAt).toLocaleString()}` : ""}.
                 </Text>
+                {draftMediaSummary ? (
+                  <Text style={styles.draftBannerText}>{draftMediaSummary}</Text>
+                ) : null}
                 <Pressable
                   onPress={async () => {
                     setTitle("");
@@ -643,9 +673,11 @@ export default function CreatePostScreen() {
                     setIsSpoiler(false);
                     setSpoilerTag("");
                     setSelectedImages([]);
+                    setImageCaptions([]);
                     setSelectedClip(null);
                     setGameSearch("");
                     setDraftRecoveredAt(null);
+                    setDraftMediaSummary("");
                     await clearPostComposerDraft(draftContextKey);
                   }}
                   style={({ pressed }) => [
@@ -717,6 +749,20 @@ export default function CreatePostScreen() {
                     );
                   })}
                 </View>
+              </View>
+            ) : null}
+            {!isEditing ? (
+              <View style={styles.templateRow}>
+                <Pressable
+                  onPress={() => {
+                    const template = POST_TEMPLATES[postType] ?? POST_TEMPLATES.discussion;
+                    if (!title.trim()) setTitle(template.title);
+                    if (!body.trim()) setBody(template.body);
+                  }}
+                  style={({ pressed }) => [styles.inlineLinkButton, pressed ? styles.buttonPressed : null]}
+                >
+                  <Text style={styles.inlineLinkText}>Use {postType} template</Text>
+                </Pressable>
               </View>
             ) : null}
             {(postType === "guide" || postType === "tip") ? (
@@ -812,6 +858,19 @@ export default function CreatePostScreen() {
                   {selectedImages.map((image, index) => (
                     <View key={`${image.uri}:${index}`} style={styles.imagePreviewTile}>
                       <Image source={{ uri: image.uri }} style={styles.imagePreview} />
+                      <TextInput
+                        onChangeText={(value) =>
+                          setImageCaptions((currentValue) => {
+                            const nextValue = [...currentValue];
+                            nextValue[index] = value;
+                            return nextValue;
+                          })
+                        }
+                        placeholder={`Caption ${index + 1}`}
+                        placeholderTextColor={theme.colors.textMuted}
+                        style={styles.captionInput}
+                        value={imageCaptions[index] ?? ""}
+                      />
                     </View>
                   ))}
                 </View>
@@ -829,7 +888,10 @@ export default function CreatePostScreen() {
                     <Text style={styles.mediaButtonText}>Replace images</Text>
                   </Pressable>
                   <Pressable
-                    onPress={() => setSelectedImages([])}
+                    onPress={() => {
+                      setSelectedImages([]);
+                      setImageCaptions([]);
+                    }}
                     style={({ pressed }) => [
                       styles.mediaButton,
                       styles.mediaButtonDanger,
@@ -863,14 +925,29 @@ export default function CreatePostScreen() {
               </Text>
             </Pressable>
             {isSpoiler ? (
-              <TextInput
-                onChangeText={setSpoilerTag}
-                onFocus={scrollToComposer}
-                placeholder="Optional spoiler label, like Campaign ending"
-                placeholderTextColor={theme.colors.textMuted}
-                style={styles.input}
-                value={spoilerTag}
-              />
+              <>
+                <View style={styles.spoilerZoneRow}>
+                  {SPOILER_ZONE_OPTIONS.map((zone) => (
+                    <Pressable
+                      key={zone}
+                      onPress={() => setSpoilerTag(zone)}
+                      style={[styles.typeButton, spoilerTag === zone ? styles.typeButtonActive : null]}
+                    >
+                      <Text style={[styles.typeButtonText, spoilerTag === zone ? styles.typeButtonTextActive : null]}>
+                        {zone}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <TextInput
+                  onChangeText={setSpoilerTag}
+                  onFocus={scrollToComposer}
+                  placeholder="Optional spoiler label, like Campaign ending"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={styles.input}
+                  value={spoilerTag}
+                />
+              </>
             ) : null}
           </SectionCard>
         </ScrollView>
@@ -903,7 +980,12 @@ export default function CreatePostScreen() {
             ]}
           >
             {isSubmitting ? (
-              <ActivityIndicator color={theme.colors.background} />
+              <View style={styles.submitProgressContent}>
+                <ActivityIndicator color={theme.colors.background} />
+                <Text style={styles.primaryButtonText} numberOfLines={1}>
+                  {submitProgress?.label ?? "Publishing..."}
+                </Text>
+              </View>
             ) : (
               <Text style={styles.primaryButtonText}>{isEditing ? "Save changes" : "Publish post"}</Text>
             )}
@@ -1147,12 +1229,30 @@ const styles = StyleSheet.create({
   },
   imagePreviewTile: {
     width: "48%",
+    gap: theme.spacing.xs,
   },
   imagePreview: {
     width: "100%",
     aspectRatio: 1,
     borderRadius: theme.radius.md,
     backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  captionInput: {
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  templateRow: {
+    alignItems: "flex-start",
+  },
+  spoilerZoneRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
   },
   imageActions: {
     flexDirection: "row",
@@ -1263,6 +1363,12 @@ const styles = StyleSheet.create({
     color: theme.colors.background,
     fontSize: theme.fontSizes.md,
     fontWeight: theme.fontWeights.bold,
+  },
+  submitProgressContent: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    justifyContent: "center",
   },
   buttonPressed: {
     opacity: 0.92,

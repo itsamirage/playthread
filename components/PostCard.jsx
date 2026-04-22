@@ -1,11 +1,25 @@
 import { BlurView } from "expo-blur";
-import { Image } from "expo-image";
+import { Image as ExpoImage } from "expo-image";
 import { useRef, useState } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Animated,
+  Alert,
+  Image as NativeImage,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
 import ClipPlayer from "./ClipPlayer";
 import { formatModerationWarning } from "../lib/moderation";
 import { getProfileNameColor } from "../lib/profileAppearance";
+import { reportContent } from "../lib/reports";
+import { useSavedPostIds } from "../lib/savedPosts";
 import { getProfileTitleOption } from "../lib/titles";
 import { theme } from "../lib/theme";
 
@@ -32,6 +46,44 @@ const reactionLabelsByMode = {
   },
 };
 
+function PostImage({ uri, style, resizeMode = "cover", onPress }) {
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError) {
+    return (
+      <View style={[style, styles.postImageFallback]}>
+        <Text style={styles.postImageFallbackText}>Image unavailable</Text>
+        <View style={styles.postImageFallbackActions}>
+          <Pressable onPress={() => setHasError(false)} style={styles.postImageFallbackButton}>
+            <Text style={styles.postImageFallbackButtonText}>Retry</Text>
+          </Pressable>
+          <Pressable onPress={() => Linking.openURL(uri)} style={styles.postImageFallbackButton}>
+            <Text style={styles.postImageFallbackButtonText}>Open</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      disabled={!onPress}
+      onPress={(event) => {
+        event.stopPropagation?.();
+        onPress?.();
+      }}
+      style={style}
+    >
+      <NativeImage
+        onError={() => setHasError(true)}
+        resizeMode={resizeMode}
+        source={{ uri }}
+        style={styles.fillImage}
+      />
+    </Pressable>
+  );
+}
+
 export default function PostCard({
   post,
   onPress,
@@ -42,14 +94,40 @@ export default function PostCard({
   onGift,
   onEdit,
   onDelete,
+  onReport,
+  onSave,
   isDeleting = false,
   isReacting = false,
+  isSaved = false,
   concealSpoilers = false,
   spoilerRevealHint = null,
 }) {
   const [spoilerRevealed, setSpoilerRevealed] = useState(false);
+  const [imageGridWidth, setImageGridWidth] = useState(0);
+  const [galleryIndex, setGalleryIndex] = useState(null);
+  const { width: viewportWidth } = useWindowDimensions();
   const blurOpacity = useRef(new Animated.Value(1)).current;
   const isSpoilerConcealed = concealSpoilers && !spoilerRevealed;
+  const { isSavedPost, toggleSavedPost } = useSavedPostIds();
+  const isPostSaved = isSaved || isSavedPost(post.id);
+  const handleSavePost = onSave ?? (() => toggleSavedPost(post.id));
+  const handleReportPost = onReport ?? (() => {
+    Alert.alert("Report post", "Send this post to moderators for review.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Abuse",
+        onPress: () => reportContent({ contentType: "post", contentId: post.id, category: "abuse", reason: "User reported this post for abuse." }).catch((error) => Alert.alert("Report failed", error.message)),
+      },
+      {
+        text: "Nudity",
+        onPress: () => reportContent({ contentType: "post", contentId: post.id, category: "nudity", reason: "User reported this post for sexual content." }).catch((error) => Alert.alert("Report failed", error.message)),
+      },
+      {
+        text: "Hate",
+        onPress: () => reportContent({ contentType: "post", contentId: post.id, category: "hate", reason: "User reported this post for hateful content." }).catch((error) => Alert.alert("Report failed", error.message)),
+      },
+    ]);
+  });
 
   const handleRevealSpoiler = () => {
     Animated.timing(blurOpacity, {
@@ -67,6 +145,7 @@ export default function PostCard({
     : post.imageUrl
       ? [post.imageUrl]
       : [];
+  const imageCaptions = Array.isArray(post.imageCaptions) ? post.imageCaptions : [];
   const reactionTypes =
     post.reactionMode === "utility"
       ? ["helpful", "not_helpful"]
@@ -124,7 +203,7 @@ export default function PostCard({
         style={styles.gameRow}
       >
         {post.gameCoverUrl ? (
-          <Image source={{ uri: post.gameCoverUrl }} style={styles.coverImage} />
+          <ExpoImage source={{ uri: post.gameCoverUrl }} style={styles.coverImage} />
         ) : (
           <View style={styles.coverFallback}>
             <Text style={styles.coverFallbackText}>
@@ -148,17 +227,42 @@ export default function PostCard({
         ) : null}
 
         {imageUrls.length === 1 ? (
-          <Image source={{ uri: imageUrls[0] }} style={styles.postImage} contentFit="cover" />
+          <View style={styles.postImageBlock}>
+            <PostImage uri={imageUrls[0]} style={styles.postImage} onPress={() => setGalleryIndex(0)} />
+            {imageCaptions[0] ? <Text style={styles.imageCaption}>{imageCaptions[0]}</Text> : null}
+          </View>
         ) : imageUrls.length > 1 ? (
-          <View style={styles.postImageGrid}>
+          <View
+            onLayout={(event) => setImageGridWidth(event.nativeEvent.layout.width)}
+            style={styles.postImageGrid}
+          >
             {imageUrls.map((imageUrl, index) => (
-              <Image
+              <PostImage
                 key={`${post.id}:image:${index}`}
-                source={{ uri: imageUrl }}
-                style={styles.postImageGridItem}
-                contentFit="cover"
+                uri={imageUrl}
+                onPress={() => setGalleryIndex(index)}
+                style={[
+                  styles.postImageGridItem,
+                  imageGridWidth > 0
+                    ? {
+                        width: (imageGridWidth - theme.spacing.sm) / 2,
+                        height: (imageGridWidth - theme.spacing.sm) / 2,
+                      }
+                    : null,
+                ]}
               />
             ))}
+          </View>
+        ) : null}
+        {imageUrls.length > 1 && imageCaptions.some(Boolean) ? (
+          <View style={styles.imageCaptionList}>
+            {imageCaptions.map((caption, index) =>
+              caption ? (
+                <Text key={`${post.id}:caption:${index}`} style={styles.imageCaption}>
+                  {index + 1}. {caption}
+                </Text>
+              ) : null,
+            )}
           </View>
         ) : null}
 
@@ -234,6 +338,30 @@ export default function PostCard({
                 style={({ pressed }) => [styles.commentButton, pressed ? styles.cardPressed : null]}
               >
                 <Text style={[styles.footerText, styles.commentButtonText]}>Gift coins</Text>
+              </Pressable>
+            ) : null}
+            {handleSavePost ? (
+              <Pressable
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  handleSavePost?.(post);
+                }}
+                style={({ pressed }) => [styles.commentButton, pressed ? styles.cardPressed : null]}
+              >
+                <Text style={[styles.footerText, styles.commentButtonText]}>
+                  {isPostSaved ? "Saved" : "Save"}
+                </Text>
+              </Pressable>
+            ) : null}
+            {handleReportPost ? (
+              <Pressable
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  handleReportPost?.(post);
+                }}
+                style={({ pressed }) => [styles.commentButton, pressed ? styles.cardPressed : null]}
+              >
+                <Text style={[styles.footerText, styles.reportButtonText]}>Report</Text>
               </Pressable>
             ) : null}
             <Pressable
@@ -312,6 +440,45 @@ export default function PostCard({
           </Pressable>
         ) : null}
       </View>
+      {galleryIndex !== null ? (
+        <Modal
+          animationType="fade"
+          onRequestClose={() => setGalleryIndex(null)}
+          transparent
+          visible
+        >
+          <View style={styles.galleryBackdrop}>
+            <View style={styles.galleryHeader}>
+              <Text style={styles.galleryCounter}>{galleryIndex + 1} / {imageUrls.length}</Text>
+              <Pressable onPress={() => setGalleryIndex(null)} style={styles.galleryHeaderButton}>
+                <Text style={styles.galleryHeaderButtonText}>Close</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={styles.galleryScroll}
+              contentOffset={{ x: galleryIndex * viewportWidth, y: 0 }}
+            >
+              {imageUrls.map((imageUrl, index) => (
+                <View
+                  key={`${post.id}:gallery:${index}`}
+                  style={[styles.galleryPage, { width: viewportWidth }]}
+                >
+                  <NativeImage resizeMode="contain" source={{ uri: imageUrl }} style={styles.galleryImage} />
+                  {imageCaptions[index] ? (
+                    <Text style={styles.galleryCaption}>{imageCaptions[index]}</Text>
+                  ) : null}
+                  <Pressable onPress={() => Linking.openURL(imageUrl)} style={styles.galleryOpenButton}>
+                    <Text style={styles.galleryOpenButtonText}>Open raw image</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </Modal>
+      ) : null}
     </Pressable>
   );
 }
@@ -475,6 +642,22 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     backgroundColor: "rgba(255,255,255,0.03)",
   },
+  postImageBlock: {
+    gap: theme.spacing.xs,
+  },
+  imageCaptionList: {
+    gap: theme.spacing.xs,
+  },
+  imageCaption: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: 20,
+  },
+  fillImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: theme.radius.md,
+  },
   postImageGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -485,6 +668,96 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: theme.radius.md,
     backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  postImageFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderColor: theme.colors.border,
+    borderWidth: theme.borders.width,
+  },
+  postImageFallbackText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.medium,
+  },
+  postImageFallbackActions: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+  },
+  postImageFallbackButton: {
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+  },
+  postImageFallbackButtonText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+  },
+  galleryBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.94)",
+    paddingVertical: theme.spacing.xl,
+  },
+  galleryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.md,
+  },
+  galleryCounter: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  galleryHeaderButton: {
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  galleryHeaderButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  galleryScroll: {
+    flex: 1,
+  },
+  galleryPage: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing.lg,
+  },
+  galleryImage: {
+    width: "100%",
+    height: "78%",
+  },
+  galleryCaption: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.md,
+    lineHeight: 22,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
+    textAlign: "center",
+  },
+  galleryOpenButton: {
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    marginTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+  },
+  galleryOpenButtonText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
   },
   clipMetaText: {
     color: theme.colors.textMuted,
@@ -559,6 +832,9 @@ const styles = StyleSheet.create({
   },
   commentButtonText: {
     color: theme.colors.accent,
+  },
+  reportButtonText: {
+    color: "#ff8a8a",
   },
   reactionRow: {
     flexDirection: "row",

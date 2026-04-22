@@ -39,3 +39,6 @@ verify_jwt = false
 
 [functions.integrity-retention]
 verify_jwt = false
+
+[functions.trusted-report]
+verify_jwt = false

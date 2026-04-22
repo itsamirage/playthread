@@ -50,6 +50,7 @@ import {
   useSteamShowcaseCatalog,
 } from "../../lib/profileShowcase";
 import { getProfileNameColor } from "../../lib/profileAppearance";
+import { useSavedPosts } from "../../lib/savedPosts";
 import {
   useMyReviewCount,
   useMyReviewsByGame,
@@ -236,6 +237,16 @@ export default function ProfileScreen() {
     session?.user?.id,
   );
   const {
+    posts: savedPosts,
+    savedRows,
+    isLoading: savedPostsLoading,
+    toggleSavedPost,
+  } = useSavedPosts({ limit: 20 });
+  const savedCollectionByPostId = useMemo(
+    () => new Map((savedRows ?? []).map((row) => [String(row.post_id), row.collection ?? "General"])),
+    [savedRows],
+  );
+  const {
     posts: myPosts,
     isLoading: myPostsLoading,
     isLoadingMore: myPostsLoadingMore,
@@ -251,6 +262,18 @@ export default function ProfileScreen() {
     reload: reloadMyComments,
     loadMore: loadMoreMyComments,
   } = useUserCommentHistory(session?.user?.id, { limit: 10 });
+  const myMediaPosts = useMemo(
+    () => myPosts.filter((post) => (post.imageUrls?.length ?? 0) > 0 || post.type === "clip").slice(0, 12),
+    [myPosts],
+  );
+  const reputationBadges = useMemo(() => {
+    const badges = [];
+    if (myPosts.filter((post) => post.type === "guide" || post.type === "tip").length >= 3) badges.push("Helpful guide maker");
+    if (reviewCount >= 3) badges.push("Reviewer");
+    if (myMediaPosts.length >= 3) badges.push("Media creator");
+    if (friendCount >= 10) badges.push("Community regular");
+    return badges;
+  }, [friendCount, myMediaPosts.length, myPosts, reviewCount]);
   const { profile, reload: reloadProfile } = useCurrentProfile();
   const { accountsByProvider, isLoading: accountsLoading, reloadAccounts } = useConnectedAccounts();
   const {
@@ -853,6 +876,15 @@ export default function ProfileScreen() {
         ) : null}
         <Text style={styles.subtitle}>Building a gaming identity on PlayThread</Text>
         {profile?.bio ? <Text style={styles.heroBio}>{profile.bio}</Text> : null}
+        {reputationBadges.length > 0 ? (
+          <View style={styles.badgeRow}>
+            {reputationBadges.map((badge) => (
+              <View key={badge} style={styles.reputationBadge}>
+                <Text style={styles.reputationBadgeText}>{badge}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
         <View style={styles.heroMetaRow}>
           <View style={styles.heroChip}>
             <Text style={styles.heroChipText}>{formatAccountAge(profile?.created_at)}</Text>
@@ -1713,6 +1745,63 @@ export default function ProfileScreen() {
         )}
       </SectionCard>
 
+      <SectionCard title="Media" eyebrow="Your screenshots and clips">
+        {myMediaPosts.length > 0 ? (
+          <View style={styles.mediaGrid}>
+            {myMediaPosts.map((post) => {
+              const imageUrl = post.imageUrls?.[0] ?? post.imageUrl ?? post.videoThumbnailUrl ?? null;
+              return (
+                <Pressable
+                  key={`media:${post.id}`}
+                  onPress={() => router.push(`/post/${post.id}`)}
+                  style={styles.mediaTile}
+                >
+                  {imageUrl ? (
+                    <Image source={{ uri: imageUrl }} style={styles.mediaTileImage} />
+                  ) : (
+                    <View style={styles.mediaTileFallback}>
+                      <Text style={styles.mediaTileFallbackText}>Clip</Text>
+                    </View>
+                  )}
+                  <Text numberOfLines={1} style={styles.mediaTileLabel}>{post.gameTitle}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={styles.bodyText}>Your image and clip posts will appear here.</Text>
+        )}
+      </SectionCard>
+
+      <SectionCard title="Saved posts" eyebrow="Bookmarks">
+        {savedPostsLoading ? (
+          <ActivityIndicator color={theme.colors.accent} />
+        ) : savedPosts.length > 0 ? (
+          <View style={styles.feedList}>
+            {savedPosts.map((post) => (
+              <View key={`saved:${post.id}`} style={styles.savedPostWrap}>
+                <Text style={styles.savedCollectionLabel}>
+                  {savedCollectionByPostId.get(String(post.id)) ?? "General"}
+                </Text>
+                <PostCard
+                  isSaved
+                  onAuthorPress={() => router.push(`/user/${post.userId}`)}
+                  onGamePress={() => router.push(`/game/${post.gameId}`)}
+                  onOpenComments={() =>
+                    router.push({ pathname: "/post/[id]", params: { id: post.id, scrollTo: "comments" } })
+                  }
+                  onPress={() => router.push(`/post/${post.id}`)}
+                  onSave={() => toggleSavedPost(post.id)}
+                  post={post}
+                />
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.bodyText}>Saved guides, images, reviews, and discussions will appear here.</Text>
+        )}
+      </SectionCard>
+
       <SectionCard title="Post history" eyebrow="Your posts">
         {myPostsLoading ? (
           <ActivityIndicator color={theme.colors.accent} />
@@ -2027,6 +2116,25 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: "center",
   },
+  badgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    justifyContent: "center",
+  },
+  reputationBadge: {
+    backgroundColor: "rgba(255,204,51,0.12)",
+    borderColor: "rgba(255,204,51,0.38)",
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+  },
+  reputationBadgeText: {
+    color: "#ffcc33",
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+  },
   handleText: {
     fontSize: theme.fontSizes.md,
     fontWeight: theme.fontWeights.bold,
@@ -2120,6 +2228,50 @@ const styles = StyleSheet.create({
   },
   feedList: {
     gap: theme.spacing.md,
+  },
+  mediaGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  mediaTile: {
+    width: "31%",
+    gap: theme.spacing.xs,
+  },
+  mediaTileImage: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: theme.radius.md,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  mediaTileFallback: {
+    width: "100%",
+    aspectRatio: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  mediaTileFallbackText: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  mediaTileLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
+  },
+  savedPostWrap: {
+    gap: theme.spacing.xs,
+  },
+  savedCollectionLabel: {
+    alignSelf: "flex-start",
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+    textTransform: "uppercase",
   },
   bodyText: {
     color: theme.colors.textPrimary,

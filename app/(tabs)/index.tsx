@@ -144,6 +144,14 @@ export default function HomeScreen() {
     />
   );
 
+  const digestStats = {
+    posts: feedPosts.length,
+    guides: feedPosts.filter((post) => post.type === "guide" || post.type === "tip").length,
+    clips: feedPosts.filter((post) => post.type === "clip").length,
+    images: feedPosts.filter((post) => post.type === "screenshot").length,
+    reviews: feedPosts.filter((post) => post.type === "review").length,
+  };
+
   const listHeader = (
     <View style={styles.header}>
       <View style={styles.hero}>
@@ -185,6 +193,18 @@ export default function HomeScreen() {
           </Text>
         </Pressable>
       </View>
+
+      {feedPosts.length > 0 ? (
+        <SectionCard title="Followed-game digest" eyebrow="Latest activity">
+          <View style={styles.digestRow}>
+            <View style={styles.digestPill}><Text style={styles.digestValue}>{digestStats.posts}</Text><Text style={styles.digestLabel}>Posts</Text></View>
+            <View style={styles.digestPill}><Text style={styles.digestValue}>{digestStats.guides}</Text><Text style={styles.digestLabel}>Guides</Text></View>
+            <View style={styles.digestPill}><Text style={styles.digestValue}>{digestStats.images}</Text><Text style={styles.digestLabel}>Images</Text></View>
+            <View style={styles.digestPill}><Text style={styles.digestValue}>{digestStats.clips}</Text><Text style={styles.digestLabel}>Clips</Text></View>
+            <View style={styles.digestPill}><Text style={styles.digestValue}>{digestStats.reviews}</Text><Text style={styles.digestLabel}>Reviews</Text></View>
+          </View>
+        </SectionCard>
+      ) : null}
 
       {isLoading ? (
         <SectionCard title="Loading feed" eyebrow="Your posts">
@@ -365,6 +385,31 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: theme.fontSizes.sm,
     lineHeight: 20,
+  },
+  digestRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  digestPill: {
+    minWidth: 82,
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    padding: theme.spacing.sm,
+  },
+  digestValue: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.lg,
+    fontWeight: theme.fontWeights.bold,
+  },
+  digestLabel: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+    textTransform: "uppercase",
   },
   bodyText: {
     color: theme.colors.textPrimary,
