@@ -57,6 +57,7 @@ export default function PostCommentsThread({
   const [isSendingGift, setIsSendingGift] = useState(false);
   const [displayComments, setDisplayComments] = useState([]);
   const [editingCommentId, setEditingCommentId] = useState(null);
+  const [replyingToComment, setReplyingToComment] = useState(null);
   const [linkedGame, setLinkedGame] = useState(null);
   const [showLinkPicker, setShowLinkPicker] = useState(false);
   const [gameLinkQuery, setGameLinkQuery] = useState("");
@@ -76,6 +77,7 @@ export default function PostCommentsThread({
     if (!post?.id) {
       setDraft("");
       setEditingCommentId(null);
+      setReplyingToComment(null);
     }
   }, [post?.id]);
 
@@ -117,6 +119,7 @@ export default function PostCommentsThread({
       setDraft("");
       setDraftImage(null);
       setEditingCommentId(null);
+      setReplyingToComment(null);
       setLinkedGame(null);
       setShowLinkPicker(false);
       setGameLinkQuery("");
@@ -160,12 +163,26 @@ export default function PostCommentsThread({
 
   const handleStartEdit = (comment) => {
     setEditingCommentId(comment.id);
+    setReplyingToComment(null);
     setDraft(stripCommentGameLinkTokens(comment.body ?? ""));
     setLinkedGame(extractCommentGameLink(comment.body ?? ""));
   };
 
+  const handleStartReply = (comment) => {
+    const replyMention = `@${comment.author}`;
+    setEditingCommentId(null);
+    setReplyingToComment({ id: comment.id, author: comment.author });
+    setDraft((current) => {
+      const cleanCurrent = current.trimStart();
+      return cleanCurrent.toLowerCase().startsWith(replyMention.toLowerCase())
+        ? cleanCurrent
+        : `${replyMention} ${cleanCurrent}`.trimEnd();
+    });
+  };
+
   const handleCancelEdit = () => {
     setEditingCommentId(null);
+    setReplyingToComment(null);
     setDraft("");
     setDraftImage(null);
     setLinkedGame(null);
@@ -363,6 +380,9 @@ export default function PostCommentsThread({
                         Like {comment.reactionCounts?.like ?? 0}
                       </Text>
                     </Pressable>
+                    <Pressable onPress={() => handleStartReply(comment)} style={styles.actionChip}>
+                      <Text style={styles.actionChipText}>Reply</Text>
+                    </Pressable>
                     {!comment.isMine ? (
                       <Pressable onPress={() => setGiftingComment(comment)} style={styles.actionChip}>
                         <Text style={styles.actionChipText}>Gift coins</Text>
@@ -391,12 +411,20 @@ export default function PostCommentsThread({
             </Pressable>
           </View>
         ) : null}
+        {!editingCommentId && replyingToComment ? (
+          <View style={styles.replyBanner}>
+            <Text style={styles.replyBannerText}>Replying to @{replyingToComment.author}</Text>
+            <Pressable onPress={() => setReplyingToComment(null)} style={styles.editingCancelButton}>
+              <Text style={styles.editingCancelButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+        ) : null}
         <TextInput
           editable={!isSubmitting}
           multiline
           maxLength={600}
           onChangeText={setDraft}
-          placeholder="Add a comment"
+          placeholder={replyingToComment ? `Reply to @${replyingToComment.author}` : "Add a comment"}
           placeholderTextColor={theme.colors.textMuted}
           style={styles.input}
           value={draft}
@@ -679,6 +707,23 @@ const styles = StyleSheet.create({
   },
   editingBannerText: {
     color: theme.colors.accent,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  replyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  replyBannerText: {
+    color: theme.colors.textPrimary,
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.bold,
   },

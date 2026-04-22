@@ -69,6 +69,7 @@ const BANNER_STYLES = {
   sunset: ["#3d1822", "#7a3140", "#d4874d"],
 };
 const PROFILE_STATS_STORAGE_KEY = "playthread:profile-stats-expanded";
+const SAVED_POST_COLLECTIONS = ["General", "Guides", "Images", "Reviews", "Discussions"];
 
 function normalizeSearchValue(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -225,6 +226,7 @@ export default function ProfileScreen() {
     bio: "",
     avatarUrl: "",
   });
+  const [activeSavedCollection, setActiveSavedCollection] = useState("All");
   const deferredShowcaseSearch = useDeferredValue(showcaseSearch);
   const { session } = useAuth();
   const { preferences: contentPreferences, savePreferences: saveContentPreferences } = useContentPreferences();
@@ -241,10 +243,28 @@ export default function ProfileScreen() {
     savedRows,
     isLoading: savedPostsLoading,
     toggleSavedPost,
+    updateSavedPostCollection,
   } = useSavedPosts({ limit: 20 });
   const savedCollectionByPostId = useMemo(
     () => new Map((savedRows ?? []).map((row) => [String(row.post_id), row.collection ?? "General"])),
     [savedRows],
+  );
+  const savedCollectionFilters = useMemo(() => {
+    const collections = new Set(["All", ...SAVED_POST_COLLECTIONS]);
+    for (const row of savedRows ?? []) {
+      collections.add(row.collection ?? "General");
+    }
+    return Array.from(collections);
+  }, [savedRows]);
+  const filteredSavedPosts = useMemo(
+    () =>
+      activeSavedCollection === "All"
+        ? savedPosts
+        : savedPosts.filter(
+            (post) =>
+              (savedCollectionByPostId.get(String(post.id)) ?? "General") === activeSavedCollection,
+          ),
+    [activeSavedCollection, savedCollectionByPostId, savedPosts],
   );
   const {
     posts: myPosts,
@@ -1778,12 +1798,63 @@ export default function ProfileScreen() {
           <ActivityIndicator color={theme.colors.accent} />
         ) : savedPosts.length > 0 ? (
           <View style={styles.feedList}>
-            {savedPosts.map((post) => (
+            <View style={styles.savedCollectionFilterRow}>
+              {savedCollectionFilters.map((collection) => {
+                const isActive = activeSavedCollection === collection;
+                return (
+                  <Pressable
+                    key={`saved-filter:${collection}`}
+                    onPress={() => setActiveSavedCollection(collection)}
+                    style={({ pressed }) => [
+                      styles.savedCollectionFilter,
+                      isActive ? styles.savedCollectionFilterActive : null,
+                      pressed ? styles.buttonPressed : null,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.savedCollectionFilterText,
+                        isActive ? styles.savedCollectionFilterTextActive : null,
+                      ]}
+                    >
+                      {collection}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {filteredSavedPosts.length > 0 ? filteredSavedPosts.map((post) => (
               <View key={`saved:${post.id}`} style={styles.savedPostWrap}>
                 <View style={styles.savedCollectionPill}>
                   <Text style={styles.savedCollectionLabel}>
                     Saved in {savedCollectionByPostId.get(String(post.id)) ?? "General"}
                   </Text>
+                </View>
+                <View style={styles.savedCollectionActions}>
+                  {SAVED_POST_COLLECTIONS.map((collection) => {
+                    const isCurrent = (savedCollectionByPostId.get(String(post.id)) ?? "General") === collection;
+                    return (
+                      <Pressable
+                        disabled={isCurrent}
+                        key={`saved:${post.id}:collection:${collection}`}
+                        onPress={() => updateSavedPostCollection(post.id, collection)}
+                        style={({ pressed }) => [
+                          styles.savedCollectionAction,
+                          isCurrent ? styles.savedCollectionActionActive : null,
+                          pressed && !isCurrent ? styles.buttonPressed : null,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.savedCollectionActionText,
+                            isCurrent ? styles.savedCollectionActionTextActive : null,
+                          ]}
+                        >
+                          {collection}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
                 <PostCard
                   isSaved
@@ -1797,7 +1868,9 @@ export default function ProfileScreen() {
                   post={post}
                 />
               </View>
-            ))}
+            )) : (
+              <Text style={styles.bodyText}>No saved posts in {activeSavedCollection} yet.</Text>
+            )}
           </View>
         ) : (
           <Text style={styles.bodyText}>Saved guides, images, reviews, and discussions will appear here.</Text>
@@ -2282,6 +2355,55 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.xs,
     fontWeight: theme.fontWeights.bold,
     textTransform: "uppercase",
+  },
+  savedCollectionFilterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  savedCollectionFilter: {
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  savedCollectionFilterActive: {
+    backgroundColor: theme.colors.accent,
+    borderColor: theme.colors.accent,
+  },
+  savedCollectionFilterText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  savedCollectionFilterTextActive: {
+    color: theme.colors.background,
+  },
+  savedCollectionActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.xs,
+  },
+  savedCollectionAction: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+  },
+  savedCollectionActionActive: {
+    backgroundColor: "rgba(0,229,255,0.12)",
+    borderColor: "rgba(0,229,255,0.32)",
+  },
+  savedCollectionActionText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+  },
+  savedCollectionActionTextActive: {
+    color: theme.colors.accent,
   },
   bodyText: {
     color: theme.colors.textPrimary,
