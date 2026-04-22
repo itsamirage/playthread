@@ -234,7 +234,10 @@ function isMatureAgeRating(
   ageRatings: IgdbAgeRating[] = [],
   themes: Array<{ id?: number; name?: string }> = [],
 ) {
-  const hasAdultTheme = themes.some((t) => Number(t?.id) === 42);
+  const hasAdultTheme = themes.some((theme) => {
+    const themeName = String(theme?.name ?? "").toLowerCase();
+    return /\b(adult|erotic|hentai|porn|sexual)\b/.test(themeName);
+  });
   if (hasAdultTheme) return true;
 
   return ageRatings.some((item) => {
