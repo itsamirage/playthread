@@ -135,7 +135,7 @@ type IgdbAgeRating = {
   category?: number;
   organization?: number;
   rating?: number;
-  rating_category?: number | { organization?: number };
+  rating_category?: number | { organization?: number; rating?: number };
 };
 
 // IGDB age_ratings: organization/category 1=ESRB, 2=PEGI, 3=CERO, 4=USK, 5=GRAC, 6=CLASS_IND, 7=ACB.
@@ -195,6 +195,11 @@ function getAgeRatingOrganization(ageRating: IgdbAgeRating): number {
 }
 
 function getAgeRatingValue(ageRating: IgdbAgeRating): number {
+  const ratingCategory = ageRating?.rating_category;
+  if (ratingCategory && typeof ratingCategory === "object") {
+    return Number(ratingCategory.rating ?? ageRating.rating ?? 0);
+  }
+
   return Number(ageRating.rating ?? 0);
 }
 
@@ -370,7 +375,7 @@ async function getOrLoadCachedValue<T>(cacheKey: string, ttlMs: number, loader: 
 }
 
 function gameFields() {
-  return "fields name,summary,first_release_date,aggregated_rating,aggregated_rating_count,total_rating,total_rating_count,follows,hypes,cover.image_id,screenshots.image_id,genres.name,platforms.name,age_ratings.category,age_ratings.organization,age_ratings.rating,age_ratings.rating_category.organization,game_modes.name,themes.id,themes.name,involved_companies.developer,involved_companies.publisher,involved_companies.company.name;";
+  return "fields name,summary,first_release_date,aggregated_rating,aggregated_rating_count,total_rating,total_rating_count,follows,hypes,cover.image_id,screenshots.image_id,genres.name,platforms.name,age_ratings.category,age_ratings.organization,age_ratings.rating,age_ratings.rating_category.organization,age_ratings.rating_category.rating,game_modes.name,themes.id,themes.name,involved_companies.developer,involved_companies.publisher,involved_companies.company.name;";
 }
 
 function discoverQuery(limit: number, offset: number) {
