@@ -11,6 +11,9 @@
     "build:ios:preview": "npx eas build --platform ios --profile preview",
     "build:ios:production": "npx eas build --platform ios --profile production",
     "submit:ios": "npx eas submit --platform ios --profile production",
+    "ota:preview": "npx eas update --channel preview --non-interactive",
+    "ota:production": "npx eas update --channel production --non-interactive",
+    "deploy:functions": "npx --yes supabase functions deploy igdb-proxy && npx --yes supabase functions deploy trusted-post && npx --yes supabase functions deploy trusted-comment && npx --yes supabase functions deploy trusted-comment-reaction && npx --yes supabase functions deploy trusted-follow && npx --yes supabase functions deploy trusted-profile && npx --yes supabase functions deploy trusted-user && npx --yes supabase functions deploy trusted-coin && npx --yes supabase functions deploy trusted-admin && npx --yes supabase functions deploy trusted-report && npx --yes supabase functions deploy integrity-retention && npx --yes supabase functions deploy steam-account && npx --yes supabase functions deploy mux-video && npx --yes supabase functions deploy mux-webhook",
     "test": "node --test lib/__tests__/*.test.mjs",
     "smoke:deployed": "node scripts/smoke-deployed-functions.mjs"
   },
@@ -31,6 +34,7 @@
     "expo-router": "~6.0.23",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
+    "expo-updates": "~29.0.16",
     "expo-video": "~3.0.16",
     "expo-web-browser": "~15.0.10",
     "react": "19.1.0",

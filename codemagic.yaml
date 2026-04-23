@@ -1,4 +1,80 @@
 workflows:
+  ota-preview:
+    name: OTA hotfix -> preview
+    max_build_duration: 20
+    environment:
+      vars:
+        EXPO_PUBLIC_SUPABASE_URL: https://zippqumynxivnhhmvblc.supabase.co
+        EXPO_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppcHBxdW15bnhpdm5oaG12YmxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NTczMzcsImV4cCI6MjA5MTIzMzMzN30.jufKA4yHSshCyM-D1Xxa_hBfXTox4ErtpoEo0yXW6QE
+        EXPO_PUBLIC_EAS_PROJECT_ID: abdbb665-1d8f-4924-9174-863608ab17b5
+      groups:
+        - playthread
+      node: 22.14.0
+    scripts:
+      - name: Install dependencies
+        script: npm ci
+      - name: Run tests
+        script: npm test
+      - name: Verify web bundle
+        script: npm run build:web
+      - name: Publish preview OTA update
+        script: |
+          : "${EXPO_TOKEN:?Set EXPO_TOKEN in the playthread Codemagic variable group.}"
+          npx eas update --channel preview --message "${CM_COMMIT_MESSAGE:-Codemagic preview OTA hotfix}" --non-interactive
+
+  ota-production:
+    name: OTA hotfix -> production
+    max_build_duration: 20
+    environment:
+      vars:
+        EXPO_PUBLIC_SUPABASE_URL: https://zippqumynxivnhhmvblc.supabase.co
+        EXPO_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppcHBxdW15bnhpdm5oaG12YmxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NTczMzcsImV4cCI6MjA5MTIzMzMzN30.jufKA4yHSshCyM-D1Xxa_hBfXTox4ErtpoEo0yXW6QE
+        EXPO_PUBLIC_EAS_PROJECT_ID: abdbb665-1d8f-4924-9174-863608ab17b5
+      groups:
+        - playthread
+      node: 22.14.0
+    scripts:
+      - name: Install dependencies
+        script: npm ci
+      - name: Run tests
+        script: npm test
+      - name: Verify web bundle
+        script: npm run build:web
+      - name: Publish production OTA update
+        script: |
+          : "${EXPO_TOKEN:?Set EXPO_TOKEN in the playthread Codemagic variable group.}"
+          npx eas update --channel production --message "${CM_COMMIT_MESSAGE:-Codemagic production OTA hotfix}" --non-interactive
+
+  supabase-functions-hotfix:
+    name: Supabase functions hotfix
+    max_build_duration: 20
+    environment:
+      groups:
+        - playthread
+      node: 22.14.0
+    scripts:
+      - name: Install dependencies
+        script: npm ci
+      - name: Run tests
+        script: npm test
+      - name: Deploy Edge Functions
+        script: |
+          : "${SUPABASE_ACCESS_TOKEN:?Set SUPABASE_ACCESS_TOKEN in the playthread Codemagic variable group.}"
+          npx --yes supabase functions deploy igdb-proxy
+          npx --yes supabase functions deploy trusted-post
+          npx --yes supabase functions deploy trusted-comment
+          npx --yes supabase functions deploy trusted-comment-reaction
+          npx --yes supabase functions deploy trusted-follow
+          npx --yes supabase functions deploy trusted-profile
+          npx --yes supabase functions deploy trusted-user
+          npx --yes supabase functions deploy trusted-coin
+          npx --yes supabase functions deploy trusted-admin
+          npx --yes supabase functions deploy trusted-report
+          npx --yes supabase functions deploy integrity-retention
+          npx --yes supabase functions deploy steam-account
+          npx --yes supabase functions deploy mux-video
+          npx --yes supabase functions deploy mux-webhook
+
   ios-testflight:
     name: iOS → TestFlight
     max_build_duration: 60

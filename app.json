@@ -64,6 +64,12 @@
         "projectId": "abdbb665-1d8f-4924-9174-863608ab17b5"
       }
     },
-    "owner": "itsamirage"
+    "owner": "itsamirage",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/abdbb665-1d8f-4924-9174-863608ab17b5"
+    }
   }
 }
