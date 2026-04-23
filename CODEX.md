@@ -195,14 +195,33 @@ Pushes to `main` do **not** auto-trigger a build. Builds are triggered manually 
 - `APP_STORE_CONNECT_PRIVATE_KEY` — App Store Connect API private key
 - `APP_STORE_CONNECT_KEY_IDENTIFIER` — key ID
 - `APP_STORE_CONNECT_ISSUER_ID` — issuer ID
+- `EXPO_TOKEN` - Expo personal access token for EAS Update OTA hotfix workflows
+- `SUPABASE_ACCESS_TOKEN` - Supabase personal access token for Edge Function hotfix deploys
 
 ### Important `codemagic.yaml` notes
 - The workflow is `ios-testflight`
+- OTA workflows are `ota-preview` and `ota-production`; they run tests, web export, then `npx eas update --channel ...`
+- Server hotfix workflow is `supabase-functions-hotfix`; it runs tests, then deploys Edge Functions
 - Build number auto-increments from the last TestFlight build
 - `expo prebuild --clean --platform ios` regenerates the native iOS folder from scratch each build — **never manually edit files inside `/ios/`**
 - Codemagic now runs `cd ios && pod install` after prebuild, then builds from the generated Xcode workspace
 - `expo-image-picker` is pinned to the Expo SDK 54-compatible line so CocoaPods resolves `ExpoImageManipulator` correctly
 
+### EAS Update / hotfix flow
+
+EAS Update is configured with:
+- `expo-updates`
+- `updates.url` in `app.json`
+- `runtimeVersion: { "policy": "appVersion" }`
+- EAS channels in `eas.json`: `development`, `preview`, `production`
+
+Use Codemagic as the operational entry point:
+- JS/UI hotfix to preview: run `ota-preview`
+- JS/UI hotfix to production: run `ota-production`
+- Supabase/server exploit or logic hotfix: run `supabase-functions-hotfix`
+- Native dependency/config change: run `ios-testflight`; OTA cannot change native code
+
+Important: because OTA support was added after earlier builds, ship one new native build through Codemagic `ios-testflight` before relying on OTA for users. Only users on an app binary built with `expo-updates` and the matching channel/runtime can receive OTA updates.
 ---
 
 ## 6. Key Architectural Decisions & Rules
@@ -563,3 +582,4 @@ EXPO_PUBLIC_SUPABASE_URL=https://zippqumynxivnhhmvblc.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon key from eas.json>
 EXPO_PUBLIC_EAS_PROJECT_ID=abdbb665-1d8f-4924-9174-863608ab17b5
 ```
+

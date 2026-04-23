@@ -39,6 +39,14 @@ Current live state:
 - Browse typo tolerance is improved for game search
 - Expo web export passed after the latest local changes
 - `@player1` is `owner` with `integrity_exempt = true`
+- EAS Update / OTA hotfix support is configured in-repo:
+  - `expo-updates` installed
+  - `app.json` has `updates.url` for EAS project `abdbb665-1d8f-4924-9174-863608ab17b5`
+  - `runtimeVersion` policy is `appVersion`
+  - `eas.json` channels exist for `development`, `preview`, and `production`
+  - Codemagic workflows exist for `ota-preview`, `ota-production`, and `supabase-functions-hotfix`
+  - Codemagic `playthread` group now has `EXPO_TOKEN` and `SUPABASE_ACCESS_TOKEN` per user confirmation
+  - IMPORTANT: because `expo-updates` was just added, ship one new native build via Codemagic `ios-testflight` before expecting OTA updates to reach users
 
 What is now live beyond the old handoff:
 - Cross-game `All` feed on the Popular tab with filters:
@@ -71,6 +79,19 @@ What is now live beyond the old handoff:
   - selectable title on profile
   - title renders on profile, posts, and comments
   - title catalog is easy to extend in `lib/titles.js`
+- Saved-post collections and filters are implemented on profile:
+  - collection chips: General, Guides, Images, Reviews, Discussions
+  - saved post list can filter by collection
+  - per-post quick move chips update `saved_posts.collection`
+- Lightweight comment reply UX is implemented:
+  - Reply chip on each comment
+  - composer shows "Replying to @user"
+  - reply mention is prefilled into the comment draft
+- Comment image picker button now uses a real image icon instead of clipped "Image" text
+- IGDB age-rating logic is shared and tested:
+  - `supabase/functions/_shared/igdbAgeRatings.js`
+  - `lib/__tests__/igdbAgeRatings.test.mjs`
+  - deployed `igdb-proxy` verified after shared mapper refactor
 
 Trusted backend work now live:
 - High-risk writes are behind trusted Supabase Edge functions:
@@ -141,6 +162,7 @@ Automated verification now present:
   - integrity error-to-UX copy mapping
   - admin moderation policy helpers
   - profile identity/avatar moderation helpers
+  - IGDB age-rating mapper behavior
 - Expo web export passes after the profile moderation pass
 
 Important local migrations already pushed:
