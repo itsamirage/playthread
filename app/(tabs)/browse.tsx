@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import GameCard from "../../components/GameCard";
 import PostCard from "../../components/PostCard";
@@ -19,7 +20,6 @@ import NotificationInboxButton from "../../components/NotificationInboxButton";
 import SectionCard from "../../components/SectionCard";
 import {
   GENERAL_DISCUSSION,
-  getFeaturedCommunities,
   PLATFORM_FAMILIES,
   searchPlatformCommunities,
 } from "../../lib/communityHubs";
@@ -254,11 +254,13 @@ function getFacetRoute(mode, value) {
 
 export default function BrowseScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [searchMode, setSearchMode] = useState("game");
   const [activePlatformFilter, setActivePlatformFilter] = useState<string | null>(null);
   const [activePlatformFamily, setActivePlatformFamily] = useState("All");
   const [activeRatingFilter, setActiveRatingFilter] = useState<string | null>(null);
+  const [activeCoOpOnly, setActiveCoOpOnly] = useState(false);
   const [gameSort, setGameSort] = useState("popular");
   const [compareGameIds, setCompareGameIds] = useState<number[]>([]);
   const scrollRef = useRef(null);
@@ -274,7 +276,6 @@ export default function BrowseScreen() {
     selectedGenre: "All",
     hideMatureGames: preferences.hideMatureGames,
   });
-  const featuredCommunities = getFeaturedCommunities(5);
   const { results: playerResults, isLoading: playersLoading } = useCreatorSearch(
     searchMode === "player" ? query : ""
   );
@@ -287,15 +288,17 @@ export default function BrowseScreen() {
     setActivePlatformFilter(null);
     setActivePlatformFamily("All");
     setActiveRatingFilter(null);
+    setActiveCoOpOnly(false);
     setGameSort("popular");
     setCompareGameIds([]);
   };
-  const hasActiveFilters = cleanQuery.length > 0 || searchMode !== "game" || activePlatformFilter !== null || effectiveRatingFilter !== null || gameSort !== "popular";
+  const hasActiveFilters = cleanQuery.length > 0 || searchMode !== "game" || activePlatformFilter !== null || effectiveRatingFilter !== null || activeCoOpOnly || gameSort !== "popular";
 
   const displayedGames = filteredGames
     .filter((game) => {
       if (!matchesPlatformFilter(game, activePlatformFilter)) return false;
       if (effectiveRatingFilter && game.ageRatingLabel !== effectiveRatingFilter) return false;
+      if (activeCoOpOnly && !game.isCoOp) return false;
       return true;
     })
     .sort((a, b) => {
@@ -395,16 +398,17 @@ export default function BrowseScreen() {
           scrollEventThrottle={scrollHandlers.scrollEventThrottle}
         >
           <View style={styles.hero}>
+            <View style={{ paddingTop: insets.top + theme.spacing.md }} />
             <View style={styles.heroTopRow}>
-          <View style={styles.heroTextBlock}>
-            <Text style={styles.eyebrow}>PlayThread</Text>
-            <Text style={styles.title}>Browse</Text>
-            <Text style={styles.subtitle}>
-              Search games, studios, genres, platforms, players, or posts.
-            </Text>
-          </View>
-          <NotificationInboxButton />
-        </View>
+              <View style={styles.heroTextBlock}>
+                <Text style={styles.eyebrow}>PlayThread</Text>
+                <Text style={styles.title}>Browse</Text>
+                <Text style={styles.subtitle}>
+                  Search games, studios, genres, platforms, players, or posts.
+                </Text>
+              </View>
+              <NotificationInboxButton />
+            </View>
           </View>
 
           <SectionCard title="Search" eyebrow="Discover">
@@ -484,6 +488,16 @@ export default function BrowseScreen() {
               })}
             </View>
             <View style={styles.filterRow}>
+              <Pressable
+                onPress={() => {
+                  setSearchMode("game");
+                  setGameSort("popular");
+                  setActiveCoOpOnly((currentValue) => !currentValue);
+                }}
+                style={[styles.filterChip, activeCoOpOnly ? styles.filterChipActive : null]}
+              >
+                <Text style={[styles.filterChipText, activeCoOpOnly ? styles.filterChipTextActive : null]}>Co-op</Text>
+              </Pressable>
               {RATING_FILTERS.map((f) => {
                 const isActive = effectiveRatingFilter === f.key;
                 return (
@@ -559,33 +573,27 @@ export default function BrowseScreen() {
       </SectionCard>
 
           {!cleanQuery && (searchMode === "game" || searchMode === "platform") ? (
-            <SectionCard title="Jump in fast" eyebrow="Communities">
+            <SectionCard title="Communities" eyebrow="Looking for a specific hub?">
               <Text style={styles.emptyText}>
-                Start broad with a gaming hub, then narrow into a platform or game once you know where the thread belongs.
+                Search games, posts, and players here. For console and platform communities, use the dedicated community browser.
               </Text>
-              <View style={styles.featuredCommunityList}>
-                <Pressable
-                  onPress={() => router.push(`/game/${GENERAL_DISCUSSION.id}`)}
-                  style={({ pressed }) => [styles.facetCard, pressed ? styles.pressedCard : null]}
-                >
-                  <Text style={styles.facetTitle}>{GENERAL_DISCUSSION.title}</Text>
-                  <Text style={styles.facetMeta}>Community hub</Text>
-                  <Text style={styles.facetHint}>{GENERAL_DISCUSSION.subtitle}</Text>
-                </Pressable>
-                {featuredCommunities
-                  .filter((community) => community.id !== GENERAL_DISCUSSION.id)
-                  .map((community) => (
-                    <Pressable
-                      key={community.id}
-                      onPress={() => router.push(`/game/${community.id}`)}
-                      style={({ pressed }) => [styles.facetCard, pressed ? styles.pressedCard : null]}
-                    >
-                      <Text style={styles.facetTitle}>{community.title}</Text>
-                      <Text style={styles.facetMeta}>{community.eyebrow}</Text>
-                      <Text style={styles.facetHint}>{community.subtitle}</Text>
-                    </Pressable>
-                  ))}
-              </View>
+              <Pressable
+                onPress={() => router.push("/platforms")}
+                style={({ pressed }) => [styles.platformPromptButton, pressed ? styles.pressedCard : null]}
+              >
+                <Text style={styles.platformPromptTitle}>Looking for specific communities?</Text>
+                <Text style={styles.platformPromptBody}>
+                  Open community search for Xbox, PlayStation, Nintendo, PC Gaming, handhelds, and more.
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => router.push(`/community/${GENERAL_DISCUSSION.slug}`)}
+                style={({ pressed }) => [styles.facetCard, pressed ? styles.pressedCard : null]}
+              >
+                <Text style={styles.facetTitle}>{GENERAL_DISCUSSION.title}</Text>
+                <Text style={styles.facetMeta}>Community hub</Text>
+                <Text style={styles.facetHint}>{GENERAL_DISCUSSION.subtitle}</Text>
+              </Pressable>
             </SectionCard>
           ) : null}
 
@@ -775,7 +783,6 @@ const styles = StyleSheet.create({
   },
   hero: {
     gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xl,
   },
   heroTopRow: {
     flexDirection: "row",
@@ -969,8 +976,23 @@ const styles = StyleSheet.create({
   postResultsList: {
     gap: theme.spacing.md,
   },
-  featuredCommunityList: {
-    gap: theme.spacing.md,
+  platformPromptButton: {
+    gap: theme.spacing.xs,
+    backgroundColor: "rgba(0,229,255,0.08)",
+    borderColor: "rgba(0,229,255,0.28)",
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    padding: theme.spacing.md,
+  },
+  platformPromptTitle: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSizes.md,
+    fontWeight: theme.fontWeights.bold,
+  },
+  platformPromptBody: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: 20,
   },
   facetCard: {
     gap: theme.spacing.md,

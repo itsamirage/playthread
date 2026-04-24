@@ -1,6 +1,7 @@
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import BottomNavBar from "../../components/BottomNavBar";
 import CoinGiftSheet from "../../components/CoinGiftSheet";
@@ -20,6 +21,7 @@ import { theme } from "../../lib/theme";
 export default function CommunityScreen() {
   const { slug } = useLocalSearchParams();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const community = getCommunityBySlug(String(slug ?? ""));
   const scrollRef = useRef(null);
@@ -135,8 +137,25 @@ export default function CommunityScreen() {
 
   return (
     <View style={styles.screenWrapper}>
-      <ScrollView ref={scrollRef} style={styles.screen} contentContainerStyle={styles.content}>
-        <View style={styles.topBar}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        onScroll={(event) => {
+          if (!hasMore || isLoading || isLoadingMore) {
+            return;
+          }
+
+          const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+          const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+
+          if (distanceFromBottom < 320) {
+            loadMore();
+          }
+        }}
+        scrollEventThrottle={16}
+      >
+        <View style={[styles.topBar, { paddingTop: insets.top + theme.spacing.md }]}>
           <Pressable onPress={() => goBackOrFallback(router, "/(tabs)")} style={styles.backButton}>
             <Text style={styles.backButtonText}>Back</Text>
           </Pressable>
@@ -265,7 +284,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: theme.spacing.xl,
+    gap: theme.spacing.sm,
   },
   backButton: {
     backgroundColor: theme.colors.card,

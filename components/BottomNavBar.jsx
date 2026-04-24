@@ -1,9 +1,19 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { usePathname, useRouter } from "expo-router";
+import { useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { emitTabReselect } from "../lib/tabReselect";
+import {
+  getActiveTab,
+  getRememberedTabRoute,
+  getTabRootHref,
+  registerTabPress,
+  rememberTabRoute,
+  resolveTabKeyFromPath,
+  setActiveTab,
+} from "../lib/tabState";
 import { theme } from "../lib/theme";
 
 const TABS = [
@@ -17,26 +27,45 @@ export default function BottomNavBar() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const currentTabKey = resolveTabKeyFromPath(pathname) ?? getActiveTab();
+
+  useEffect(() => {
+    const tabKeyFromPath = resolveTabKeyFromPath(pathname);
+
+    if (tabKeyFromPath) {
+      setActiveTab(tabKeyFromPath);
+      rememberTabRoute(tabKeyFromPath, pathname);
+      return;
+    }
+
+    rememberTabRoute(getActiveTab(), pathname);
+  }, [pathname]);
 
   return (
     <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 8) }]}>
       {TABS.map((tab) => (
         (() => {
-          const isActive =
-            tab.href === "/(tabs)"
-              ? pathname === "/" || pathname === "/(tabs)" || pathname === "/(tabs)/index"
-              : pathname === tab.href;
+          const isActive = currentTabKey === tab.key;
 
           return (
             <Pressable
               key={tab.key}
               onPress={() => {
                 if (isActive) {
-                  emitTabReselect(tab.key);
+                  const isDoubleTap = registerTabPress(tab.key);
+
+                  if (isDoubleTap) {
+                    setActiveTab(tab.key);
+                    rememberTabRoute(tab.key, getTabRootHref(tab.key));
+                    router.replace(getTabRootHref(tab.key));
+                    emitTabReselect(tab.key);
+                  }
+
                   return;
                 }
 
-                router.navigate(tab.href);
+                setActiveTab(tab.key);
+                router.navigate(getRememberedTabRoute(tab.key));
               }}
               style={({ pressed }) => [styles.tab, pressed ? styles.tabPressed : null]}
             >

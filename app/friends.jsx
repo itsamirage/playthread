@@ -1,10 +1,13 @@
 import { useRouter } from "expo-router";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import BottomNavBar from "../components/BottomNavBar";
 import SectionCard from "../components/SectionCard";
 import { useAuth } from "../lib/auth";
 import { goBackOrFallback } from "../lib/navigation";
 import { getProfileNameColor } from "../lib/profileAppearance";
+import { bindRouteToTab } from "../lib/tabState";
 import { theme } from "../lib/theme";
 import {
   acceptFriendRequest,
@@ -12,20 +15,23 @@ import {
   removeFriend,
   useUserFollows,
 } from "../lib/userSocial";
+import { useEffect } from "react";
 
 export default function FriendsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const {
     friends,
     friendCount,
-    incomingRequestUserIds,
-    outgoingRequestUserIds,
     incomingRequestProfiles,
     outgoingRequestProfiles,
-    getFriendshipStatus,
     reload,
   } = useUserFollows(session?.user?.id);
+
+  useEffect(() => {
+    bindRouteToTab("profile", "/friends");
+  }, []);
 
   const handleAccept = async (userId) => {
     try {
@@ -68,13 +74,14 @@ export default function FriendsScreen() {
   };
 
   return (
+    <View style={styles.screen}>
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + theme.spacing.md }]}>
         <Pressable
           onPress={() => goBackOrFallback(router, "/(tabs)/profile")}
           style={({ pressed }) => [styles.backButton, pressed ? styles.buttonPressed : null]}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>Back</Text>
         </Pressable>
         <Text style={styles.eyebrow}>PlayThread</Text>
         <Text style={styles.title}>Friends</Text>
@@ -94,10 +101,7 @@ export default function FriendsScreen() {
           <View style={styles.requestList}>
             {incomingRequestProfiles.map((profile) => (
               <View key={profile.id} style={styles.requestCard}>
-                <Pressable
-                  onPress={() => router.push(`/user/${profile.id}`)}
-                  style={styles.requestNameRow}
-                >
+                <Pressable onPress={() => router.push(`/user/${profile.id}`)} style={styles.requestNameRow}>
                   <Text style={[styles.requestUsername, { color: getProfileNameColor(profile.selectedNameColor) }]}>
                     @{profile.username}
                   </Text>
@@ -155,10 +159,7 @@ export default function FriendsScreen() {
           <View style={styles.friendList}>
             {friends.map((friend) => (
               <View key={friend.id} style={styles.friendCard}>
-                <Pressable
-                  onPress={() => router.push(`/user/${friend.id}`)}
-                  style={styles.friendInfo}
-                >
+                <Pressable onPress={() => router.push(`/user/${friend.id}`)} style={styles.friendInfo}>
                   <Text style={[styles.friendUsername, { color: getProfileNameColor(friend.selectedNameColor) }]}>
                     @{friend.username}
                   </Text>
@@ -193,6 +194,8 @@ export default function FriendsScreen() {
         </SectionCard>
       )}
     </ScrollView>
+    <BottomNavBar />
+    </View>
   );
 }
 
@@ -204,10 +207,10 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.layout.screenPadding,
     gap: theme.spacing.lg,
+    paddingBottom: 96,
   },
   header: {
     gap: theme.spacing.xs,
-    paddingTop: theme.spacing.xl,
   },
   backButton: {
     alignSelf: "flex-start",

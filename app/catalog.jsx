@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
@@ -9,13 +9,16 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import BottomNavBar from "../components/BottomNavBar";
 import GameCard from "../components/GameCard";
 import SectionCard from "../components/SectionCard";
 import { useContentPreferences } from "../lib/contentPreferences";
 import { useFollows } from "../lib/follows";
 import { useCatalogGames } from "../lib/games";
 import { goBackOrFallback } from "../lib/navigation";
+import { bindRouteToTab } from "../lib/tabState";
 import { theme } from "../lib/theme";
 
 const sortOptions = [
@@ -33,6 +36,7 @@ const titlesByFacet = {
 
 export default function CatalogScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const facet = String(params.facet ?? "");
   const value = String(params.value ?? "");
@@ -45,6 +49,13 @@ export default function CatalogScreen() {
     hideMatureGames: preferences.hideMatureGames,
   });
   const { isFollowingGame, getFollowStatus, setFollowStatus, unfollowGame } = useFollows();
+
+  useEffect(() => {
+    const nextHref = facet && value
+      ? `/catalog?facet=${encodeURIComponent(facet)}&value=${encodeURIComponent(value)}`
+      : "/catalog";
+    bindRouteToTab("browse", nextHref);
+  }, [facet, value]);
 
   const handleSelectStatus = async (game, status) => {
     const { error } = await setFollowStatus(game, status);
@@ -63,8 +74,9 @@ export default function CatalogScreen() {
   };
 
   return (
+    <View style={styles.screen}>
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <View style={styles.hero}>
+      <View style={[styles.hero, { paddingTop: insets.top + theme.spacing.md }]}>
         <Pressable
           onPress={() => goBackOrFallback(router, "/(tabs)/browse")}
           style={({ pressed }) => [
@@ -134,6 +146,8 @@ export default function CatalogScreen() {
         )}
       </View>
     </ScrollView>
+    <BottomNavBar />
+    </View>
   );
 }
 
@@ -145,11 +159,10 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.layout.screenPadding,
     gap: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
+    paddingBottom: 96,
   },
   hero: {
     gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xl,
   },
   backButton: {
     alignSelf: "flex-start",

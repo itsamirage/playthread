@@ -1,6 +1,7 @@
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
-import { useCallback, useRef, useState } from "react";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRef, useState } from "react";
+import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import PostCard from "../../components/PostCard";
 import PostCommentsSheet from "../../components/PostCommentsSheet";
@@ -18,6 +19,7 @@ import { theme } from "../../lib/theme";
 
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const { followedGameIds, followedGames, shouldShowSpoilersByDefault } =
     useFollows();
@@ -121,12 +123,6 @@ export default function HomeScreen() {
     ]);
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      reload();
-    }, [reload])
-  );
-
   const renderPost = ({ item: post }) => (
     <PostCard
       concealSpoilers={Boolean(post.spoiler) && !shouldShowSpoilersByDefault(post.gameId)}
@@ -153,7 +149,7 @@ export default function HomeScreen() {
   };
 
   const listHeader = (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: insets.top + theme.spacing.md }]}>
       <View style={styles.hero}>
         <View style={styles.heroTopRow}>
           <View style={styles.heroTextBlock}>

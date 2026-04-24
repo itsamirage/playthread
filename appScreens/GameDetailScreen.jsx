@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import BottomNavBar from "../components/BottomNavBar";
 import PostCard from "../components/PostCard";
@@ -94,6 +95,7 @@ function getResourceKindLabel(kind) {
 export default function GameDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const { preferences } = useContentPreferences();
   const { profile: staffProfile } = useMyAdminProfile();
@@ -440,8 +442,24 @@ export default function GameDetailScreen() {
 
   return (
     <View style={styles.screenWrapper}>
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <View style={styles.topBar}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      onScroll={(event) => {
+        if (!hasMore || postsLoading || isLoadingMore) {
+          return;
+        }
+
+        const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+        const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+
+        if (distanceFromBottom < 320) {
+          loadMore();
+        }
+      }}
+      scrollEventThrottle={16}
+    >
+      <View style={[styles.topBar, { paddingTop: insets.top + theme.spacing.md }]}>
         <Pressable onPress={() => goBackOrFallback(router, "/(tabs)/browse")} style={styles.topBarBackButton}>
           <Text style={styles.topBarBackButtonText}>Back</Text>
         </Pressable>
@@ -1018,7 +1036,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: theme.spacing.xl,
+    gap: theme.spacing.sm,
   },
   topBarBackButton: {
     alignItems: "center",

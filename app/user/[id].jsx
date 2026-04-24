@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import BottomNavBar from "../../components/BottomNavBar";
 import PostCard from "../../components/PostCard";
@@ -36,6 +37,7 @@ import {
 export default function PublicProfileScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const userId = typeof id === "string" ? id : null;
   const { profile, isLoading, error, reload } = usePublicProfile(userId);
@@ -221,8 +223,29 @@ export default function PublicProfileScreen() {
 
   return (
     <View style={styles.screenWrapper}>
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        onScroll={(event) => {
+          const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+          const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+
+          if (distanceFromBottom >= 320) {
+            return;
+          }
+
+          if (activityHasMore && !activityLoading && !activityLoadingMore) {
+            loadMoreActivity();
+          }
+
+          if (commentsHasMore && !commentsLoading && !commentsLoadingMore) {
+            loadMoreComments();
+          }
+        }}
+        scrollEventThrottle={16}
+      >
         <View style={styles.hero}>
+          <View style={{ paddingTop: insets.top + theme.spacing.md }} />
           <View style={styles.heroActions}>
             <Pressable onPress={() => goBackOrFallback(router, "/(tabs)/browse")} style={styles.secondaryButton}>
               <Text style={styles.secondaryButtonText}>Back</Text>
@@ -508,7 +531,6 @@ const styles = StyleSheet.create({
   },
   hero: {
     gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xl,
     alignItems: "center",
   },
   heroActions: {

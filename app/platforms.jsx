@@ -1,21 +1,37 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import BottomNavBar from "../components/BottomNavBar";
 import SectionCard from "../components/SectionCard";
-import { PLATFORM_COMMUNITIES, searchPlatformCommunities } from "../lib/communityHubs";
+import { PLATFORM_COMMUNITIES, PLATFORM_FAMILIES, searchPlatformCommunities } from "../lib/communityHubs";
 import { goBackOrFallback } from "../lib/navigation";
+import { bindRouteToTab } from "../lib/tabState";
 import { theme } from "../lib/theme";
 
 export default function PlatformsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const query = String(params.q ?? "");
   const [draftQuery, setDraftQuery] = useState(query);
   const platforms = searchPlatformCommunities(query);
+  const groupedPlatforms = useMemo(
+    () =>
+      PLATFORM_FAMILIES.filter((family) => family !== "All").map((family) => ({
+        family,
+        items: PLATFORM_COMMUNITIES.filter((platform) => platform.family === family),
+      })),
+    [],
+  );
 
   useEffect(() => {
     setDraftQuery(query);
+  }, [query]);
+
+  useEffect(() => {
+    bindRouteToTab("browse", query.trim() ? `/platforms?q=${encodeURIComponent(query.trim())}` : "/platforms");
   }, [query]);
 
   useEffect(() => {
@@ -36,8 +52,10 @@ export default function PlatformsScreen() {
   }, [draftQuery, query, router]);
 
   return (
+    <View style={styles.screen}>
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
+        <View style={{ paddingTop: insets.top + theme.spacing.md }} />
         <Pressable onPress={() => goBackOrFallback(router, "/(tabs)/browse")} style={styles.backButton}>
           <Text style={styles.backButtonText}>Back</Text>
         </Pressable>
@@ -58,20 +76,44 @@ export default function PlatformsScreen() {
         />
       </SectionCard>
 
-      <View style={styles.list}>
-        {(query ? platforms : PLATFORM_COMMUNITIES).map((platform) => (
-          <Pressable
-            key={platform.slug}
-            onPress={() => router.push(`/community/${platform.slug}`)}
-            style={styles.card}
-          >
-            <Text style={styles.cardEyebrow}>{platform.family}</Text>
-            <Text style={styles.cardTitle}>{platform.title}</Text>
-            <Text style={styles.cardBody}>{platform.subtitle}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {query ? (
+        <View style={styles.list}>
+          {platforms.map((platform) => (
+            <Pressable
+              key={platform.slug}
+              onPress={() => router.push(`/community/${platform.slug}`)}
+              style={styles.card}
+            >
+              <Text style={styles.cardEyebrow}>{platform.family}</Text>
+              <Text style={styles.cardTitle}>{platform.title}</Text>
+              <Text style={styles.cardBody}>{platform.subtitle}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.familySections}>
+          {groupedPlatforms.map((group) => (
+            <SectionCard key={group.family} title={group.family} eyebrow={`${group.items.length} communities`}>
+              <View style={styles.list}>
+                {group.items.map((platform) => (
+                  <Pressable
+                    key={platform.slug}
+                    onPress={() => router.push(`/community/${platform.slug}`)}
+                    style={styles.card}
+                  >
+                    <Text style={styles.cardEyebrow}>{platform.family}</Text>
+                    <Text style={styles.cardTitle}>{platform.title}</Text>
+                    <Text style={styles.cardBody}>{platform.subtitle}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </SectionCard>
+          ))}
+        </View>
+      )}
     </ScrollView>
+    <BottomNavBar />
+    </View>
   );
 }
 
@@ -83,11 +125,10 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.layout.screenPadding,
     gap: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
+    paddingBottom: 96,
   },
   hero: {
     gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xl,
   },
   backButton: {
     alignSelf: "flex-start",
@@ -132,6 +173,9 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: theme.spacing.md,
+  },
+  familySections: {
+    gap: theme.spacing.lg,
   },
   card: {
     gap: theme.spacing.sm,

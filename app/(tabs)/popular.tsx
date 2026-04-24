@@ -1,6 +1,7 @@
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useMemo, useRef, useState } from "react";
+import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import PostCard from "../../components/PostCard";
 import PostCommentsSheet from "../../components/PostCommentsSheet";
@@ -30,6 +31,7 @@ function getPopularSummary(post) {
 
 export default function AllScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const { shouldShowSpoilersByDefault } = useFollows();
   const [period, setPeriod] = useState("day");
@@ -54,6 +56,13 @@ export default function AllScreen() {
   const hasMoreVisible = visibleCount < posts.length;
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
   const scrollHandlers = useTabReselectScroll("all", { scrollRef, onRefresh: reload });
+  const loadMoreVisiblePosts = () => {
+    if (!hasMoreVisible) {
+      return;
+    }
+
+    setVisibleCount((currentValue) => Math.min(currentValue + 12, posts.length));
+  };
 
   const handleReact = async (postId, reactionType) => {
     if (!session?.user?.id) {
@@ -140,21 +149,25 @@ export default function AllScreen() {
     ]);
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      reload();
-    }, [reload]),
-  );
-
   return (
     <ScrollView
       ref={scrollRef}
       style={styles.screen}
       contentContainerStyle={styles.content}
-      onScroll={scrollHandlers.onScroll}
+      onScroll={(event) => {
+        scrollHandlers.onScroll?.(event);
+
+        const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+        const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+
+        if (distanceFromBottom < 320) {
+          loadMoreVisiblePosts();
+        }
+      }}
       scrollEventThrottle={scrollHandlers.scrollEventThrottle}
     >
       <View style={styles.hero}>
+        <View style={{ paddingTop: insets.top + theme.spacing.md }} />
         <View style={styles.heroTopRow}>
           <View style={styles.heroTextBlock}>
             <Text style={styles.eyebrow}>PlayThread</Text>
@@ -265,7 +278,7 @@ export default function AllScreen() {
 
           {hasMoreVisible ? (
             <Pressable
-              onPress={() => setVisibleCount((n) => n + 12)}
+              onPress={loadMoreVisiblePosts}
               style={({ pressed }) => [styles.loadMoreButton, pressed ? { opacity: 0.85 } : null]}
             >
               <Text style={styles.loadMoreText}>Show more</Text>
@@ -312,7 +325,6 @@ const styles = StyleSheet.create({
   },
   hero: {
     gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xl,
   },
   heroTopRow: {
     flexDirection: "row",

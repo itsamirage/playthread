@@ -1,15 +1,19 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import BottomNavBar from "../components/BottomNavBar";
 import SectionCard from "../components/SectionCard";
 import { isValidEmail, logoutUser, requestPasswordReset, updateEmail, useAuth } from "../lib/auth";
 import { useContentPreferences } from "../lib/contentPreferences";
 import { goBackOrFallback } from "../lib/navigation";
+import { bindRouteToTab } from "../lib/tabState";
 import { theme } from "../lib/theme";
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const { preferences, savePreferences } = useContentPreferences();
   const [emailDraft, setEmailDraft] = useState("");
@@ -19,6 +23,10 @@ export default function SettingsScreen() {
   useEffect(() => {
     setEmailDraft(session?.user?.email ?? "");
   }, [session?.user?.email]);
+
+  useEffect(() => {
+    bindRouteToTab("profile", "/settings");
+  }, []);
 
   const handleSaveEmail = async () => {
     if (!emailDraft.trim()) {
@@ -85,78 +93,81 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Pressable onPress={() => goBackOrFallback(router, "/(tabs)/profile")} style={styles.backButton}>
-          <Text style={styles.backButtonText}>Back</Text>
-        </Pressable>
-        <Text style={styles.title}>Settings</Text>
-        <Text style={styles.subtitle}>Account, visibility, and session controls.</Text>
-      </View>
-
-      <SectionCard title="Account" eyebrow="Security">
-        <Text style={styles.bodyText}>Update your account email or send yourself a password reset link.</Text>
-        <TextInput
-          autoCapitalize="none"
-          keyboardType="email-address"
-          onChangeText={setEmailDraft}
-          placeholder="Email address"
-          placeholderTextColor={theme.colors.textMuted}
-          style={styles.textInput}
-          value={emailDraft}
-        />
-        <Pressable
-          disabled={isSavingEmail}
-          onPress={handleSaveEmail}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            pressed ? styles.buttonPressed : null,
-            isSavingEmail ? styles.buttonDisabled : null,
-          ]}
-        >
-          {isSavingEmail ? <ActivityIndicator color={theme.colors.background} /> : <Text style={styles.primaryButtonText}>Save email</Text>}
-        </Pressable>
-        <Pressable onPress={handlePasswordReset} style={({ pressed }) => [styles.secondaryButton, pressed ? styles.buttonPressed : null]}>
-          <Text style={styles.secondaryButtonText}>Send password reset</Text>
-        </Pressable>
-      </SectionCard>
-
-      <SectionCard title="Content" eyebrow="Visibility">
-        <Text style={styles.bodyText}>
-          NSFW games stay hidden by default. Adult-only titles are filtered from Browse, Catalog, and search when this is enabled.
-        </Text>
-        <View style={styles.toggleRow}>
-          <Pressable
-            onPress={() => savePreferences({ ...preferences, hideMatureGames: true })}
-            style={[styles.toggleOption, preferences.hideMatureGames ? styles.toggleOptionActive : null]}
-          >
-            <Text style={[styles.toggleText, preferences.hideMatureGames ? styles.toggleTextActive : null]}>Hide NSFW</Text>
+    <View style={styles.screen}>
+      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+        <View style={[styles.header, { paddingTop: insets.top + theme.spacing.md }]}>
+          <Pressable onPress={() => goBackOrFallback(router, "/(tabs)/profile")} style={styles.backButton}>
+            <Text style={styles.backButtonText}>Back</Text>
           </Pressable>
-          <Pressable
-            onPress={() => savePreferences({ ...preferences, hideMatureGames: false })}
-            style={[styles.toggleOption, !preferences.hideMatureGames ? styles.toggleOptionMuted : null]}
-          >
-            <Text style={[styles.toggleText, !preferences.hideMatureGames ? styles.toggleTextMuted : null]}>Show NSFW</Text>
-          </Pressable>
+          <Text style={styles.title}>Settings</Text>
+          <Text style={styles.subtitle}>Account, visibility, and session controls.</Text>
         </View>
-      </SectionCard>
 
-      <SectionCard title="Session" eyebrow="Device">
-        <Text style={styles.bodyText}>Sign out on this device without changing your saved profile data.</Text>
-        <Pressable
-          disabled={isLoggingOut}
-          onPress={handleLogout}
-          style={({ pressed }) => [
-            styles.secondaryButton,
-            styles.dangerButton,
-            pressed ? styles.buttonPressed : null,
-            isLoggingOut ? styles.buttonDisabled : null,
-          ]}
-        >
-          {isLoggingOut ? <ActivityIndicator color={theme.colors.text} /> : <Text style={styles.dangerButtonText}>Log out</Text>}
-        </Pressable>
-      </SectionCard>
-    </ScrollView>
+        <SectionCard title="Account" eyebrow="Security">
+          <Text style={styles.bodyText}>Update your account email or send yourself a password reset link.</Text>
+          <TextInput
+            autoCapitalize="none"
+            keyboardType="email-address"
+            onChangeText={setEmailDraft}
+            placeholder="Email address"
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.textInput}
+            value={emailDraft}
+          />
+          <Pressable
+            disabled={isSavingEmail}
+            onPress={handleSaveEmail}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed ? styles.buttonPressed : null,
+              isSavingEmail ? styles.buttonDisabled : null,
+            ]}
+          >
+            {isSavingEmail ? <ActivityIndicator color={theme.colors.background} /> : <Text style={styles.primaryButtonText}>Save email</Text>}
+          </Pressable>
+          <Pressable onPress={handlePasswordReset} style={({ pressed }) => [styles.secondaryButton, pressed ? styles.buttonPressed : null]}>
+            <Text style={styles.secondaryButtonText}>Send password reset</Text>
+          </Pressable>
+        </SectionCard>
+
+        <SectionCard title="Content" eyebrow="Visibility">
+          <Text style={styles.bodyText}>
+            NSFW games stay hidden by default. Adult-only titles are filtered from Browse, Catalog, and search when this is enabled.
+          </Text>
+          <View style={styles.toggleRow}>
+            <Pressable
+              onPress={() => savePreferences({ ...preferences, hideMatureGames: true })}
+              style={[styles.toggleOption, preferences.hideMatureGames ? styles.toggleOptionActive : null]}
+            >
+              <Text style={[styles.toggleText, preferences.hideMatureGames ? styles.toggleTextActive : null]}>Hide NSFW</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => savePreferences({ ...preferences, hideMatureGames: false })}
+              style={[styles.toggleOption, !preferences.hideMatureGames ? styles.toggleOptionMuted : null]}
+            >
+              <Text style={[styles.toggleText, !preferences.hideMatureGames ? styles.toggleTextMuted : null]}>Show NSFW</Text>
+            </Pressable>
+          </View>
+        </SectionCard>
+
+        <SectionCard title="Session" eyebrow="Device">
+          <Text style={styles.bodyText}>Sign out on this device without changing your saved profile data.</Text>
+          <Pressable
+            disabled={isLoggingOut}
+            onPress={handleLogout}
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              styles.dangerButton,
+              pressed ? styles.buttonPressed : null,
+              isLoggingOut ? styles.buttonDisabled : null,
+            ]}
+          >
+            {isLoggingOut ? <ActivityIndicator color={theme.colors.text} /> : <Text style={styles.dangerButtonText}>Log out</Text>}
+          </Pressable>
+        </SectionCard>
+      </ScrollView>
+      <BottomNavBar />
+    </View>
   );
 }
 
@@ -168,11 +179,10 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.layout.screenPadding,
     gap: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
+    paddingBottom: 96,
   },
   header: {
     gap: theme.spacing.sm,
-    paddingTop: theme.spacing.lg,
   },
   backButton: {
     alignSelf: "flex-start",

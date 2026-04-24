@@ -1,6 +1,9 @@
 import { useRouter } from "expo-router";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import BottomNavBar from "../components/BottomNavBar";
 import SectionCard from "../components/SectionCard";
 import { useAuth } from "../lib/auth";
 import {
@@ -13,6 +16,7 @@ import {
   useNotifications,
 } from "../lib/notifications";
 import { goBackOrFallback } from "../lib/navigation";
+import { bindRouteToTab } from "../lib/tabState";
 import { theme } from "../lib/theme";
 
 const PREFERENCE_ROWS = [
@@ -27,6 +31,7 @@ const PREFERENCE_ROWS = [
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const { notifications, unreadCount, isLoading, reload } = useNotifications();
   const {
@@ -35,6 +40,10 @@ export default function NotificationsScreen() {
     reload: reloadPreferences,
   } = useNotificationPreferences();
   const notificationGroups = groupNotifications(notifications);
+
+  useEffect(() => {
+    bindRouteToTab("profile", "/notifications");
+  }, []);
 
   const handleNotificationPress = async (notification) => {
     if (!notification.isRead) {
@@ -81,130 +90,133 @@ export default function NotificationsScreen() {
   };
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>PlayThread</Text>
-        <Text style={styles.title}>Notifications</Text>
-        <Text style={styles.subtitle}>
-          Replies, gifts, friend activity, moderation warnings, and new posts from games you follow.
-        </Text>
-        <View style={styles.heroActions}>
-          <Pressable onPress={() => goBackOrFallback(router, "/(tabs)/profile")} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Back</Text>
-          </Pressable>
-          <Pressable onPress={() => router.push("/(tabs)/profile")} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Profile</Text>
-          </Pressable>
+    <View style={styles.screen}>
+      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+        <View style={[styles.hero, { paddingTop: insets.top + theme.spacing.md }]}>
+          <Text style={styles.eyebrow}>PlayThread</Text>
+          <Text style={styles.title}>Notifications</Text>
+          <Text style={styles.subtitle}>
+            Replies, gifts, friend activity, moderation warnings, and new posts from games you follow.
+          </Text>
+          <View style={styles.heroActions}>
+            <Pressable onPress={() => goBackOrFallback(router, "/(tabs)/profile")} style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>Back</Text>
+            </Pressable>
+            <Pressable onPress={() => router.push("/(tabs)/profile")} style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>Profile</Text>
+            </Pressable>
+          </View>
         </View>
-      </View>
 
-      <SectionCard title="Inbox" eyebrow={`${unreadCount} unread`}>
-        {unreadCount > 0 ? (
-          <Pressable onPress={handleMarkAllRead} style={styles.markReadButton}>
-            <Text style={styles.markReadButtonText}>Mark all read</Text>
-          </Pressable>
-        ) : null}
-        {isLoading ? (
-          <View style={styles.loadingState}>
-            <ActivityIndicator color={theme.colors.accent} />
-          </View>
-        ) : notifications.length > 0 ? (
-          <View style={styles.list}>
-            {notificationGroups.map((group) => (
-              <View key={group.dayLabel} style={styles.group}>
-                <Text style={styles.groupTitle}>{group.dayLabel}</Text>
-                <View style={styles.groupList}>
-                  {group.items.map((notification) => (
-                    <Pressable
-                      key={notification.id}
-                      onPress={() => handleNotificationPress(notification)}
-                      style={[styles.notificationCard, !notification.isRead ? styles.notificationUnread : null]}
-                    >
-                      <View style={styles.notificationHeader}>
-                        <Text style={styles.notificationKind}>{notification.kindLabel}</Text>
+        <SectionCard title="Inbox" eyebrow={`${unreadCount} unread`}>
+          {unreadCount > 0 ? (
+            <Pressable onPress={handleMarkAllRead} style={styles.markReadButton}>
+              <Text style={styles.markReadButtonText}>Mark all read</Text>
+            </Pressable>
+          ) : null}
+          {isLoading ? (
+            <View style={styles.loadingState}>
+              <ActivityIndicator color={theme.colors.accent} />
+            </View>
+          ) : notifications.length > 0 ? (
+            <View style={styles.list}>
+              {notificationGroups.map((group) => (
+                <View key={group.dayLabel} style={styles.group}>
+                  <Text style={styles.groupTitle}>{group.dayLabel}</Text>
+                  <View style={styles.groupList}>
+                    {group.items.map((notification) => (
+                      <Pressable
+                        key={notification.id}
+                        onPress={() => handleNotificationPress(notification)}
+                        style={[styles.notificationCard, !notification.isRead ? styles.notificationUnread : null]}
+                      >
+                        <View style={styles.notificationHeader}>
+                          <Text style={styles.notificationKind}>{notification.kindLabel}</Text>
+                          <Text style={styles.notificationMeta}>
+                            {new Date(notification.createdAt).toLocaleTimeString([], {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                          </Text>
+                        </View>
+                        <Text style={styles.notificationTitle}>{notification.title}</Text>
+                        {notification.body ? <Text style={styles.notificationBody}>{notification.body}</Text> : null}
                         <Text style={styles.notificationMeta}>
-                          {new Date(notification.createdAt).toLocaleTimeString([], {
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })}
+                          {notification.actor ? `@${notification.actor}` : "PlayThread"}
                         </Text>
-                      </View>
-                      <Text style={styles.notificationTitle}>{notification.title}</Text>
-                      {notification.body ? <Text style={styles.notificationBody}>{notification.body}</Text> : null}
-                      <Text style={styles.notificationMeta}>
-                        {notification.actor ? `@${notification.actor}` : "PlayThread"}
-                      </Text>
-                    </Pressable>
-                  ))}
+                      </Pressable>
+                    ))}
+                  </View>
                 </View>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.emptyText}>Nothing new yet.</Text>
-        )}
-      </SectionCard>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>Nothing new yet.</Text>
+          )}
+        </SectionCard>
 
-      <SectionCard title="Preferences" eyebrow="Signal control">
-        <Text style={styles.preferenceIntro}>
-          Tune which events reach your inbox. Push uses the same event list plus the master push switch.
-        </Text>
-        {preferencesLoading ? (
-          <View style={styles.loadingState}>
-            <ActivityIndicator color={theme.colors.accent} />
-          </View>
-        ) : (
-          <View style={styles.preferenceList}>
-            {PREFERENCE_ROWS.map(([key, label, hint]) => (
-              <Pressable
-                key={key}
-                onPress={() => handleTogglePreference(key)}
-                style={[styles.preferenceRow, preferences[key] ? styles.preferenceRowActive : null]}
-              >
-                <View style={styles.preferenceCopy}>
-                  <Text style={styles.preferenceLabel}>{label}</Text>
-                  <Text style={styles.preferenceHint}>{hint}</Text>
-                </View>
-                <Text style={[styles.preferenceValue, preferences[key] ? styles.preferenceValueActive : null]}>
-                  {preferences[key] ? "On" : "Off"}
-                </Text>
-              </Pressable>
-            ))}
-            {preferences.activityNoiseControlEnabled ? (
-              <View style={styles.cooldownWrap}>
-                <Text style={styles.cooldownLabel}>Activity push cooldown</Text>
-                <View style={styles.cooldownOptions}>
-                  {[0, 15, 30, 60].map((minutes) => (
-                    <Pressable
-                      key={minutes}
-                      onPress={() => handleSetCooldownMinutes(minutes)}
-                      style={[
-                        styles.cooldownChip,
-                        preferences.activityPushCooldownMinutes === minutes ? styles.cooldownChipActive : null,
-                      ]}
-                    >
-                      <Text
+        <SectionCard title="Preferences" eyebrow="Signal control">
+          <Text style={styles.preferenceIntro}>
+            Tune which events reach your inbox. Push uses the same event list plus the master push switch.
+          </Text>
+          {preferencesLoading ? (
+            <View style={styles.loadingState}>
+              <ActivityIndicator color={theme.colors.accent} />
+            </View>
+          ) : (
+            <View style={styles.preferenceList}>
+              {PREFERENCE_ROWS.map(([key, label, hint]) => (
+                <Pressable
+                  key={key}
+                  onPress={() => handleTogglePreference(key)}
+                  style={[styles.preferenceRow, preferences[key] ? styles.preferenceRowActive : null]}
+                >
+                  <View style={styles.preferenceCopy}>
+                    <Text style={styles.preferenceLabel}>{label}</Text>
+                    <Text style={styles.preferenceHint}>{hint}</Text>
+                  </View>
+                  <Text style={[styles.preferenceValue, preferences[key] ? styles.preferenceValueActive : null]}>
+                    {preferences[key] ? "On" : "Off"}
+                  </Text>
+                </Pressable>
+              ))}
+              {preferences.activityNoiseControlEnabled ? (
+                <View style={styles.cooldownWrap}>
+                  <Text style={styles.cooldownLabel}>Activity push cooldown</Text>
+                  <View style={styles.cooldownOptions}>
+                    {[0, 15, 30, 60].map((minutes) => (
+                      <Pressable
+                        key={minutes}
+                        onPress={() => handleSetCooldownMinutes(minutes)}
                         style={[
-                          styles.cooldownChipText,
-                          preferences.activityPushCooldownMinutes === minutes
-                            ? styles.cooldownChipTextActive
-                            : null,
+                          styles.cooldownChip,
+                          preferences.activityPushCooldownMinutes === minutes ? styles.cooldownChipActive : null,
                         ]}
                       >
-                        {minutes === 0 ? "Instant" : `${minutes} min`}
-                      </Text>
-                    </Pressable>
-                  ))}
+                        <Text
+                          style={[
+                            styles.cooldownChipText,
+                            preferences.activityPushCooldownMinutes === minutes
+                              ? styles.cooldownChipTextActive
+                              : null,
+                          ]}
+                        >
+                          {minutes === 0 ? "Instant" : `${minutes} min`}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={styles.cooldownHint}>
+                    Noise control applies to friend activity and followed-game posts.
+                  </Text>
                 </View>
-                <Text style={styles.cooldownHint}>
-                  Noise control applies to friend activity and followed-game posts.
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        )}
-      </SectionCard>
-    </ScrollView>
+              ) : null}
+            </View>
+          )}
+        </SectionCard>
+      </ScrollView>
+      <BottomNavBar />
+    </View>
   );
 }
 
@@ -216,10 +228,10 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.layout.screenPadding,
     gap: theme.spacing.lg,
+    paddingBottom: 96,
   },
   hero: {
     gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xl,
   },
   eyebrow: {
     color: theme.colors.accent,

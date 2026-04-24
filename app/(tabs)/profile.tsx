@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import NotificationInboxButton from "../../components/NotificationInboxButton";
 import PostCard from "../../components/PostCard";
@@ -203,7 +204,10 @@ export default function ProfileScreen() {
     alpha: "A-Z",
   };
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const scrollRef = useRef(null);
+  const postsSectionOffsetRef = useRef(0);
+  const commentsSectionOffsetRef = useRef(0);
   const [loading, setLoading] = useState(false);
   const [linkingSteam, setLinkingSteam] = useState(false);
   const [syncingSteam, setSyncingSteam] = useState(false);
@@ -227,6 +231,8 @@ export default function ProfileScreen() {
     avatarUrl: "",
   });
   const [activeSavedCollection, setActiveSavedCollection] = useState("All");
+  const [postHistorySearchQuery, setPostHistorySearchQuery] = useState("");
+  const [commentHistorySearchQuery, setCommentHistorySearchQuery] = useState("");
   const deferredShowcaseSearch = useDeferredValue(showcaseSearch);
   const { session } = useAuth();
   const { preferences: contentPreferences, savePreferences: saveContentPreferences } = useContentPreferences();
@@ -282,6 +288,28 @@ export default function ProfileScreen() {
     reload: reloadMyComments,
     loadMore: loadMoreMyComments,
   } = useUserCommentHistory(session?.user?.id, { limit: 10 });
+  const filteredMyPosts = useMemo(() => {
+    const searchValue = normalizeSearchValue(postHistorySearchQuery);
+
+    if (!searchValue) {
+      return myPosts;
+    }
+
+    return myPosts.filter((post) =>
+      normalizeSearchValue([post.title, post.body, post.gameTitle, post.type].filter(Boolean).join(" ")).includes(searchValue),
+    );
+  }, [myPosts, postHistorySearchQuery]);
+  const filteredMyComments = useMemo(() => {
+    const searchValue = normalizeSearchValue(commentHistorySearchQuery);
+
+    if (!searchValue) {
+      return myComments;
+    }
+
+    return myComments.filter((comment) =>
+      normalizeSearchValue([comment.postTitle, comment.gameTitle, comment.body].filter(Boolean).join(" ")).includes(searchValue),
+    );
+  }, [commentHistorySearchQuery, myComments]);
   const myMediaPosts = useMemo(
     () => myPosts.filter((post) => (post.imageUrls?.length ?? 0) > 0 || post.type === "clip").slice(0, 12),
     [myPosts],
@@ -856,7 +884,24 @@ export default function ProfileScreen() {
       ref={scrollRef}
       style={styles.screen}
       contentContainerStyle={styles.content}
-      onScroll={scrollHandlers.onScroll}
+      onScroll={(event) => {
+        scrollHandlers.onScroll?.(event);
+
+        const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+        const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+
+        if (distanceFromBottom >= 320) {
+          return;
+        }
+
+        if (myPostsHasMore && !myPostsLoading && !myPostsLoadingMore) {
+          loadMoreMyPosts();
+        }
+
+        if (myCommentsHasMore && !myCommentsLoading && !myCommentsLoadingMore) {
+          loadMoreMyComments();
+        }
+      }}
       scrollEventThrottle={scrollHandlers.scrollEventThrottle}
     >
       <View
@@ -865,6 +910,7 @@ export default function ProfileScreen() {
           {
             backgroundColor: heroBannerColors[0],
             borderColor: heroBannerColors[2],
+            paddingTop: insets.top + theme.spacing.md,
           },
         ]}
       >
@@ -1002,9 +1048,33 @@ export default function ProfileScreen() {
                 ) : null}
                 <Text style={styles.statLabel} numberOfLines={1}>Reviewed</Text>
               </Pressable>
+              <Pressable
+                onPress={() =>
+                  scrollRef.current?.scrollTo({
+                    y: Math.max(0, postsSectionOffsetRef.current - theme.spacing.lg),
+                    animated: true,
+                  })
+                }
+                style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
+              >
+                <Text style={styles.statValue}>{myPosts.length}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>Posts</Text>
+              </Pressable>
+              <Pressable
+                onPress={() =>
+                  scrollRef.current?.scrollTo({
+                    y: Math.max(0, commentsSectionOffsetRef.current - theme.spacing.lg),
+                    animated: true,
+                  })
+                }
+                style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
+              >
+                <Text style={styles.statValue}>{myComments.length}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>Comments</Text>
+              </Pressable>
             </View>
             <Text style={styles.helperText}>
-              Tap Following, Backlog, Completed, Currently playing, or Reviewed to open searchable lists.
+              Tap Following, Backlog, Completed, Currently playing, or Reviewed to open searchable lists. Posts and Comments jump to searchable history below.
             </Text>
           </>
         ) : null}
@@ -1877,12 +1947,24 @@ export default function ProfileScreen() {
         )}
       </SectionCard>
 
+      <View
+        onLayout={(event) => {
+          postsSectionOffsetRef.current = event.nativeEvent.layout.y;
+        }}
+      >
       <SectionCard title="Post history" eyebrow="Your posts">
+        <TextInput
+          onChangeText={setPostHistorySearchQuery}
+          placeholder="Search your posts"
+          placeholderTextColor={theme.colors.textMuted}
+          style={styles.textInput}
+          value={postHistorySearchQuery}
+        />
         {myPostsLoading ? (
           <ActivityIndicator color={theme.colors.accent} />
         ) : myPosts.length > 0 ? (
           <View style={styles.feedList}>
-            {myPosts.map((post) => (
+            {filteredMyPosts.map((post) => (
               <PostCard
                 key={post.id}
                 onAuthorPress={() => {}}
@@ -1917,13 +1999,26 @@ export default function ProfileScreen() {
           </Text>
         )}
       </SectionCard>
+      </View>
 
+      <View
+        onLayout={(event) => {
+          commentsSectionOffsetRef.current = event.nativeEvent.layout.y;
+        }}
+      >
       <SectionCard title="Comment history" eyebrow="Your replies">
+        <TextInput
+          onChangeText={setCommentHistorySearchQuery}
+          placeholder="Search your comments"
+          placeholderTextColor={theme.colors.textMuted}
+          style={styles.textInput}
+          value={commentHistorySearchQuery}
+        />
         {myCommentsLoading ? (
           <ActivityIndicator color={theme.colors.accent} />
         ) : myComments.length > 0 ? (
           <View style={styles.feedList}>
-            {myComments.map((comment) => (
+            {filteredMyComments.map((comment) => (
               <Pressable
                 key={comment.id}
                 onPress={() =>
@@ -1958,6 +2053,7 @@ export default function ProfileScreen() {
           <Text style={styles.bodyText}>You have not left any comments yet.</Text>
         )}
       </SectionCard>
+      </View>
 
       <SectionCard title="Settings" eyebrow="Account">
         <View style={styles.inlineFieldGroup}>

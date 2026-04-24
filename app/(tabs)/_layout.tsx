@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { BottomTabBar } from '@react-navigation/bottom-tabs';
-import { Redirect, Tabs } from 'expo-router';
+import { Redirect, Tabs, usePathname } from 'expo-router';
 import { ActivityIndicator, Animated, SafeAreaView, StyleSheet, Text } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
@@ -11,6 +11,7 @@ import { useCurrentProfile } from '@/lib/profile';
 import { useNotifications } from '@/lib/notifications';
 import { emitTabReselect } from '@/lib/tabReselect';
 import { tabBarTranslateY } from '@/lib/tabBarScroll';
+import { registerTabPress, rememberTabRoute, resolveTabKeyFromPath, setActiveTab } from '@/lib/tabState';
 import { theme } from '@/lib/theme';
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
@@ -26,6 +27,18 @@ export default function TabLayout() {
   const { isLoading: followsLoading } = useFollows();
   const { profile, isLoading: profileLoading } = useCurrentProfile();
   const { unreadCount } = useNotifications(20);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    const tabKey = resolveTabKeyFromPath(pathname);
+
+    if (!tabKey) {
+      return;
+    }
+
+    setActiveTab(tabKey);
+    rememberTabRoute(tabKey, pathname);
+  }, [pathname]);
 
   if (isLoading || followsLoading || profileLoading) {
     return (
@@ -76,8 +89,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
         }}
         listeners={({ navigation }) => ({
-          tabPress: () => {
+          tabPress: (event) => {
             if (navigation.isFocused()) {
+              const isDoubleTap = registerTabPress("home");
+              if (!isDoubleTap) {
+                event.preventDefault();
+                return;
+              }
               emitTabReselect("home");
             }
           },
@@ -90,8 +108,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="fire" color={color} />,
         }}
         listeners={({ navigation }) => ({
-          tabPress: () => {
+          tabPress: (event) => {
             if (navigation.isFocused()) {
+              const isDoubleTap = registerTabPress("all");
+              if (!isDoubleTap) {
+                event.preventDefault();
+                return;
+              }
               emitTabReselect("all");
             }
           },
@@ -104,8 +127,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="search" color={color} />,
         }}
         listeners={({ navigation }) => ({
-          tabPress: () => {
+          tabPress: (event) => {
             if (navigation.isFocused()) {
+              const isDoubleTap = registerTabPress("browse");
+              if (!isDoubleTap) {
+                event.preventDefault();
+                return;
+              }
               emitTabReselect("browse");
             }
           },
@@ -119,8 +147,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
         }}
         listeners={({ navigation }) => ({
-          tabPress: () => {
+          tabPress: (event) => {
             if (navigation.isFocused()) {
+              const isDoubleTap = registerTabPress("profile");
+              if (!isDoubleTap) {
+                event.preventDefault();
+                return;
+              }
               emitTabReselect("profile");
             }
           },
