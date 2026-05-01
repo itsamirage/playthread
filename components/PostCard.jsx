@@ -869,16 +869,21 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   footerActions: {
+    flex: 1,
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
+    justifyContent: "flex-end",
     gap: theme.spacing.md,
   },
   footerText: {
     color: theme.colors.textMuted,
+    flexShrink: 0,
     fontSize: theme.fontSizes.sm,
   },
   commentButton: {
     alignItems: "flex-end",
+    flexShrink: 0,
   },
   footerIconAction: {
     alignItems: "center",
