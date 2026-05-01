@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { BottomTabBar } from '@react-navigation/bottom-tabs';
-import { Redirect, Tabs, usePathname } from 'expo-router';
+import { Redirect, Tabs, usePathname, useRouter } from 'expo-router';
 import { ActivityIndicator, Animated, SafeAreaView, StyleSheet, Text } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
@@ -11,7 +11,7 @@ import { useCurrentProfile } from '@/lib/profile';
 import { useNotifications } from '@/lib/notifications';
 import { emitTabReselect } from '@/lib/tabReselect';
 import { tabBarTranslateY } from '@/lib/tabBarScroll';
-import { registerTabPress, rememberTabRoute, resolveTabKeyFromPath, setActiveTab } from '@/lib/tabState';
+import { getRememberedTabRoute, registerTabPress, rememberTabRoute, resolveTabKeyFromPath, setActiveTab } from '@/lib/tabState';
 import { theme } from '@/lib/theme';
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
@@ -28,6 +28,7 @@ export default function TabLayout() {
   const { profile, isLoading: profileLoading } = useCurrentProfile();
   const { unreadCount } = useNotifications(20);
   const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     const tabKey = resolveTabKeyFromPath(pathname);
@@ -97,7 +98,12 @@ export default function TabLayout() {
                 return;
               }
               emitTabReselect("home");
+              return;
             }
+
+            event.preventDefault();
+            setActiveTab("home");
+            router.replace(getRememberedTabRoute("home"));
           },
         })}
       />
@@ -116,7 +122,12 @@ export default function TabLayout() {
                 return;
               }
               emitTabReselect("all");
+              return;
             }
+
+            event.preventDefault();
+            setActiveTab("all");
+            router.replace(getRememberedTabRoute("all"));
           },
         })}
       />
@@ -135,7 +146,12 @@ export default function TabLayout() {
                 return;
               }
               emitTabReselect("browse");
+              return;
             }
+
+            event.preventDefault();
+            setActiveTab("browse");
+            router.replace(getRememberedTabRoute("browse"));
           },
         })}
       />
@@ -154,7 +170,12 @@ export default function TabLayout() {
                 return;
               }
               emitTabReselect("friends");
+              return;
             }
+
+            event.preventDefault();
+            setActiveTab("friends");
+            router.replace(getRememberedTabRoute("friends"));
           },
         })}
       />
@@ -174,7 +195,12 @@ export default function TabLayout() {
                 return;
               }
               emitTabReselect("profile");
+              return;
             }
+
+            event.preventDefault();
+            setActiveTab("profile");
+            router.replace(getRememberedTabRoute("profile"));
           },
         })}
       />
