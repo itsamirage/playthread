@@ -245,8 +245,6 @@ Deno.serve(async (request) => {
         throw new Error("That flag no longer exists.");
       }
 
-      assertCanModerateGameScope(actorProfile, flagRow.igdb_game_id ?? null);
-
       const { error } = await adminClient
         .from("moderation_flags")
         .update({
@@ -304,8 +302,6 @@ Deno.serve(async (request) => {
       if (!flagRow) {
         throw new Error("That flag no longer exists.");
       }
-
-      assertCanModerateGameScope(actorProfile, flagRow.igdb_game_id ?? null);
 
       if (!flagRow.content_id) {
         throw new Error("That flagged item no longer has a target record.");
