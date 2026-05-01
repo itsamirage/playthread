@@ -39,6 +39,86 @@ function readNumberEnv(name: string, fallback: number, { min = 0, max = Number.M
   return Math.min(max, Math.max(min, Math.floor(parsedValue)));
 }
 
+function isStaffRole(accountRole: string | null) {
+  return ["moderator", "admin", "owner"].includes(accountRole ?? "");
+}
+
+async function getCustomCommunityForGameId(adminClient: ReturnType<typeof getAdminClient>, gameId: number | null) {
+  if (gameId == null || gameId >= 0) {
+    return null;
+  }
+
+  const { data, error } = await adminClient
+    .from("custom_communities")
+    .select("id, community_game_id, creator_user_id, moderation_state")
+    .eq("community_game_id", gameId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? null;
+}
+
+async function assertCanCommentInCustomCommunity({
+  adminClient,
+  gameId,
+  userId,
+}: {
+  adminClient: ReturnType<typeof getAdminClient>;
+  gameId: number | null;
+  userId: string;
+}) {
+  const community = await getCustomCommunityForGameId(adminClient, gameId);
+
+  if (!community) {
+    return null;
+  }
+
+  if (community.moderation_state !== "active") {
+    throw new Error("That community is not available.");
+  }
+
+  const { data: banRow, error: banError } = await adminClient
+    .from("custom_community_bans")
+    .select("id")
+    .eq("community_id", community.id)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (banError) {
+    throw new Error(banError.message);
+  }
+
+  if (banRow) {
+    throw new Error("You are banned from commenting in that community.");
+  }
+
+  return community;
+}
+
+async function canManageComment({
+  adminClient,
+  commentUserId,
+  postGameId,
+  actorUserId,
+  accountRole,
+}: {
+  adminClient: ReturnType<typeof getAdminClient>;
+  commentUserId: string | null;
+  postGameId: number | null;
+  actorUserId: string;
+  accountRole: string | null;
+}) {
+  if (commentUserId === actorUserId || isStaffRole(accountRole)) {
+    return true;
+  }
+
+  const community = await getCustomCommunityForGameId(adminClient, postGameId);
+  return community?.creator_user_id === actorUserId;
+}
+
 async function enforceCommentCreateLimits({
   adminClient,
   profile,
@@ -189,7 +269,7 @@ Deno.serve(async (request) => {
 
       const { data: commentRow, error: commentError } = await adminClient
         .from("post_comments")
-        .select("id, user_id")
+        .select("id, user_id, posts(igdb_game_id)")
         .eq("id", commentId)
         .maybeSingle();
 
@@ -201,7 +281,13 @@ Deno.serve(async (request) => {
         throw new Error("That comment no longer exists.");
       }
 
-      if (commentRow.user_id !== user.id && !["admin", "owner"].includes(profile.account_role ?? "")) {
+      if (!(await canManageComment({
+        adminClient,
+        commentUserId: commentRow.user_id,
+        postGameId: commentRow.posts?.igdb_game_id ?? null,
+        actorUserId: user.id,
+        accountRole: profile.account_role,
+      }))) {
         throw new Error("You cannot delete that comment.");
       }
 
@@ -289,6 +375,12 @@ Deno.serve(async (request) => {
     if (!postRow) {
       throw new Error("That post no longer exists.");
     }
+
+    await assertCanCommentInCustomCommunity({
+      adminClient,
+      gameId: postRow.igdb_game_id ?? null,
+      userId: user.id,
+    });
 
     const imageUrl = String(body.imageUrl ?? "").trim() || null;
 

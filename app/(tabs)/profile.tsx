@@ -51,7 +51,7 @@ import {
   useSteamShowcaseCatalog,
 } from "../../lib/profileShowcase";
 import { getProfileNameColor } from "../../lib/profileAppearance";
-import { useSavedPosts } from "../../lib/savedPosts";
+import { useSavedComments, useSavedPosts } from "../../lib/savedPosts";
 import {
   useMyReviewCount,
   useMyReviewsByGame,
@@ -70,7 +70,6 @@ const BANNER_STYLES = {
   sunset: ["#3d1822", "#7a3140", "#d4874d"],
 };
 const PROFILE_STATS_STORAGE_KEY = "playthread:profile-stats-expanded";
-const SAVED_POST_COLLECTIONS = ["General", "Guides", "Images", "Reviews", "Discussions"];
 
 function normalizeSearchValue(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -206,8 +205,6 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef(null);
-  const postsSectionOffsetRef = useRef(0);
-  const commentsSectionOffsetRef = useRef(0);
   const [loading, setLoading] = useState(false);
   const [linkingSteam, setLinkingSteam] = useState(false);
   const [syncingSteam, setSyncingSteam] = useState(false);
@@ -230,13 +227,12 @@ export default function ProfileScreen() {
     bio: "",
     avatarUrl: "",
   });
-  const [activeSavedCollection, setActiveSavedCollection] = useState("All");
-  const [postHistorySearchQuery, setPostHistorySearchQuery] = useState("");
-  const [commentHistorySearchQuery, setCommentHistorySearchQuery] = useState("");
+  const [activeContentStatKey, setActiveContentStatKey] = useState(null);
+  const [contentStatSearchQuery, setContentStatSearchQuery] = useState("");
   const deferredShowcaseSearch = useDeferredValue(showcaseSearch);
   const { session } = useAuth();
   const { preferences: contentPreferences, savePreferences: saveContentPreferences } = useContentPreferences();
-  const { followedCount, followedGames, isLoading: followsLoading, unfollowGame } = useFollows();
+  const { followedCount, followedGames } = useFollows();
   const { nowPlayingIds } = useNowPlaying(session?.user?.id);
   const { friendCount, incomingRequestUserIds } = useUserFollows(session?.user?.id);
   const { reviewCount, avgRating, reload: reloadReviews } = useMyReviewCount(session?.user?.id);
@@ -249,28 +245,15 @@ export default function ProfileScreen() {
     savedRows,
     isLoading: savedPostsLoading,
     toggleSavedPost,
-    updateSavedPostCollection,
   } = useSavedPosts({ limit: 20 });
+  const {
+    comments: savedComments,
+    isLoading: savedCommentsLoading,
+    toggleSavedComment,
+  } = useSavedComments({ limit: 20 });
   const savedCollectionByPostId = useMemo(
     () => new Map((savedRows ?? []).map((row) => [String(row.post_id), row.collection ?? "General"])),
     [savedRows],
-  );
-  const savedCollectionFilters = useMemo(() => {
-    const collections = new Set(["All", ...SAVED_POST_COLLECTIONS]);
-    for (const row of savedRows ?? []) {
-      collections.add(row.collection ?? "General");
-    }
-    return Array.from(collections);
-  }, [savedRows]);
-  const filteredSavedPosts = useMemo(
-    () =>
-      activeSavedCollection === "All"
-        ? savedPosts
-        : savedPosts.filter(
-            (post) =>
-              (savedCollectionByPostId.get(String(post.id)) ?? "General") === activeSavedCollection,
-          ),
-    [activeSavedCollection, savedCollectionByPostId, savedPosts],
   );
   const {
     posts: myPosts,
@@ -288,32 +271,70 @@ export default function ProfileScreen() {
     reload: reloadMyComments,
     loadMore: loadMoreMyComments,
   } = useUserCommentHistory(session?.user?.id, { limit: 10 });
-  const filteredMyPosts = useMemo(() => {
-    const searchValue = normalizeSearchValue(postHistorySearchQuery);
-
-    if (!searchValue) {
-      return myPosts;
-    }
-
-    return myPosts.filter((post) =>
-      normalizeSearchValue([post.title, post.body, post.gameTitle, post.type].filter(Boolean).join(" ")).includes(searchValue),
-    );
-  }, [myPosts, postHistorySearchQuery]);
-  const filteredMyComments = useMemo(() => {
-    const searchValue = normalizeSearchValue(commentHistorySearchQuery);
-
-    if (!searchValue) {
-      return myComments;
-    }
-
-    return myComments.filter((comment) =>
-      normalizeSearchValue([comment.postTitle, comment.gameTitle, comment.body].filter(Boolean).join(" ")).includes(searchValue),
-    );
-  }, [commentHistorySearchQuery, myComments]);
   const myMediaPosts = useMemo(
     () => myPosts.filter((post) => (post.imageUrls?.length ?? 0) > 0 || post.type === "clip").slice(0, 12),
     [myPosts],
   );
+  const contentStatConfig = {
+    posts: {
+      label: "Posts",
+      eyebrow: "Your posts",
+      emptyText: "Your posts will appear here.",
+    },
+    media: {
+      label: "Screenshots and clips",
+      eyebrow: "Your media",
+      emptyText: "Your image and clip posts will appear here.",
+    },
+    comments: {
+      label: "Comments",
+      eyebrow: "Your replies",
+      emptyText: "Your comments will appear here.",
+    },
+    saved: {
+      label: "Saved",
+      eyebrow: "Bookmarks",
+      emptyText: "Saved posts and comments will appear here.",
+    },
+  };
+  const activeContentStat = activeContentStatKey ? contentStatConfig[activeContentStatKey] : null;
+  const filteredContentStatItems = useMemo(() => {
+    const searchValue = normalizeSearchValue(contentStatSearchQuery);
+    const items =
+      activeContentStatKey === "media"
+        ? myMediaPosts.map((post) => ({ kind: "post", item: post }))
+        : activeContentStatKey === "comments"
+          ? myComments.map((comment) => ({ kind: "comment", item: comment }))
+          : activeContentStatKey === "saved"
+            ? [
+                ...savedPosts.map((post) => ({ kind: "post", item: post, saved: true })),
+                ...savedComments.map((comment) => ({ kind: "comment", item: comment, saved: true })),
+              ]
+            : activeContentStatKey === "posts"
+              ? myPosts.map((post) => ({ kind: "post", item: post }))
+              : [];
+
+    if (!searchValue) {
+      return items;
+    }
+
+    return items.filter(({ kind, item }) => {
+      const searchText =
+        kind === "comment"
+          ? [item.postTitle, item.gameTitle, item.body, item.author].filter(Boolean).join(" ")
+          : [item.title, item.body, item.gameTitle, item.type, item.author].filter(Boolean).join(" ");
+
+      return normalizeSearchValue(searchText).includes(searchValue);
+    });
+  }, [
+    activeContentStatKey,
+    contentStatSearchQuery,
+    myComments,
+    myMediaPosts,
+    myPosts,
+    savedComments,
+    savedPosts,
+  ]);
   const reputationBadges = useMemo(() => {
     const badges = [];
     if (myPosts.filter((post) => post.type === "guide" || post.type === "tip").length >= 3) badges.push("Helpful guide maker");
@@ -571,14 +592,6 @@ export default function ProfileScreen() {
       Alert.alert("Reset email sent", `A password reset link was sent to ${session.user.email}.`);
     } catch (error) {
       Alert.alert("Reset failed", error instanceof Error ? error.message : "Could not send the reset email.");
-    }
-  };
-
-  const handleUnfollow = async (game) => {
-    const { error } = await unfollowGame(game);
-
-    if (error) {
-      Alert.alert("Follow update failed", error.message);
     }
   };
 
@@ -996,7 +1009,7 @@ export default function ProfileScreen() {
                 style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
               >
                 <Text style={styles.statValue}>{followedCount}</Text>
-                <Text style={styles.statLabel} numberOfLines={1}>Following</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>Games</Text>
               </Pressable>
               <Pressable
                 onPress={() => router.push("/friends")}
@@ -1049,32 +1062,48 @@ export default function ProfileScreen() {
                 <Text style={styles.statLabel} numberOfLines={1}>Reviewed</Text>
               </Pressable>
               <Pressable
-                onPress={() =>
-                  scrollRef.current?.scrollTo({
-                    y: Math.max(0, postsSectionOffsetRef.current - theme.spacing.lg),
-                    animated: true,
-                  })
-                }
+                onPress={() => {
+                  setContentStatSearchQuery("");
+                  setActiveContentStatKey("posts");
+                }}
                 style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
               >
                 <Text style={styles.statValue}>{myPosts.length}</Text>
                 <Text style={styles.statLabel} numberOfLines={1}>Posts</Text>
               </Pressable>
               <Pressable
-                onPress={() =>
-                  scrollRef.current?.scrollTo({
-                    y: Math.max(0, commentsSectionOffsetRef.current - theme.spacing.lg),
-                    animated: true,
-                  })
-                }
+                onPress={() => {
+                  setContentStatSearchQuery("");
+                  setActiveContentStatKey("media");
+                }}
+                style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
+              >
+                <Text style={styles.statValue}>{myMediaPosts.length}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>Media</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setContentStatSearchQuery("");
+                  setActiveContentStatKey("comments");
+                }}
                 style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
               >
                 <Text style={styles.statValue}>{myComments.length}</Text>
                 <Text style={styles.statLabel} numberOfLines={1}>Comments</Text>
               </Pressable>
+              <Pressable
+                onPress={() => {
+                  setContentStatSearchQuery("");
+                  setActiveContentStatKey("saved");
+                }}
+                style={({ pressed }) => [styles.statBox, pressed ? styles.buttonPressed : null]}
+              >
+                <Text style={styles.statValue}>{savedPosts.length + savedComments.length}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>Saved</Text>
+              </Pressable>
             </View>
             <Text style={styles.helperText}>
-              Tap Following, Backlog, Completed, Currently playing, or Reviewed to open searchable lists. Posts and Comments jump to searchable history below.
+              Tap any stat to open a searchable list or jump to that history below.
             </Text>
           </>
         ) : null}
@@ -1236,7 +1265,7 @@ export default function ProfileScreen() {
 
       <SectionCard title="Content settings" eyebrow="Visibility">
         <Text style={styles.bodyText}>
-          NSFW games (AO-rated or adult-themed titles) are filtered out of Browse and Catalog. Mature 17+ games always show regardless of this setting.
+          AO-rated games are filtered out of Browse and Catalog when hidden. Mature 17+ games and post-level NSFW warnings still show.
         </Text>
         <View style={styles.nsfwToggleRow}>
           <Pressable
@@ -1254,7 +1283,7 @@ export default function ProfileScreen() {
                 !contentPreferences.hideMatureGames ? styles.nsfwToggleOptionTextActive : null,
               ]}
             >
-              Show NSFW
+              Show AO
             </Text>
           </Pressable>
           <Pressable
@@ -1272,7 +1301,7 @@ export default function ProfileScreen() {
                 contentPreferences.hideMatureGames ? styles.nsfwToggleOptionTextHidden : null,
               ]}
             >
-              Hide NSFW
+              Hide AO
             </Text>
           </Pressable>
         </View>
@@ -1750,311 +1779,6 @@ export default function ProfileScreen() {
         </SectionCard>
       ) : null}
 
-      {nowPlayingIds.length > 0 ? (
-        <SectionCard title="Currently playing" eyebrow="Now playing">
-          <View style={styles.nowPlayingList}>
-            {followedGames
-              .filter((game) => nowPlayingIds.includes(Number(game.id)))
-              .map((game) => (
-                <Pressable
-                  key={game.id}
-                  onPress={() => router.push(`/game/${game.id}`)}
-                  style={({ pressed }) => [styles.nowPlayingCard, pressed ? styles.buttonPressed : null]}
-                >
-                  {game.coverUrl ? (
-                    <Image source={{ uri: game.coverUrl }} style={styles.nowPlayingCover} />
-                  ) : (
-                    <View style={[styles.nowPlayingCover, styles.nowPlayingFallbackCover]}>
-                      <Text style={styles.followFallbackText}>{game.title.charAt(0).toUpperCase()}</Text>
-                    </View>
-                  )}
-                  <Text style={styles.nowPlayingTitle} numberOfLines={2}>{game.title}</Text>
-                  {reviewsByGameId.has(String(game.id)) ? (
-                    <Text style={styles.nowPlayingMeta}>
-                      Your rating: {reviewsByGameId.get(String(game.id))}/10
-                    </Text>
-                  ) : null}
-                </Pressable>
-              ))}
-          </View>
-        </SectionCard>
-      ) : null}
-
-      <SectionCard title="Following" eyebrow="Your games">
-        {followsLoading ? (
-          <View style={styles.loadingState}>
-            <ActivityIndicator color={theme.colors.accent} />
-            <Text style={styles.bodyText}>Loading followed games...</Text>
-          </View>
-        ) : followedGames.length > 0 ? (
-          <View style={styles.followList}>
-            {followedGames.map((game) => (
-              <View key={game.id} style={styles.followCard}>
-                <Pressable
-                  onPress={() => router.push(`/game/${game.id}`)}
-                  style={({ pressed }) => [
-                    styles.followMainArea,
-                    pressed ? styles.buttonPressed : null,
-                  ]}
-                >
-                  {game.coverUrl ? (
-                    <Image source={{ uri: game.coverUrl }} style={styles.followCover} />
-                  ) : (
-                    <View style={styles.followFallbackCover}>
-                      <Text style={styles.followFallbackText}>
-                        {game.title.charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                  )}
-
-                  <View style={styles.followTextBlock}>
-                    <Text style={styles.followTitle}>{game.title}</Text>
-                    <Text style={styles.followMeta}>
-                      {getFollowStatusLabel(game.playStatus)} | Followed{" "}
-                      {new Date(game.followedAt).toLocaleDateString()}
-                    </Text>
-                  </View>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => handleUnfollow(game)}
-                  style={({ pressed }) => [
-                    styles.secondaryActionButton,
-                    pressed ? styles.buttonPressed : null,
-                  ]}
-                >
-                  <Text style={styles.secondaryActionText}>Unfollow</Text>
-                </Pressable>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.bodyText}>
-            You are not following any games yet. Browse live IGDB results and follow a few to build this list.
-          </Text>
-        )}
-      </SectionCard>
-
-      <SectionCard title="Media" eyebrow="Your screenshots and clips">
-        {myMediaPosts.length > 0 ? (
-          <View style={styles.mediaGrid}>
-            {myMediaPosts.map((post) => {
-              const imageUrl = post.imageUrls?.[0] ?? post.imageUrl ?? post.videoThumbnailUrl ?? null;
-              return (
-                <Pressable
-                  key={`media:${post.id}`}
-                  onPress={() => router.push(`/post/${post.id}`)}
-                  style={styles.mediaTile}
-                >
-                  {imageUrl ? (
-                    <Image source={{ uri: imageUrl }} style={styles.mediaTileImage} />
-                  ) : (
-                    <View style={styles.mediaTileFallback}>
-                      <Text style={styles.mediaTileFallbackText}>Clip</Text>
-                    </View>
-                  )}
-                  <Text numberOfLines={1} style={styles.mediaTileLabel}>{post.gameTitle}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : (
-          <Text style={styles.bodyText}>Your image and clip posts will appear here.</Text>
-        )}
-      </SectionCard>
-
-      <SectionCard title="Saved posts" eyebrow="Bookmarks">
-        {savedPostsLoading ? (
-          <ActivityIndicator color={theme.colors.accent} />
-        ) : savedPosts.length > 0 ? (
-          <View style={styles.feedList}>
-            <View style={styles.savedCollectionFilterRow}>
-              {savedCollectionFilters.map((collection) => {
-                const isActive = activeSavedCollection === collection;
-                return (
-                  <Pressable
-                    key={`saved-filter:${collection}`}
-                    onPress={() => setActiveSavedCollection(collection)}
-                    style={({ pressed }) => [
-                      styles.savedCollectionFilter,
-                      isActive ? styles.savedCollectionFilterActive : null,
-                      pressed ? styles.buttonPressed : null,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.savedCollectionFilterText,
-                        isActive ? styles.savedCollectionFilterTextActive : null,
-                      ]}
-                    >
-                      {collection}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            {filteredSavedPosts.length > 0 ? filteredSavedPosts.map((post) => (
-              <View key={`saved:${post.id}`} style={styles.savedPostWrap}>
-                <View style={styles.savedCollectionPill}>
-                  <Text style={styles.savedCollectionLabel}>
-                    Saved in {savedCollectionByPostId.get(String(post.id)) ?? "General"}
-                  </Text>
-                </View>
-                <View style={styles.savedCollectionActions}>
-                  {SAVED_POST_COLLECTIONS.map((collection) => {
-                    const isCurrent = (savedCollectionByPostId.get(String(post.id)) ?? "General") === collection;
-                    return (
-                      <Pressable
-                        disabled={isCurrent}
-                        key={`saved:${post.id}:collection:${collection}`}
-                        onPress={() => updateSavedPostCollection(post.id, collection)}
-                        style={({ pressed }) => [
-                          styles.savedCollectionAction,
-                          isCurrent ? styles.savedCollectionActionActive : null,
-                          pressed && !isCurrent ? styles.buttonPressed : null,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.savedCollectionActionText,
-                            isCurrent ? styles.savedCollectionActionTextActive : null,
-                          ]}
-                        >
-                          {collection}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                <PostCard
-                  isSaved
-                  onAuthorPress={() => router.push(`/user/${post.userId}`)}
-                  onGamePress={() => router.push(`/game/${post.gameId}`)}
-                  onOpenComments={() =>
-                    router.push({ pathname: "/post/[id]", params: { id: post.id, scrollTo: "comments" } })
-                  }
-                  onPress={() => router.push(`/post/${post.id}`)}
-                  onSave={() => toggleSavedPost(post.id)}
-                  post={post}
-                />
-              </View>
-            )) : (
-              <Text style={styles.bodyText}>No saved posts in {activeSavedCollection} yet.</Text>
-            )}
-          </View>
-        ) : (
-          <Text style={styles.bodyText}>Saved guides, images, reviews, and discussions will appear here.</Text>
-        )}
-      </SectionCard>
-
-      <View
-        onLayout={(event) => {
-          postsSectionOffsetRef.current = event.nativeEvent.layout.y;
-        }}
-      >
-      <SectionCard title="Post history" eyebrow="Your posts">
-        <TextInput
-          onChangeText={setPostHistorySearchQuery}
-          placeholder="Search your posts"
-          placeholderTextColor={theme.colors.textMuted}
-          style={styles.textInput}
-          value={postHistorySearchQuery}
-        />
-        {myPostsLoading ? (
-          <ActivityIndicator color={theme.colors.accent} />
-        ) : myPosts.length > 0 ? (
-          <View style={styles.feedList}>
-            {filteredMyPosts.map((post) => (
-              <PostCard
-                key={post.id}
-                onAuthorPress={() => {}}
-                onOpenComments={() =>
-                  router.push({ pathname: "/post/[id]", params: { id: post.id, scrollTo: "comments" } })
-                }
-                onPress={() => router.push(`/post/${post.id}`)}
-                post={post}
-              />
-            ))}
-            {myPostsHasMore ? (
-              <Pressable
-                disabled={myPostsLoadingMore}
-                onPress={loadMoreMyPosts}
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  myPostsLoadingMore ? styles.buttonDisabled : null,
-                  pressed && !myPostsLoadingMore ? styles.buttonPressed : null,
-                ]}
-              >
-                {myPostsLoadingMore ? (
-                  <ActivityIndicator color={theme.colors.accent} size="small" />
-                ) : (
-                  <Text style={styles.secondaryButtonText}>Load more</Text>
-                )}
-              </Pressable>
-            ) : null}
-          </View>
-        ) : (
-          <Text style={styles.bodyText}>
-            You have not posted anything yet. Share a review or discussion from a game page.
-          </Text>
-        )}
-      </SectionCard>
-      </View>
-
-      <View
-        onLayout={(event) => {
-          commentsSectionOffsetRef.current = event.nativeEvent.layout.y;
-        }}
-      >
-      <SectionCard title="Comment history" eyebrow="Your replies">
-        <TextInput
-          onChangeText={setCommentHistorySearchQuery}
-          placeholder="Search your comments"
-          placeholderTextColor={theme.colors.textMuted}
-          style={styles.textInput}
-          value={commentHistorySearchQuery}
-        />
-        {myCommentsLoading ? (
-          <ActivityIndicator color={theme.colors.accent} />
-        ) : myComments.length > 0 ? (
-          <View style={styles.feedList}>
-            {filteredMyComments.map((comment) => (
-              <Pressable
-                key={comment.id}
-                onPress={() =>
-                  router.push({ pathname: "/post/[id]", params: { id: comment.postId, scrollTo: "comments" } })
-                }
-                style={({ pressed }) => [styles.commentHistoryCard, pressed ? styles.buttonPressed : null]}
-              >
-                <Text style={styles.commentHistoryTitle}>{comment.postTitle}</Text>
-                {comment.gameTitle ? <Text style={styles.commentHistoryMeta}>{comment.gameTitle}</Text> : null}
-                <Text numberOfLines={3} style={styles.bodyText}>{comment.body || "Image comment"}</Text>
-              </Pressable>
-            ))}
-            {myCommentsHasMore ? (
-              <Pressable
-                disabled={myCommentsLoadingMore}
-                onPress={loadMoreMyComments}
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  myCommentsLoadingMore ? styles.buttonDisabled : null,
-                  pressed && !myCommentsLoadingMore ? styles.buttonPressed : null,
-                ]}
-              >
-                {myCommentsLoadingMore ? (
-                  <ActivityIndicator color={theme.colors.accent} size="small" />
-                ) : (
-                  <Text style={styles.secondaryButtonText}>Load more</Text>
-                )}
-              </Pressable>
-            ) : null}
-          </View>
-        ) : (
-          <Text style={styles.bodyText}>You have not left any comments yet.</Text>
-        )}
-      </SectionCard>
-      </View>
-
       <SectionCard title="Settings" eyebrow="Account">
         <View style={styles.inlineFieldGroup}>
           <Text style={styles.securityTitle}>Email</Text>
@@ -2120,6 +1844,153 @@ export default function ProfileScreen() {
           )}
         </Pressable>
       </SectionCard>
+
+      <Modal
+        animationType="slide"
+        transparent
+        visible={Boolean(activeContentStat)}
+        onRequestClose={() => {
+          setActiveContentStatKey(null);
+          setContentStatSearchQuery("");
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderText}>
+                <Text style={styles.eyebrow}>{activeContentStat?.eyebrow ?? "Profile"}</Text>
+                <Text style={styles.modalTitle}>{activeContentStat?.label ?? "Activity"}</Text>
+              </View>
+              <Pressable
+                onPress={() => {
+                  setActiveContentStatKey(null);
+                  setContentStatSearchQuery("");
+                }}
+                style={styles.closeButton}
+              >
+                <Text style={styles.closeButtonText}>Close</Text>
+              </Pressable>
+            </View>
+
+            <TextInput
+              autoCapitalize="none"
+              onChangeText={setContentStatSearchQuery}
+              placeholder={`Search ${activeContentStat?.label?.toLowerCase() ?? "activity"}`}
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.textInput}
+              value={contentStatSearchQuery}
+            />
+            <ScrollView contentContainerStyle={styles.modalList}>
+              {(activeContentStatKey === "posts" || activeContentStatKey === "media") && myPostsLoading ? (
+                <ActivityIndicator color={theme.colors.accent} />
+              ) : activeContentStatKey === "comments" && myCommentsLoading ? (
+                <ActivityIndicator color={theme.colors.accent} />
+              ) : activeContentStatKey === "saved" && (savedPostsLoading || savedCommentsLoading) ? (
+                <ActivityIndicator color={theme.colors.accent} />
+              ) : filteredContentStatItems.length > 0 ? (
+                <>
+                  {filteredContentStatItems.map(({ kind, item, saved }) =>
+                    kind === "comment" ? (
+                      <Pressable
+                        key={`${activeContentStatKey}:comment:${item.id}`}
+                        onPress={() => {
+                          setActiveContentStatKey(null);
+                          setContentStatSearchQuery("");
+                          router.push({ pathname: "/post/[id]", params: { id: item.postId, scrollTo: "comments" } });
+                        }}
+                        style={({ pressed }) => [styles.commentHistoryCard, pressed ? styles.buttonPressed : null]}
+                      >
+                        {saved ? (
+                          <View style={styles.savedCollectionPill}>
+                            <Text style={styles.savedCollectionLabel}>Saved comment</Text>
+                          </View>
+                        ) : null}
+                        <Text style={styles.commentHistoryTitle}>{item.postTitle}</Text>
+                        {item.gameTitle ? <Text style={styles.commentHistoryMeta}>{item.gameTitle}</Text> : null}
+                        <Text numberOfLines={4} style={styles.bodyText}>{item.body || "Image comment"}</Text>
+                        {saved ? (
+                          <Pressable
+                            onPress={(event) => {
+                              event.stopPropagation?.();
+                              toggleSavedComment(item.id);
+                            }}
+                            style={styles.savedCollectionAction}
+                          >
+                            <Text style={styles.savedCollectionActionText}>Remove saved comment</Text>
+                          </Pressable>
+                        ) : null}
+                      </Pressable>
+                    ) : (
+                      <View key={`${activeContentStatKey}:post:${item.id}`} style={styles.savedPostWrap}>
+                        {saved ? (
+                          <View style={styles.savedCollectionPill}>
+                            <Text style={styles.savedCollectionLabel}>
+                              Saved in {savedCollectionByPostId.get(String(item.id)) ?? "General"}
+                            </Text>
+                          </View>
+                        ) : null}
+                        <PostCard
+                          isSaved={Boolean(saved)}
+                          onAuthorPress={() => {}}
+                          onGamePress={() => router.push(`/game/${item.gameId}`)}
+                          onOpenComments={() => {
+                            setActiveContentStatKey(null);
+                            setContentStatSearchQuery("");
+                            router.push({ pathname: "/post/[id]", params: { id: item.id, scrollTo: "comments" } });
+                          }}
+                          onPress={() => {
+                            setActiveContentStatKey(null);
+                            setContentStatSearchQuery("");
+                            router.push(`/post/${item.id}`);
+                          }}
+                          onSave={() => toggleSavedPost(item.id)}
+                          post={item}
+                        />
+                      </View>
+                    ),
+                  )}
+                  {activeContentStatKey === "posts" && myPostsHasMore ? (
+                    <Pressable
+                      disabled={myPostsLoadingMore}
+                      onPress={loadMoreMyPosts}
+                      style={({ pressed }) => [
+                        styles.secondaryButton,
+                        myPostsLoadingMore ? styles.buttonDisabled : null,
+                        pressed && !myPostsLoadingMore ? styles.buttonPressed : null,
+                      ]}
+                    >
+                      {myPostsLoadingMore ? (
+                        <ActivityIndicator color={theme.colors.accent} size="small" />
+                      ) : (
+                        <Text style={styles.secondaryButtonText}>Load more</Text>
+                      )}
+                    </Pressable>
+                  ) : null}
+                  {activeContentStatKey === "comments" && myCommentsHasMore ? (
+                    <Pressable
+                      disabled={myCommentsLoadingMore}
+                      onPress={loadMoreMyComments}
+                      style={({ pressed }) => [
+                        styles.secondaryButton,
+                        myCommentsLoadingMore ? styles.buttonDisabled : null,
+                        pressed && !myCommentsLoadingMore ? styles.buttonPressed : null,
+                      ]}
+                    >
+                      {myCommentsLoadingMore ? (
+                        <ActivityIndicator color={theme.colors.accent} size="small" />
+                      ) : (
+                        <Text style={styles.secondaryButtonText}>Load more</Text>
+                      )}
+                    </Pressable>
+                  ) : null}
+                </>
+              ) : (
+                <Text style={styles.bodyText}>{activeContentStat?.emptyText}</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         animationType="slide"
@@ -2399,6 +2270,31 @@ const styles = StyleSheet.create({
   },
   feedList: {
     gap: theme.spacing.md,
+  },
+  commentList: {
+    gap: theme.spacing.sm,
+  },
+  commentRow: {
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    padding: theme.spacing.md,
+  },
+  commentPostTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  commentBody: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: 20,
+  },
+  commentMeta: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.xs,
   },
   mediaGrid: {
     flexDirection: "row",

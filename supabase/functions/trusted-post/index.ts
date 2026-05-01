@@ -72,10 +72,85 @@ type RequestBody = {
   rating?: number | null;
   spoiler?: boolean;
   spoilerTag?: string | null;
+  isNsfw?: boolean;
 };
 
-function canManagePost(postUserId: string | null, actorUserId: string, accountRole: string | null) {
-  return postUserId === actorUserId || ["admin", "owner"].includes(accountRole ?? "");
+function isStaffRole(accountRole: string | null) {
+  return ["moderator", "admin", "owner"].includes(accountRole ?? "");
+}
+
+async function getCustomCommunityForGameId(adminClient: ReturnType<typeof getAdminClient>, gameId: number) {
+  if (gameId >= 0) {
+    return null;
+  }
+
+  const { data, error } = await adminClient
+    .from("custom_communities")
+    .select("id, community_game_id, title, creator_user_id, moderation_state")
+    .eq("community_game_id", gameId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? null;
+}
+
+async function assertCanPostInCustomCommunity({
+  adminClient,
+  gameId,
+  userId,
+}: {
+  adminClient: ReturnType<typeof getAdminClient>;
+  gameId: number;
+  userId: string;
+}) {
+  const community = await getCustomCommunityForGameId(adminClient, gameId);
+
+  if (!community) {
+    return null;
+  }
+
+  if (community.moderation_state !== "active") {
+    throw new Error("That community is not available.");
+  }
+
+  const { data: banRow, error: banError } = await adminClient
+    .from("custom_community_bans")
+    .select("id")
+    .eq("community_id", community.id)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (banError) {
+    throw new Error(banError.message);
+  }
+
+  if (banRow) {
+    throw new Error("You are banned from posting in that community.");
+  }
+
+  return community;
+}
+
+async function canManagePost(
+  adminClient: ReturnType<typeof getAdminClient>,
+  postUserId: string | null,
+  postGameId: number | null,
+  actorUserId: string,
+  accountRole: string | null,
+) {
+  if (postUserId === actorUserId || isStaffRole(accountRole)) {
+    return true;
+  }
+
+  if (postGameId == null || postGameId >= 0) {
+    return false;
+  }
+
+  const community = await getCustomCommunityForGameId(adminClient, postGameId);
+  return community?.creator_user_id === actorUserId;
 }
 
 function normalizeImageMetadata(value: RequestBody["imageMetadata"]) {
@@ -293,7 +368,7 @@ Deno.serve(async (request) => {
         throw new Error("That post no longer exists.");
       }
 
-      if (!canManagePost(postRow.user_id, user.id, profile.account_role)) {
+      if (!(await canManagePost(adminClient, postRow.user_id, postRow.igdb_game_id ?? null, user.id, profile.account_role))) {
         throw new Error("You cannot delete that post.");
       }
 
@@ -320,6 +395,7 @@ Deno.serve(async (request) => {
       const nextBody = String(body.body ?? "").trim();
       const nextSpoiler = Boolean(body.spoiler);
       const nextSpoilerTag = nextSpoiler ? String(body.spoilerTag ?? "").trim() || null : null;
+      const nextIsNsfw = Boolean(body.isNsfw);
 
       if (!postId) {
         throw new Error("Post id is required.");
@@ -339,7 +415,7 @@ Deno.serve(async (request) => {
         throw new Error("That post no longer exists.");
       }
 
-      if (!canManagePost(postRow.user_id, user.id, profile.account_role)) {
+      if (!(await canManagePost(adminClient, postRow.user_id, postRow.igdb_game_id ?? null, user.id, profile.account_role))) {
         throw new Error("You cannot edit that post.");
       }
 
@@ -353,6 +429,7 @@ Deno.serve(async (request) => {
         body: nextBody,
         spoiler: nextSpoiler,
         spoiler_tag: nextSpoilerTag,
+        is_nsfw: nextIsNsfw,
         moderation_state: moderation.moderationState,
         moderation_labels: moderation.labels,
       };
@@ -426,6 +503,12 @@ Deno.serve(async (request) => {
       throw new Error("Game title is required.");
     }
 
+    await assertCanPostInCustomCommunity({
+      adminClient,
+      gameId,
+      userId: user.id,
+    });
+
     if (!textBody && postType !== "clip") {
       throw new Error("Post body is required.");
     }
@@ -474,6 +557,7 @@ Deno.serve(async (request) => {
         video_status: postType === "clip" ? "uploading" : "none",
         spoiler: Boolean(body.spoiler),
         spoiler_tag: body.spoiler ? String(body.spoilerTag ?? "").trim() || null : null,
+        is_nsfw: Boolean(body.isNsfw),
         rating: body.rating != null ? Number(body.rating) : null,
       })
       .select("id")

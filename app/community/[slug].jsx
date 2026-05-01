@@ -1,4 +1,4 @@
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,8 +10,16 @@ import PostCard from "../../components/PostCard";
 import PostCommentsSheet from "../../components/PostCommentsSheet";
 import SectionCard from "../../components/SectionCard";
 import { sendCoinGift } from "../../lib/admin";
+import { isStaffRole, useMyAdminProfile } from "../../lib/admin";
 import { useAuth } from "../../lib/auth";
 import { getCommunityBySlug } from "../../lib/communityHubs";
+import {
+  hideCustomCommunity,
+  setCustomCommunityBan,
+  updateCustomCommunity,
+  useCommunityBans,
+  useCustomCommunityBySlug,
+} from "../../lib/customCommunities";
 import { useFollows } from "../../lib/follows";
 import { describeIntegrityError } from "../../lib/integrity";
 import { goBackOrFallback } from "../../lib/navigation";
@@ -23,7 +31,12 @@ export default function CommunityScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
-  const community = getCommunityBySlug(String(slug ?? ""));
+  const staticCommunity = getCommunityBySlug(String(slug ?? ""));
+  const { community: customCommunity, isLoading: customCommunityLoading, reload: reloadCustomCommunity } =
+    useCustomCommunityBySlug(staticCommunity ? null : String(slug ?? ""));
+  const community = staticCommunity ?? customCommunity;
+  const { profile: currentProfile } = useMyAdminProfile();
+  const { bannedUserIds, reload: reloadBans } = useCommunityBans(community);
   const scrollRef = useRef(null);
   const { isFollowingGame, getFollowStatus, setFollowStatus, unfollowGame } = useFollows();
   const {
@@ -40,6 +53,19 @@ export default function CommunityScreen() {
   const [isSendingGift, setIsSendingGift] = useState(false);
   const [reactingPostId, setReactingPostId] = useState(null);
   const [deletingPostId, setDeletingPostId] = useState(null);
+  const [isEditingCommunity, setIsEditingCommunity] = useState(false);
+  const [communityTitle, setCommunityTitle] = useState("");
+  const [communitySubtitle, setCommunitySubtitle] = useState("");
+  const [communityBody, setCommunityBody] = useState("");
+  const [moderatingUserId, setModeratingUserId] = useState(null);
+
+  if (customCommunityLoading && !community) {
+    return (
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator color={theme.colors.accent} />
+      </View>
+    );
+  }
 
   if (!community) {
     return (
@@ -52,6 +78,16 @@ export default function CommunityScreen() {
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
   const isFollowed = isFollowingGame(community.id);
   const followStatus = getFollowStatus(community.id);
+  const canModerateCommunity =
+    Boolean(community.isCustom) &&
+    (community.creatorUserId === session?.user?.id || isStaffRole(currentProfile?.accountRole));
+
+  const openEditCommunity = () => {
+    setCommunityTitle(community.title);
+    setCommunitySubtitle(community.subtitle);
+    setCommunityBody(community.body);
+    setIsEditingCommunity(true);
+  };
 
   const handleSelectStatus = async (status) => {
     const { error: followError } = await setFollowStatus(
@@ -135,6 +171,64 @@ export default function CommunityScreen() {
     ]);
   };
 
+  const handleSaveCommunity = async () => {
+    try {
+      await updateCustomCommunity({
+        communityId: community.id,
+        title: communityTitle,
+        subtitle: communitySubtitle,
+        body: communityBody,
+      });
+      setIsEditingCommunity(false);
+      await reloadCustomCommunity();
+    } catch (nextError) {
+      Alert.alert("Community update failed", nextError instanceof Error ? nextError.message : "Could not update this community.");
+    }
+  };
+
+  const handleHideCommunity = () => {
+    Alert.alert("Remove community", "This hides the community and stops it from appearing in community search.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await hideCustomCommunity({ communityId: community.id });
+            router.replace("/platforms");
+          } catch (nextError) {
+            Alert.alert("Community removal failed", nextError instanceof Error ? nextError.message : "Could not remove this community.");
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleBanUser = (post) => {
+    Alert.alert("Ban from community", `Ban @${post.author} from posting or commenting here?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Ban",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setModeratingUserId(post.userId);
+            await setCustomCommunityBan({
+              communityId: community.id,
+              targetUserId: post.userId,
+              reason: `Banned from ${community.title}`,
+            });
+            await reloadBans();
+          } catch (nextError) {
+            Alert.alert("Ban failed", nextError instanceof Error ? nextError.message : "Could not ban that user.");
+          } finally {
+            setModeratingUserId(null);
+          }
+        },
+      },
+    ]);
+  };
+
   return (
     <View style={styles.screenWrapper}>
       <ScrollView
@@ -163,7 +257,45 @@ export default function CommunityScreen() {
         </View>
 
         <SectionCard title={community.title} eyebrow={community.eyebrow}>
-          <Text style={styles.bodyText}>{community.body}</Text>
+          {isEditingCommunity ? (
+            <View style={styles.form}>
+              <TextInput
+                value={communityTitle}
+                onChangeText={setCommunityTitle}
+                placeholder="Community name"
+                placeholderTextColor={theme.colors.textMuted}
+                style={styles.input}
+              />
+              <TextInput
+                value={communitySubtitle}
+                onChangeText={setCommunitySubtitle}
+                placeholder="Short description"
+                placeholderTextColor={theme.colors.textMuted}
+                style={styles.input}
+              />
+              <TextInput
+                value={communityBody}
+                onChangeText={setCommunityBody}
+                multiline
+                placeholder="Community details"
+                placeholderTextColor={theme.colors.textMuted}
+                style={[styles.input, styles.textArea]}
+              />
+              <View style={styles.actionRow}>
+                <Pressable onPress={() => setIsEditingCommunity(false)} style={styles.secondaryButton}>
+                  <Text style={styles.secondaryButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable onPress={handleSaveCommunity} style={styles.primaryButton}>
+                  <Text style={styles.primaryButtonText}>Save</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Text style={styles.bodyText}>{community.body}</Text>
+          )}
+          {community.isCustom ? (
+            <Text style={styles.helperText}>Created by @{community.creatorName}</Text>
+          ) : null}
           <View style={styles.actionRow}>
             <Pressable
               onPress={() =>
@@ -193,6 +325,16 @@ export default function CommunityScreen() {
               <Text style={styles.inlineButtonText}>Unfollow community</Text>
             </Pressable>
           ) : null}
+          {canModerateCommunity && !isEditingCommunity ? (
+            <View style={styles.moderatorRow}>
+              <Pressable onPress={openEditCommunity} style={styles.moderatorButton}>
+                <Text style={styles.moderatorButtonText}>Edit community</Text>
+              </Pressable>
+              <Pressable onPress={handleHideCommunity} style={[styles.moderatorButton, styles.dangerButton]}>
+                <Text style={styles.moderatorButtonText}>Remove community</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </SectionCard>
 
         <SectionCard title="Threads" eyebrow="Community">
@@ -204,34 +346,52 @@ export default function CommunityScreen() {
           ) : posts.length > 0 ? (
             <View style={styles.threadList}>
               {posts.map((post) => (
-                <PostCard
-                  key={post.id}
-                  isDeleting={deletingPostId === post.id}
-                  isReacting={reactingPostId === post.id}
-                  onAuthorPress={() => router.push(`/user/${post.userId}`)}
-                  onDelete={session?.user?.id === post.userId ? () => handleDeletePost(post) : null}
-                  onEdit={
-                    session?.user?.id === post.userId
-                      ? () =>
-                          router.push({
-                            pathname: "/create-post",
-                            params: {
-                              gameId: String(community.id),
-                              gameTitle: community.title,
-                              postId: post.id,
-                              lockContext: "true",
-                              allowedTypes: community.allowedPostTypes.join(","),
-                            },
-                          })
-                      : null
-                  }
-                  onGift={session?.user?.id && session.user.id !== post.userId ? () => setGiftPost(post) : null}
-                  onOpenComments={() => setSelectedPostId(post.id)}
-                  onGamePress={null}
-                  onReact={(reactionType) => handleReact(post, reactionType)}
-                  onPress={() => router.push(`/post/${post.id}`)}
-                  post={post}
-                />
+                <View key={post.id} style={styles.moderatedPost}>
+                  <PostCard
+                    isDeleting={deletingPostId === post.id}
+                    isReacting={reactingPostId === post.id}
+                    onAuthorPress={() => router.push(`/user/${post.userId}`)}
+                    onDelete={session?.user?.id === post.userId || canModerateCommunity ? () => handleDeletePost(post) : null}
+                    onEdit={
+                      session?.user?.id === post.userId
+                        ? () =>
+                            router.push({
+                              pathname: "/create-post",
+                              params: {
+                                gameId: String(community.id),
+                                gameTitle: community.title,
+                                postId: post.id,
+                                lockContext: "true",
+                                allowedTypes: community.allowedPostTypes.join(","),
+                              },
+                            })
+                        : null
+                    }
+                    onGift={session?.user?.id && session.user.id !== post.userId ? () => setGiftPost(post) : null}
+                    onOpenComments={() => setSelectedPostId(post.id)}
+                    onGamePress={null}
+                    onReact={(reactionType) => handleReact(post, reactionType)}
+                    onPress={() => router.push(`/post/${post.id}`)}
+                    post={post}
+                  />
+                  {canModerateCommunity && post.userId !== session?.user?.id ? (
+                    <View style={styles.moderatorRow}>
+                      <Pressable
+                        onPress={() => handleBanUser(post)}
+                        disabled={bannedUserIds.has(post.userId) || moderatingUserId === post.userId}
+                        style={[styles.moderatorButton, styles.dangerButton]}
+                      >
+                        <Text style={styles.moderatorButtonText}>
+                          {bannedUserIds.has(post.userId)
+                            ? "Banned"
+                            : moderatingUserId === post.userId
+                              ? "Saving..."
+                              : "Ban from community"}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
               ))}
             </View>
           ) : (
@@ -280,6 +440,12 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
     paddingBottom: 80,
   },
+  loadingScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.background,
+  },
   topBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -303,6 +469,23 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontSize: theme.fontSizes.md,
     lineHeight: 22,
+  },
+  form: {
+    gap: theme.spacing.md,
+  },
+  input: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  textArea: {
+    minHeight: 96,
+    textAlignVertical: "top",
   },
   actionRow: {
     flexDirection: "row",
@@ -354,5 +537,30 @@ const styles = StyleSheet.create({
   },
   threadList: {
     gap: theme.spacing.md,
+  },
+  moderatedPost: {
+    gap: theme.spacing.sm,
+  },
+  moderatorRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  moderatorButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  dangerButton: {
+    borderColor: theme.colors.scoreBad,
+  },
+  moderatorButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
   },
 });

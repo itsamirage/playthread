@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
@@ -39,6 +39,11 @@ export default function PublicProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  const scrollRef = useRef(null);
+  const friendsSectionOffsetRef = useRef(0);
+  const postsSectionOffsetRef = useRef(0);
+  const reviewsSectionOffsetRef = useRef(0);
+  const commentsSectionOffsetRef = useRef(0);
   const userId = typeof id === "string" ? id : null;
   const { profile, isLoading, error, reload } = usePublicProfile(userId);
   const {
@@ -67,6 +72,12 @@ export default function PublicProfileScreen() {
   const deferredActivitySearch = useDeferredValue(activitySearch);
   const deferredCommentSearch = useDeferredValue(commentSearch);
   const deferredReviewSearch = useDeferredValue(reviewSearch);
+  const scrollToSection = (sectionRef) => {
+    scrollRef.current?.scrollTo({
+      y: Math.max(0, sectionRef.current - theme.spacing.lg),
+      animated: true,
+    });
+  };
 
   const filteredPosts = useMemo(() => {
     const query = deferredActivitySearch.trim().toLowerCase();
@@ -224,6 +235,7 @@ export default function PublicProfileScreen() {
   return (
     <View style={styles.screenWrapper}>
       <ScrollView
+        ref={scrollRef}
         style={styles.screen}
         contentContainerStyle={styles.content}
         onScroll={(event) => {
@@ -275,25 +287,25 @@ export default function PublicProfileScreen() {
             </View>
           ) : null}
           <View style={styles.statRow}>
-            <View style={styles.statBox}>
+            <Pressable onPress={() => scrollToSection(friendsSectionOffsetRef)} style={styles.statBox}>
               <Text style={styles.statValue}>{friendCount}</Text>
               <Text style={styles.statLabel}>Friends</Text>
-            </View>
-            <View style={styles.statBox}>
+            </Pressable>
+            <Pressable onPress={() => scrollToSection(postsSectionOffsetRef)} style={styles.statBox}>
               <Text style={styles.statValue}>{posts.length}</Text>
               <Text style={styles.statLabel}>Posts</Text>
-            </View>
-            <View style={styles.statBox}>
+            </Pressable>
+            <Pressable onPress={() => scrollToSection(reviewsSectionOffsetRef)} style={styles.statBox}>
               <Text style={styles.statValue}>{reviewCount}</Text>
               {reviewAvgRating ? (
                 <Text style={styles.statSubValue}>{reviewAvgRating} avg</Text>
               ) : null}
               <Text style={styles.statLabel}>Reviewed</Text>
-            </View>
-            <View style={styles.statBox}>
+            </Pressable>
+            <Pressable onPress={() => scrollToSection(commentsSectionOffsetRef)} style={styles.statBox}>
               <Text style={styles.statValue}>{comments.length}</Text>
               <Text style={styles.statLabel}>Comments</Text>
-            </View>
+            </Pressable>
           </View>
           {canFollow ? (
             <View style={styles.friendActionRow}>
@@ -328,6 +340,7 @@ export default function PublicProfileScreen() {
           ) : null}
         </View>
 
+        <View onLayout={(event) => { friendsSectionOffsetRef.current = event.nativeEvent.layout.y; }}>
         <SectionCard title="Friends" eyebrow={`${friendCount} connected`}>
           {friends.length > 0 ? (
             <View style={styles.friendList}>
@@ -357,6 +370,7 @@ export default function PublicProfileScreen() {
             <Text style={styles.bodyText}>No friends listed on this profile yet.</Text>
           )}
         </SectionCard>
+        </View>
 
         <SectionCard title="Media" eyebrow="Screenshots and clips">
           {mediaPosts.length > 0 ? (
@@ -386,7 +400,8 @@ export default function PublicProfileScreen() {
           )}
         </SectionCard>
 
-        <SectionCard title="Recent activity" eyebrow="Profile feed">
+        <View onLayout={(event) => { postsSectionOffsetRef.current = event.nativeEvent.layout.y; }}>
+        <SectionCard title="Post history" eyebrow="Searchable">
           <TextInput
             onChangeText={setActivitySearch}
             placeholder="Search posts"
@@ -429,7 +444,9 @@ export default function PublicProfileScreen() {
             <Text style={styles.bodyText}>No public posts from this player yet.</Text>
           )}
         </SectionCard>
+        </View>
 
+        <View onLayout={(event) => { reviewsSectionOffsetRef.current = event.nativeEvent.layout.y; }}>
         <SectionCard title="Reviews" eyebrow="Searchable">
           <TextInput
             onChangeText={setReviewSearch}
@@ -459,7 +476,9 @@ export default function PublicProfileScreen() {
             <Text style={styles.bodyText}>No public reviews from this player yet.</Text>
           )}
         </SectionCard>
+        </View>
 
+        <View onLayout={(event) => { commentsSectionOffsetRef.current = event.nativeEvent.layout.y; }}>
         <SectionCard title="Comment history" eyebrow="Searchable">
           <TextInput
             onChangeText={setCommentSearch}
@@ -503,6 +522,7 @@ export default function PublicProfileScreen() {
             <Text style={styles.bodyText}>No public comments from this player yet.</Text>
           )}
         </SectionCard>
+        </View>
       </ScrollView>
       <BottomNavBar />
     </View>

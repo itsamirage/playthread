@@ -26,6 +26,7 @@ import {
 import { useBrowseGames } from "../lib/games";
 import { pickPostImage } from "../lib/postMedia";
 import { describeIntegrityError } from "../lib/integrity";
+import { useSavedCommentIds } from "../lib/savedPosts";
 import { formatModerationWarning } from "../lib/moderation";
 import { getProfileNameColor } from "../lib/profileAppearance";
 import { getProfileTitleOption } from "../lib/titles";
@@ -48,6 +49,7 @@ export default function PostCommentsThread({
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const { comments, isLoading, error, reload } = usePostComments(post?.id, Boolean(post?.id));
+  const { isSavedComment, toggleSavedComment } = useSavedCommentIds();
   const [draft, setDraft] = useState("");
   const [draftImage, setDraftImage] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -382,6 +384,19 @@ export default function PostCommentsThread({
                     </Pressable>
                     <Pressable onPress={() => handleStartReply(comment)} style={styles.actionChip}>
                       <Text style={styles.actionChipText}>Reply</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => toggleSavedComment(comment.id)}
+                      style={[styles.actionChip, isSavedComment(comment.id) ? styles.actionChipActive : null]}
+                    >
+                      <Text
+                        style={[
+                          styles.actionChipText,
+                          isSavedComment(comment.id) ? styles.actionChipTextActive : null,
+                        ]}
+                      >
+                        {isSavedComment(comment.id) ? "Saved" : "Save"}
+                      </Text>
                     </Pressable>
                     {!comment.isMine ? (
                       <Pressable onPress={() => setGiftingComment(comment)} style={styles.actionChip}>

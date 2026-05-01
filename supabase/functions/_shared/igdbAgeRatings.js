@@ -123,13 +123,7 @@ export function getAgeRatingLabel(ageRatings = []) {
 }
 
 export function isMatureAgeRating(ageRatings = [], themes = []) {
-  const hasAdultTheme = themes.some((theme) => {
-    const themeName = String(theme?.name ?? "").toLowerCase();
-    return /\b(adult|erotic|hentai|porn|sexual)\b/.test(themeName);
-  });
-  if (hasAdultTheme) return true;
-
   return getValidAgeRatingLabels(ageRatings).some((item) =>
-    ["ESRB AO", "PEGI 18", "CERO Z", "USK 18", "ACB R18+", "ACB RC", "GRAC 18", "ClassInd 18"].includes(item.label)
+    item.label === "ESRB AO"
   );
 }

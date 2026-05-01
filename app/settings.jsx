@@ -132,20 +132,20 @@ export default function SettingsScreen() {
 
         <SectionCard title="Content" eyebrow="Visibility">
           <Text style={styles.bodyText}>
-            NSFW games stay hidden by default. Adult-only titles are filtered from Browse, Catalog, and search when this is enabled.
+            AO-rated games stay hidden by default. Post-level NSFW warnings still show in feeds, but are blurred until opened.
           </Text>
           <View style={styles.toggleRow}>
             <Pressable
               onPress={() => savePreferences({ ...preferences, hideMatureGames: true })}
               style={[styles.toggleOption, preferences.hideMatureGames ? styles.toggleOptionActive : null]}
             >
-              <Text style={[styles.toggleText, preferences.hideMatureGames ? styles.toggleTextActive : null]}>Hide NSFW</Text>
+              <Text style={[styles.toggleText, preferences.hideMatureGames ? styles.toggleTextActive : null]}>Hide AO</Text>
             </Pressable>
             <Pressable
               onPress={() => savePreferences({ ...preferences, hideMatureGames: false })}
               style={[styles.toggleOption, !preferences.hideMatureGames ? styles.toggleOptionMuted : null]}
             >
-              <Text style={[styles.toggleText, !preferences.hideMatureGames ? styles.toggleTextMuted : null]}>Show NSFW</Text>
+              <Text style={[styles.toggleText, !preferences.hideMatureGames ? styles.toggleTextMuted : null]}>Show AO</Text>
             </Pressable>
           </View>
         </SectionCard>

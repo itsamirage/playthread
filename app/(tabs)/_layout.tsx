@@ -140,6 +140,25 @@ export default function TabLayout() {
         })}
       />
       <Tabs.Screen
+        name="friends"
+        options={{
+          title: 'Friends',
+          tabBarIcon: ({ color }) => <TabBarIcon name="users" color={color} />,
+        }}
+        listeners={({ navigation }) => ({
+          tabPress: (event) => {
+            if (navigation.isFocused()) {
+              const isDoubleTap = registerTabPress("friends");
+              if (!isDoubleTap) {
+                event.preventDefault();
+                return;
+              }
+              emitTabReselect("friends");
+            }
+          },
+        })}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',

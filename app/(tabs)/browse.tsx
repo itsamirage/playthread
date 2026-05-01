@@ -24,6 +24,7 @@ import {
   searchPlatformCommunities,
 } from "../../lib/communityHubs";
 import { useContentPreferences } from "../../lib/contentPreferences";
+import { useCustomCommunities } from "../../lib/customCommunities";
 import { useFollows } from "../../lib/follows";
 import { useBrowseGames } from "../../lib/games";
 import { stripAgeRatingQueryTerms } from "../../lib/gameSearch";
@@ -267,6 +268,7 @@ export default function BrowseScreen() {
   const { followedCount, isFollowingGame, getFollowStatus, setFollowStatus, unfollowGame } =
     useFollows();
   const { preferences } = useContentPreferences();
+  const { communities: customCommunities } = useCustomCommunities();
   const cleanQuery = query.trim().toLowerCase();
   const inferredRatingFilter = searchMode === "game" ? getRatingFilterFromQuery(query) : null;
   const effectiveRatingFilter = activeRatingFilter ?? inferredRatingFilter;
@@ -318,15 +320,23 @@ export default function BrowseScreen() {
     onRefresh: hasActiveFilters ? handleClearFilters : undefined,
   });
   const facetResults = searchMode === "platform"
-    ? searchPlatformCommunities(cleanQuery).map((platform) => ({
+    ? [...customCommunities, ...searchPlatformCommunities(cleanQuery)].filter((platform) => {
+        if (!cleanQuery || !platform.isCustom) {
+          return true;
+        }
+
+        const searchPool = [platform.title, platform.subtitle, platform.body].join(" ").toLowerCase();
+        return searchPool.includes(cleanQuery);
+      }).map((platform) => ({
         key: platform.slug,
         label: platform.title,
-        family: platform.family,
+        family: platform.family ?? "Custom",
         count: null,
         hint: platform.subtitle,
+        isCustom: Boolean(platform.isCustom),
         route: {
-          pathname: "/platforms",
-          params: { q: platform.title },
+          pathname: platform.isCustom ? "/community/[slug]" : "/platforms",
+          params: platform.isCustom ? { slug: platform.slug } : { q: platform.title },
         },
       })).filter((platform) => activePlatformFamily === "All" || platform.family === activePlatformFamily)
     : buildFacetResults(games, searchMode, cleanQuery);
@@ -557,7 +567,7 @@ export default function BrowseScreen() {
           Source: {source === "igdb" ? "Live IGDB" : "Mock fallback"}
         </Text>
         {preferences.hideMatureGames ? (
-          <Text style={styles.sourceText}>NSFW games are hidden in your current settings.</Text>
+          <Text style={styles.sourceText}>AO-rated games are hidden in your current settings.</Text>
         ) : null}
         {cleanQuery.length === 1 ? (
           <Text style={styles.sourceText}>Type at least 2 letters to search IGDB.</Text>

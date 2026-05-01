@@ -19,6 +19,7 @@ import { theme } from "../lib/theme";
 const TABS = [
   { key: "home", label: "Hot", icon: "home", href: "/(tabs)" },
   { key: "all", label: "All", icon: "fire", href: "/(tabs)/popular" },
+  { key: "friends", label: "Friends", icon: "users", href: "/(tabs)/friends" },
   { key: "browse", label: "Browse", icon: "search", href: "/(tabs)/browse" },
   { key: "profile", label: "Profile", icon: "user", href: "/(tabs)/profile" },
 ];
@@ -65,7 +66,7 @@ export default function BottomNavBar() {
                 }
 
                 setActiveTab(tab.key);
-                router.navigate(getRememberedTabRoute(tab.key));
+                router.replace(getRememberedTabRoute(tab.key));
               }}
               style={({ pressed }) => [styles.tab, pressed ? styles.tabPressed : null]}
             >

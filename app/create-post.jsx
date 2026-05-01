@@ -96,6 +96,7 @@ export default function CreatePostScreen() {
   const [rating, setRating] = useState("8");
   const [isSpoiler, setIsSpoiler] = useState(false);
   const [spoilerTag, setSpoilerTag] = useState("");
+  const [isNsfw, setIsNsfw] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
   const [imageCaptions, setImageCaptions] = useState([]);
   const [selectedClip, setSelectedClip] = useState(null);
@@ -141,6 +142,7 @@ export default function CreatePostScreen() {
     setBody(editablePost.body ?? "");
     setIsSpoiler(Boolean(editablePost.spoiler));
     setSpoilerTag(editablePost.spoilerTag ?? "");
+    setIsNsfw(Boolean(editablePost.isNsfw));
     setHasLoadedEditValues(true);
   }, [editablePost, hasLoadedEditValues, isEditing]);
 
@@ -166,6 +168,7 @@ export default function CreatePostScreen() {
         setRating(draft.rating ?? "8");
         setIsSpoiler(Boolean(draft.isSpoiler));
         setSpoilerTag(draft.spoilerTag ?? "");
+        setIsNsfw(Boolean(draft.isNsfw));
         setGameSearch(draft.gameSearch ?? "");
         setDraftRecoveredAt(draft.updatedAt ?? null);
         setDraftMediaSummary(draft.hadMedia ? draft.mediaSummary || "Media from the previous draft must be reselected." : "");
@@ -195,6 +198,7 @@ export default function CreatePostScreen() {
         rating,
         isSpoiler,
         spoilerTag,
+        isNsfw,
         gameSearch,
         hadMedia: selectedImages.length > 0 || Boolean(selectedClip),
         mediaSummary: selectedClip
@@ -208,7 +212,7 @@ export default function CreatePostScreen() {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [body, draftContextKey, gameSearch, hasRestoredDraft, isEditing, isSpoiler, postType, rating, selectedClip, selectedGameId, selectedImages.length, spoilerTag, title]);
+  }, [body, draftContextKey, gameSearch, hasRestoredDraft, isEditing, isNsfw, isSpoiler, postType, rating, selectedClip, selectedGameId, selectedImages.length, spoilerTag, title]);
 
   useEffect(() => {
     const handleShow = (event) => {
@@ -387,6 +391,7 @@ export default function CreatePostScreen() {
             body,
             spoiler: isSpoiler,
             spoilerTag,
+            isNsfw,
           })
         : await createPost({
             userId: session.user.id,
@@ -399,6 +404,7 @@ export default function CreatePostScreen() {
             rating: postType === "review" ? Number(rating) : null,
             spoiler: isSpoiler,
             spoilerTag,
+            isNsfw,
             imageAssets: selectedImages,
             imageCaptions,
             clipAsset: selectedClip,
@@ -955,6 +961,20 @@ export default function CreatePostScreen() {
               </>
             ) : null}
           </SectionCard>
+
+          <SectionCard title="Content warning" eyebrow="NSFW">
+            <Text style={styles.helperText}>
+              Mark gore, intense violence, or other sensitive moments. This does not affect AO game filtering.
+            </Text>
+            <Pressable
+              onPress={() => setIsNsfw((currentValue) => !currentValue)}
+              style={[styles.typeButton, isNsfw ? styles.typeButtonDangerActive : null]}
+            >
+              <Text style={[styles.typeButtonText, isNsfw ? styles.typeButtonDangerTextActive : null]}>
+                {isNsfw ? "NSFW warning on" : "No NSFW warning"}
+              </Text>
+            </Pressable>
+          </SectionCard>
         </ScrollView>
 
         <View
@@ -1157,6 +1177,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.accent,
     borderColor: theme.colors.accent,
   },
+  typeButtonDangerActive: {
+    backgroundColor: "rgba(255,69,58,0.18)",
+    borderColor: "rgba(255,69,58,0.58)",
+  },
   typeButtonDisabled: {
     opacity: 0.7,
   },
@@ -1167,6 +1191,9 @@ const styles = StyleSheet.create({
   },
   typeButtonTextActive: {
     color: theme.colors.background,
+  },
+  typeButtonDangerTextActive: {
+    color: "#ff8a80",
   },
   input: {
     backgroundColor: "rgba(255,255,255,0.03)",

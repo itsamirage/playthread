@@ -88,6 +88,7 @@ create table if not exists public.posts (
   image_captions text[] not null default '{}',
   spoiler boolean not null default false,
   spoiler_tag text,
+  is_nsfw boolean not null default false,
   likes_count integer not null default 0,
   comments_count integer not null default 0,
   created_at timestamptz not null default timezone('utc', now()),
@@ -252,6 +253,7 @@ create index if not exists follows_igdb_game_id_idx on public.follows (igdb_game
 create index if not exists posts_user_id_idx on public.posts (user_id);
 create index if not exists posts_igdb_game_id_idx on public.posts (igdb_game_id);
 create index if not exists posts_created_at_idx on public.posts (created_at desc);
+create index if not exists posts_is_nsfw_idx on public.posts (is_nsfw);
 create index if not exists likes_user_id_idx on public.likes (user_id);
 create index if not exists likes_post_id_idx on public.likes (post_id);
 create index if not exists post_reactions_user_id_idx on public.post_reactions (user_id);

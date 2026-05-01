@@ -1,7 +1,7 @@
 import { BlurView } from "expo-blur";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Image as ExpoImage } from "expo-image";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Alert,
@@ -108,7 +108,17 @@ export default function PostCard({
   const [galleryIndex, setGalleryIndex] = useState(null);
   const { width: viewportWidth } = useWindowDimensions();
   const blurOpacity = useRef(new Animated.Value(1)).current;
-  const isSpoilerConcealed = concealSpoilers && !spoilerRevealed;
+  const hasNsfwWarning = Boolean(post.isNsfw);
+  const hasSpoilerWarning = Boolean(post.spoiler && concealSpoilers);
+  const isContentWarningConcealed = (hasNsfwWarning || hasSpoilerWarning) && !spoilerRevealed;
+  const overlayTitle = hasNsfwWarning && hasSpoilerWarning
+    ? "Content warning"
+    : hasNsfwWarning
+      ? "NSFW content warning"
+      : "Spoiler concealed";
+  const overlayText = hasNsfwWarning
+    ? "Tap to reveal this post. It may include gore, intense violence, or sensitive moments."
+    : spoilerRevealHint ?? "Tap to reveal this spoiler post.";
   const { isSavedPost, toggleSavedPost } = useSavedPostIds();
   const isPostSaved = isSaved || isSavedPost(post.id);
   const handleSavePost = onSave ?? (() => toggleSavedPost(post.id));
@@ -138,6 +148,11 @@ export default function PostCard({
     }).start(() => setSpoilerRevealed(true));
   };
 
+  useEffect(() => {
+    setSpoilerRevealed(false);
+    blurOpacity.setValue(1);
+  }, [blurOpacity, post.id]);
+
   const reactionLabels = reactionLabelsByMode[post.reactionMode] ?? reactionLabelsByMode.sentiment;
   const authorTitle = getProfileTitleOption(post.authorTitleKey);
   const authorNameColor = getProfileNameColor(post.authorNameColor);
@@ -156,7 +171,7 @@ export default function PostCard({
 
   return (
     <Pressable
-      disabled={!onPress || isSpoilerConcealed}
+      disabled={!onPress || isContentWarningConcealed}
       onPress={onPress}
       style={({ pressed }) => [styles.card, pressed ? styles.cardPressed : null]}
     >
@@ -170,6 +185,11 @@ export default function PostCard({
               <Text style={styles.spoilerPillText}>
                 {post.spoilerTag ? `Spoiler: ${post.spoilerTag}` : "Spoiler"}
               </Text>
+            </View>
+          ) : null}
+          {hasNsfwWarning ? (
+            <View style={styles.nsfwPill}>
+              <Text style={styles.nsfwPillText}>NSFW</Text>
             </View>
           ) : null}
           {post.isDeveloperPost ? (
@@ -436,15 +456,18 @@ export default function PostCard({
           })}
         </View>
 
-        {isSpoilerConcealed ? (
+        {isContentWarningConcealed ? (
           <Pressable onPress={handleRevealSpoiler} style={styles.blurWrap}>
             <Animated.View style={[styles.blurLayer, { opacity: blurOpacity }]}>
               <BlurView intensity={80} style={styles.blurLayer} tint="dark" />
+              {hasNsfwWarning ? <View style={styles.nsfwBlurTint} /> : null}
             </Animated.View>
-            <View style={styles.spoilerOverlay}>
-              <Text style={styles.spoilerOverlayTitle}>Spoiler concealed</Text>
+            <View style={[styles.spoilerOverlay, hasNsfwWarning ? styles.nsfwOverlay : null]}>
+              <Text style={[styles.spoilerOverlayTitle, hasNsfwWarning ? styles.nsfwOverlayTitle : null]}>
+                {overlayTitle}
+              </Text>
               <Text style={styles.spoilerOverlayText}>
-                {spoilerRevealHint ?? "Tap to reveal this spoiler post."}
+                {overlayText}
               </Text>
             </View>
           </Pressable>
@@ -540,6 +563,17 @@ const styles = StyleSheet.create({
   },
   spoilerPillText: {
     color: theme.colors.spoiler,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.bold,
+  },
+  nsfwPill: {
+    backgroundColor: "rgba(255,69,58,0.16)",
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+  },
+  nsfwPillText: {
+    color: "#ff8a80",
     fontSize: theme.fontSizes.xs,
     fontWeight: theme.fontWeights.bold,
   },
@@ -932,6 +966,10 @@ const styles = StyleSheet.create({
   blurLayer: {
     ...StyleSheet.absoluteFillObject,
   },
+  nsfwBlurTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(90,0,0,0.28)",
+  },
   spoilerOverlay: {
     marginHorizontal: theme.spacing.lg,
     backgroundColor: "rgba(8,16,23,0.72)",
@@ -946,6 +984,13 @@ const styles = StyleSheet.create({
     color: theme.colors.spoiler,
     fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.bold,
+  },
+  nsfwOverlay: {
+    backgroundColor: "rgba(42,8,8,0.78)",
+    borderColor: "rgba(255,69,58,0.38)",
+  },
+  nsfwOverlayTitle: {
+    color: "#ff8a80",
   },
   spoilerOverlayText: {
     color: theme.colors.textSecondary,

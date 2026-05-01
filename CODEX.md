@@ -251,7 +251,7 @@ Direct Supabase client writes are only used for reads. All mutations (posts, com
 `usePushNotifications()` is called in `_layout.tsx` via `<PushNotificationSync />` inside `AuthProvider`. It requests permission and syncs the Expo push token to `user_push_tokens` on login and whenever the app becomes active.
 
 ### NSFW / mature content filter
-`contentPreferences.hideMatureGames` hides AO-rated and adult-themed games from Browse and Catalog. Mature 17+ games always show — this filter is for AO/NSFW only. The setting lives in `AsyncStorage` via `lib/contentPreferences.js`.
+`contentPreferences.hideMatureGames` hides ESRB AO-rated games from Browse, Catalog, and game detail pages. Mature 17+ games always show — this filter is for AO/NSFW only. The setting lives in `AsyncStorage` via `lib/contentPreferences.js`.
 
 ### Friend system
 Friends use a `user_friendships` table with `status: "pending" | "accepted"`. The four states are `none / outgoing / incoming / friends`. All mutations go through `trusted-follow` Edge Function.
