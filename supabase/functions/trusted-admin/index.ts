@@ -210,7 +210,7 @@ Deno.serve(async (request) => {
 
       const { data, error } = await adminClient
         .from("moderation_flags")
-        .select("id, content_type, content_id, igdb_game_id, game_title, user_id, flagged_by, origin, category, labels, reason, content_excerpt, status, reviewed_at, created_at, evidence_json, profiles(username, display_name, selected_name_color), reporter_profiles:profiles!moderation_flags_flagged_by_fkey(username, display_name, selected_name_color)")
+        .select("id, content_type, content_id, igdb_game_id, game_title, user_id, flagged_by, origin, category, labels, reason, content_excerpt, status, reviewed_at, created_at, evidence_json, profiles(username, display_name, selected_name_color)")
         .order("created_at", { ascending: false })
         .limit(200);
 
@@ -218,7 +218,32 @@ Deno.serve(async (request) => {
         throw new Error(error.message);
       }
 
-      return jsonResponse({ success: true, flags: data ?? [] });
+      const reporterIds = Array.from(
+        new Set((data ?? []).map((flag) => flag.flagged_by).filter(Boolean)),
+      );
+      const reporterProfilesById = new Map<string, Record<string, unknown>>();
+
+      if (reporterIds.length > 0) {
+        const { data: reporterRows, error: reporterError } = await adminClient
+          .from("profiles")
+          .select("id, username, display_name, selected_name_color")
+          .in("id", reporterIds);
+
+        if (reporterError) {
+          throw new Error(reporterError.message);
+        }
+
+        for (const reporter of reporterRows ?? []) {
+          reporterProfilesById.set(reporter.id, reporter);
+        }
+      }
+
+      const flags = (data ?? []).map((flag) => ({
+        ...flag,
+        reporter_profiles: flag.flagged_by ? (reporterProfilesById.get(flag.flagged_by) ?? null) : null,
+      }));
+
+      return jsonResponse({ success: true, flags });
     }
 
     if (action === "set_flag_status") {

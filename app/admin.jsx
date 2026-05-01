@@ -63,7 +63,7 @@ export default function AdminScreen() {
   const { profile: currentProfile, isLoading: currentProfileLoading, reload: reloadCurrentProfile } =
     useMyAdminProfile();
   const { profiles, isLoading: profilesLoading, reload: reloadProfiles } = useAdminProfiles();
-  const { flags, isLoading: flagsLoading, reload: reloadFlags } = useModerationFlags(currentProfile);
+  const { flags, isLoading: flagsLoading, error: flagsError, reload: reloadFlags } = useModerationFlags(currentProfile);
   const { events: integrityEvents, isLoading: integrityEventsLoading, reload: reloadIntegrityEvents } =
     useIntegrityEvents(currentProfile);
   const { settings: integritySettings, isLoading: integritySettingsLoading, reload: reloadIntegritySettings } =
@@ -678,6 +678,10 @@ export default function AdminScreen() {
             <ActivityIndicator color={theme.colors.accent} />
             <Text style={styles.helperText}>Loading flagged content...</Text>
           </View>
+        ) : flagsError ? (
+          <Text style={styles.warningText}>
+            Moderation flags could not load: {flagsError instanceof Error ? flagsError.message : "Unknown error"}
+          </Text>
         ) : filteredFlags.length > 0 ? (
           <View style={styles.cardList}>
             {pagedFlags.items.map((flag) => (
@@ -859,6 +863,34 @@ export default function AdminScreen() {
         ) : (
           <Text style={styles.bodyText}>No integrity events recorded yet.</Text>
         )}
+        {selectedIntegrityEvent ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Selected integrity event / @{selectedIntegrityEvent.actor}</Text>
+            <Text style={styles.cardMeta}>
+              {selectedIntegrityEvent.eventType} / {new Date(selectedIntegrityEvent.createdAt).toLocaleString()}
+            </Text>
+            <Text style={styles.bodyText}>
+              IP hash {String(selectedIntegrityEvent.requestIpHash).slice(0, 24)}...
+            </Text>
+            <Text style={styles.excerptText}>{JSON.stringify(selectedIntegrityEvent.metadata)}</Text>
+            <View style={styles.inlineRow}>
+              <Pressable onPress={() => handleShowAuthorContext(selectedIntegrityEvent.actor)} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Find actor flags</Text>
+              </Pressable>
+              <Pressable onPress={() => handleShowNetworkContext(selectedIntegrityEvent.requestIpHash)} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Find same network</Text>
+              </Pressable>
+              {selectedIntegrityEvent.target ? (
+                <Pressable onPress={() => handleShowActionContext(selectedIntegrityEvent.target)} style={styles.secondaryButton}>
+                  <Text style={styles.secondaryButtonText}>Find target context</Text>
+                </Pressable>
+              ) : null}
+              <Pressable onPress={() => setSelectedIntegrityEvent(null)} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Clear</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
       </SectionCard>
 
       {isAdminRole(currentProfile?.accountRole) ? (
