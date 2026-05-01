@@ -896,7 +896,10 @@ export default function ProfileScreen() {
     <ScrollView
       ref={scrollRef}
       style={styles.screen}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        { paddingBottom: Math.max(insets.bottom + 128, 144) },
+      ]}
       onScroll={(event) => {
         scrollHandlers.onScroll?.(event);
 
@@ -2089,6 +2092,7 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.layout.screenPadding,
     gap: theme.spacing.lg,
+    paddingBottom: 144,
   },
   hero: {
     alignItems: "center",

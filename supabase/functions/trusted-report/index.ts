@@ -1,5 +1,6 @@
 import {
   assertActiveProfile,
+  assertNoBannedSignals,
   corsHeaders,
   createModerationFlag,
   getAdminClient,
@@ -9,6 +10,9 @@ import {
   readJsonBody,
   requireProfile,
 } from "../_shared/trusted.ts";
+import { shouldAutoHideReportedContent } from "../../../lib/reportModeration.js";
+
+const REPORT_AUTO_HIDE_LABEL = "multiple user reports";
 
 type RequestBody = {
   contentType?: "post" | "comment" | "profile";
@@ -31,6 +35,7 @@ Deno.serve(async (request) => {
     const adminClient = getAdminClient();
     const profile = await requireProfile(adminClient, user.id);
     assertActiveProfile(profile);
+    await assertNoBannedSignals(adminClient, request, user.id);
 
     const body = await readJsonBody<RequestBody>(request);
     const contentType = body.contentType;
@@ -58,7 +63,7 @@ Deno.serve(async (request) => {
     if (contentType === "post") {
       const { data, error } = await adminClient
         .from("posts")
-        .select("id, user_id, title, body, igdb_game_id, game_title")
+        .select("id, user_id, title, body, igdb_game_id, game_title, moderation_state, moderation_labels")
         .eq("id", contentId)
         .maybeSingle();
 
@@ -72,7 +77,7 @@ Deno.serve(async (request) => {
     } else if (contentType === "comment") {
       const { data, error } = await adminClient
         .from("post_comments")
-        .select("id, user_id, body, posts(igdb_game_id, game_title)")
+        .select("id, user_id, body, moderation_state, moderation_labels, posts(igdb_game_id, game_title)")
         .eq("id", contentId)
         .maybeSingle();
 
@@ -114,13 +119,83 @@ Deno.serve(async (request) => {
       igdbGameId: gameId,
       gameTitle,
       origin: "manual",
+      flaggedByUserId: user.id,
       evidence: {
         reporter_user_id: user.id,
         request_ip_hash: requestIpHash,
       },
     });
 
-    return jsonResponse({ success: true });
+    let autoHidden = false;
+
+    if (contentType === "post" || contentType === "comment") {
+      const { data: openReportRows, error: reportCountError } = await adminClient
+        .from("moderation_flags")
+        .select("flagged_by, evidence_json")
+        .eq("content_type", contentType)
+        .eq("content_id", contentId)
+        .eq("origin", "manual")
+        .eq("status", "open");
+
+      if (reportCountError) {
+        throw new Error(reportCountError.message);
+      }
+
+      if (shouldAutoHideReportedContent(openReportRows ?? [])) {
+        const table = contentType === "post" ? "posts" : "post_comments";
+        const { data: currentContent, error: currentContentError } = await adminClient
+          .from(table)
+          .select("moderation_state, moderation_labels")
+          .eq("id", contentId)
+          .maybeSingle();
+
+        if (currentContentError) {
+          throw new Error(currentContentError.message);
+        }
+
+        const labels = Array.isArray(currentContent?.moderation_labels)
+          ? currentContent.moderation_labels
+          : [];
+        const nextLabels = labels.includes(REPORT_AUTO_HIDE_LABEL)
+          ? labels
+          : [...labels, REPORT_AUTO_HIDE_LABEL];
+
+        if (currentContent?.moderation_state !== "hidden") {
+          const { error: hideError } = await adminClient
+            .from(table)
+            .update({
+              moderation_state: "hidden",
+              moderation_labels: nextLabels,
+            })
+            .eq("id", contentId);
+
+          if (hideError) {
+            throw new Error(hideError.message);
+          }
+
+          const { error: actionError } = await adminClient.from("moderation_actions").insert({
+            target_user_id: targetUserId,
+            actor_user_id: user.id,
+            action_type: "hide_content",
+            reason: "Content was hidden pending moderator review after multiple user reports.",
+            metadata_json: {
+              contentType,
+              contentId,
+              reportThreshold: openReportRows?.length ?? 0,
+              automatic: true,
+            },
+          });
+
+          if (actionError) {
+            throw new Error(actionError.message);
+          }
+        }
+
+        autoHidden = true;
+      }
+    }
+
+    return jsonResponse({ success: true, autoHidden });
   } catch (error) {
     return jsonResponse(
       { error: error instanceof Error ? error.message : "Unknown function error." },

@@ -6,6 +6,7 @@ import {
   corsHeaders,
   getAdminClient,
   getAuthenticatedUser,
+  hashValue,
   jsonResponse,
   readJsonBody,
   requireProfile,
@@ -21,6 +22,9 @@ import {
 } from "../../../lib/trustedAdminService.js";
 
 type RequestBody =
+  | {
+      action?: "get_moderation_flags";
+    }
   | {
       action?: "set_flag_status";
       flagId?: string;
@@ -76,6 +80,115 @@ type RequestBody =
 const PROFILE_SELECT =
   "id, username, display_name, created_at, account_role, moderation_scope, moderation_game_ids, developer_game_ids, is_banned, banned_reason, integrity_exempt, coins_from_posts, coins_from_comments, coins_from_gifts, coins_from_adjustments, coins_spent, selected_name_color, selected_banner_style, selected_title_key";
 
+async function syncBanSignals(
+  adminClient: ReturnType<typeof getAdminClient>,
+  {
+    targetUserId,
+    actorUserId,
+    reason,
+    isBanned,
+  }: {
+    targetUserId: string;
+    actorUserId: string;
+    reason: string | null;
+    isBanned: boolean;
+  },
+) {
+  if (!isBanned) {
+    const { error } = await adminClient
+      .from("moderation_ban_signals")
+      .update({ is_active: false })
+      .eq("source_user_id", targetUserId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return;
+  }
+
+  const signalHashes = new Map<string, { signal_type: "network" | "device"; signal_hash: string }>();
+
+  const { data: integrityRows, error: integrityError } = await adminClient
+    .from("integrity_events")
+    .select("request_ip_hash")
+    .eq("user_id", targetUserId)
+    .limit(100);
+
+  if (integrityError) {
+    throw new Error(integrityError.message);
+  }
+
+  for (const row of integrityRows ?? []) {
+    if (row.request_ip_hash) {
+      signalHashes.set(`network:${row.request_ip_hash}`, {
+        signal_type: "network",
+        signal_hash: row.request_ip_hash,
+      });
+    }
+  }
+
+  const { data: flagRows, error: flagError } = await adminClient
+    .from("moderation_flags")
+    .select("evidence_json")
+    .eq("user_id", targetUserId)
+    .limit(100);
+
+  if (flagError) {
+    throw new Error(flagError.message);
+  }
+
+  for (const row of flagRows ?? []) {
+    const requestIpHash = row.evidence_json?.request_ip_hash;
+    if (requestIpHash) {
+      signalHashes.set(`network:${requestIpHash}`, {
+        signal_type: "network",
+        signal_hash: requestIpHash,
+      });
+    }
+  }
+
+  const { data: tokenRows, error: tokenError } = await adminClient
+    .from("user_push_tokens")
+    .select("expo_push_token")
+    .eq("user_id", targetUserId)
+    .eq("is_active", true);
+
+  if (tokenError) {
+    throw new Error(tokenError.message);
+  }
+
+  for (const row of tokenRows ?? []) {
+    if (row.expo_push_token) {
+      const tokenHash = await hashValue(`device:${row.expo_push_token}`);
+      signalHashes.set(`device:${tokenHash}`, {
+        signal_type: "device",
+        signal_hash: tokenHash,
+      });
+    }
+  }
+
+  const rows = Array.from(signalHashes.values()).map((signal) => ({
+    ...signal,
+    source_user_id: targetUserId,
+    banned_by: actorUserId,
+    reason,
+    is_active: true,
+  }));
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  const { error: upsertError } = await adminClient
+    .from("moderation_ban_signals")
+    .upsert(rows, { onConflict: "signal_type,signal_hash,source_user_id" });
+
+  if (upsertError) {
+    throw new Error(upsertError.message);
+  }
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -91,6 +204,22 @@ Deno.serve(async (request) => {
     const actorProfile = await requireProfile(adminClient, user.id);
     const body = await readJsonBody<RequestBody>(request);
     const action = body.action;
+
+    if (action === "get_moderation_flags") {
+      assertStaff(actorProfile);
+
+      const { data, error } = await adminClient
+        .from("moderation_flags")
+        .select("id, content_type, content_id, igdb_game_id, game_title, user_id, origin, category, labels, reason, content_excerpt, status, reviewed_at, created_at, evidence_json, profiles(username, display_name, selected_name_color)")
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return jsonResponse({ success: true, flags: data ?? [] });
+    }
 
     if (action === "set_flag_status") {
       assertStaff(actorProfile);
@@ -245,6 +374,13 @@ Deno.serve(async (request) => {
       if (error) {
         throw new Error(error.message);
       }
+
+      await syncBanSignals(adminClient, {
+        targetUserId,
+        actorUserId: user.id,
+        reason: bannedReason,
+        isBanned,
+      });
 
       const { error: actionError } = await adminClient.from("moderation_actions").insert({
         target_user_id: targetUserId,

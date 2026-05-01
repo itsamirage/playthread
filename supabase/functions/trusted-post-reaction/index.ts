@@ -1,5 +1,6 @@
 import {
   assertActiveProfile,
+  assertNoBannedSignals,
   corsHeaders,
   enforceIntegrityCheck,
   getAdminClient,
@@ -35,6 +36,7 @@ Deno.serve(async (request) => {
     const adminClient = getAdminClient();
     const profile = await requireProfile(adminClient, user.id);
     assertActiveProfile(profile);
+    await assertNoBannedSignals(adminClient, request, user.id);
 
     const body = await readJsonBody<RequestBody>(request);
     const postId = String(body.postId ?? "").trim();

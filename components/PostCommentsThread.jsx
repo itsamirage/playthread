@@ -26,8 +26,10 @@ import {
 import { useBrowseGames } from "../lib/games";
 import { pickPostImage } from "../lib/postMedia";
 import { describeIntegrityError } from "../lib/integrity";
+import { isStaffRole } from "../lib/admin";
 import { useSavedCommentIds } from "../lib/savedPosts";
 import { formatModerationWarning } from "../lib/moderation";
+import { useCurrentProfile } from "../lib/profile";
 import { getProfileNameColor } from "../lib/profileAppearance";
 import { getProfileTitleOption } from "../lib/titles";
 import {
@@ -48,6 +50,7 @@ export default function PostCommentsThread({
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  const { profile: currentProfile } = useCurrentProfile();
   const { comments, isLoading, error, reload } = usePostComments(post?.id, Boolean(post?.id));
   const { isSavedComment, toggleSavedComment } = useSavedCommentIds();
   const [draft, setDraft] = useState("");
@@ -289,10 +292,12 @@ export default function PostCommentsThread({
             </View>
           ) : visibleComments.length > 0 ? (
             visibleComments.map((comment) => {
-              const authorTitle = getProfileTitleOption(comment.authorTitleKey);
-              const authorNameColor = getProfileNameColor(comment.authorNameColor);
+            const authorTitle = getProfileTitleOption(comment.authorTitleKey);
+            const authorNameColor = getProfileNameColor(comment.authorNameColor);
+            const canManageComment = comment.isMine || isStaffRole(currentProfile?.account_role);
+            const isHiddenForReview = comment.moderationState === "hidden";
 
-              return (
+            return (
                 <View key={comment.id} style={styles.commentCard}>
                   <View style={styles.commentHeader}>
                     <Pressable disabled={!onAuthorPress} onPress={() => onAuthorPress?.(comment.userId)}>
@@ -303,15 +308,17 @@ export default function PostCommentsThread({
                         <Text> | {comment.age}</Text>
                       </Text>
                     </Pressable>
-                    {comment.isMine ? (
+                    {canManageComment ? (
                       <View style={styles.ownerCommentActions}>
-                        <Pressable
-                          disabled={isSubmitting}
-                          onPress={() => handleStartEdit(comment)}
-                          style={styles.editButton}
-                        >
-                          <Text style={styles.editButtonText}>Edit</Text>
-                        </Pressable>
+                        {comment.isMine ? (
+                          <Pressable
+                            disabled={isSubmitting}
+                            onPress={() => handleStartEdit(comment)}
+                            style={styles.editButton}
+                          >
+                            <Text style={styles.editButtonText}>Edit</Text>
+                          </Pressable>
+                        ) : null}
                         <Pressable
                           disabled={deletingCommentId === comment.id}
                           onPress={() => handleDelete(comment.id)}
@@ -339,32 +346,43 @@ export default function PostCommentsThread({
                       </Text>
                     </View>
                   ) : null}
-                  {comment.body ? (
-                    <Text style={styles.commentBody}>
-                      {buildCommentTextSegments(comment.body).map((segment, index) =>
-                        segment.gameId ? (
-                          <Text
-                            key={`${comment.id}:segment:${index}`}
-                            style={styles.commentLinkText}
-                            onPress={() => router.push(`/game/${segment.gameId}`)}
-                          >
-                            {segment.text}
-                          </Text>
-                        ) : (
-                          <Text key={`${comment.id}:segment:${index}`}>{segment.text}</Text>
-                        ),
-                      )}
-                    </Text>
-                  ) : null}
-                  {comment.imageUrl ? (
-                    <Image source={{ uri: comment.imageUrl }} style={styles.commentImage} contentFit="cover" />
-                  ) : null}
-                  {comment.isEdited ? (
-                    <Text style={styles.commentEditedText}>
-                      Last edited {new Date(comment.updatedAt).toLocaleString()}
-                    </Text>
-                  ) : null}
-                  <View style={styles.commentActions}>
+                  {isHiddenForReview ? (
+                    <View style={styles.hiddenReviewBanner}>
+                      <Text style={styles.hiddenReviewTitle}>Hidden pending review</Text>
+                      <Text style={styles.hiddenReviewText}>
+                        This comment is hidden until a moderator reviews recent reports.
+                      </Text>
+                    </View>
+                  ) : (
+                    <>
+                      {comment.body ? (
+                        <Text style={styles.commentBody}>
+                          {buildCommentTextSegments(comment.body).map((segment, index) =>
+                            segment.gameId ? (
+                              <Text
+                                key={`${comment.id}:segment:${index}`}
+                                style={styles.commentLinkText}
+                                onPress={() => router.push(`/game/${segment.gameId}`)}
+                              >
+                                {segment.text}
+                              </Text>
+                            ) : (
+                              <Text key={`${comment.id}:segment:${index}`}>{segment.text}</Text>
+                            ),
+                          )}
+                        </Text>
+                      ) : null}
+                      {comment.imageUrl ? (
+                        <Image source={{ uri: comment.imageUrl }} style={styles.commentImage} contentFit="cover" />
+                      ) : null}
+                      {comment.isEdited ? (
+                        <Text style={styles.commentEditedText}>
+                          Last edited {new Date(comment.updatedAt).toLocaleString()}
+                        </Text>
+                      ) : null}
+                    </>
+                  )}
+                  {!isHiddenForReview ? <View style={styles.commentActions}>
                     <Pressable
                       disabled={reactingCommentId === comment.id}
                       onPress={() => handleToggleLike(comment.id)}
@@ -403,7 +421,7 @@ export default function PostCommentsThread({
                         <Text style={styles.actionChipText}>Gift coins</Text>
                       </Pressable>
                     ) : null}
-                  </View>
+                  </View> : null}
                 </View>
               );
             })
@@ -671,6 +689,24 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   warningBannerText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: 18,
+  },
+  hiddenReviewBanner: {
+    gap: theme.spacing.xs,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.12)",
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    padding: theme.spacing.sm,
+  },
+  hiddenReviewTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  hiddenReviewText: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSizes.sm,
     lineHeight: 18,

@@ -1,5 +1,6 @@
 import {
   assertActiveProfile,
+  assertNoBannedSignals,
   corsHeaders,
   createModerationFlag,
   enforceIntegrityCheck,
@@ -256,6 +257,7 @@ Deno.serve(async (request) => {
     const adminClient = getAdminClient();
     const profile = await requireProfile(adminClient, user.id);
     assertActiveProfile(profile);
+    await assertNoBannedSignals(adminClient, request, user.id);
 
     const body = await readJsonBody<RequestBody>(request);
     const action = body.action ?? "create";

@@ -110,6 +110,7 @@ export default function PostCard({
   const blurOpacity = useRef(new Animated.Value(1)).current;
   const hasNsfwWarning = Boolean(post.isNsfw);
   const hasSpoilerWarning = Boolean(post.spoiler && concealSpoilers);
+  const isHiddenForReview = post.moderationState === "hidden";
   const isContentWarningConcealed = (hasNsfwWarning || hasSpoilerWarning) && !spoilerRevealed;
   const overlayTitle = hasNsfwWarning && hasSpoilerWarning
     ? "Content warning"
@@ -240,69 +241,80 @@ export default function PostCard({
       </Pressable>
 
       <View style={styles.mainContent}>
-        <Text style={styles.bodyText}>{post.body}</Text>
-        {post.isEdited ? (
-          <Text style={styles.editedText}>
-            Edited {new Date(post.updatedAt).toLocaleString()}
-          </Text>
-        ) : null}
-
-        {imageUrls.length === 1 ? (
-          <View style={styles.postImageBlock}>
-            <PostImage uri={imageUrls[0]} style={styles.postImage} onPress={() => setGalleryIndex(0)} />
-            {imageCaptions[0] ? <Text style={styles.imageCaption}>{imageCaptions[0]}</Text> : null}
+        {isHiddenForReview ? (
+          <View style={styles.hiddenReviewBanner}>
+            <Text style={styles.hiddenReviewTitle}>Hidden pending review</Text>
+            <Text style={styles.hiddenReviewText}>
+              This post is hidden until a moderator reviews recent reports.
+            </Text>
           </View>
-        ) : imageUrls.length > 1 ? (
-          <View
-            onLayout={(event) => setImageGridWidth(event.nativeEvent.layout.width)}
-            style={styles.postImageGrid}
-          >
-            {imageUrls.map((imageUrl, index) => (
-              <PostImage
-                key={`${post.id}:image:${index}`}
-                uri={imageUrl}
-                onPress={() => setGalleryIndex(index)}
-                style={[
-                  styles.postImageGridItem,
-                  imageGridWidth > 0
-                    ? {
-                        width: (imageGridWidth - theme.spacing.sm) / 2,
-                        height: (imageGridWidth - theme.spacing.sm) / 2,
-                      }
-                    : null,
-                ]}
+        ) : (
+          <>
+            <Text style={styles.bodyText}>{post.body}</Text>
+            {post.isEdited ? (
+              <Text style={styles.editedText}>
+                Edited {new Date(post.updatedAt).toLocaleString()}
+              </Text>
+            ) : null}
+
+            {imageUrls.length === 1 ? (
+              <View style={styles.postImageBlock}>
+                <PostImage uri={imageUrls[0]} style={styles.postImage} onPress={() => setGalleryIndex(0)} />
+                {imageCaptions[0] ? <Text style={styles.imageCaption}>{imageCaptions[0]}</Text> : null}
+              </View>
+            ) : imageUrls.length > 1 ? (
+              <View
+                onLayout={(event) => setImageGridWidth(event.nativeEvent.layout.width)}
+                style={styles.postImageGrid}
+              >
+                {imageUrls.map((imageUrl, index) => (
+                  <PostImage
+                    key={`${post.id}:image:${index}`}
+                    uri={imageUrl}
+                    onPress={() => setGalleryIndex(index)}
+                    style={[
+                      styles.postImageGridItem,
+                      imageGridWidth > 0
+                        ? {
+                            width: (imageGridWidth - theme.spacing.sm) / 2,
+                            height: (imageGridWidth - theme.spacing.sm) / 2,
+                          }
+                        : null,
+                    ]}
+                  />
+                ))}
+              </View>
+            ) : null}
+            {imageUrls.length > 1 && imageCaptions.some(Boolean) ? (
+              <View style={styles.imageCaptionList}>
+                {imageCaptions.map((caption, index) =>
+                  caption ? (
+                    <Text key={`${post.id}:caption:${index}`} style={styles.imageCaption}>
+                      {index + 1}. {caption}
+                    </Text>
+                  ) : null,
+                )}
+              </View>
+            ) : null}
+
+            {post.type === "clip" ? (
+              <ClipPlayer
+                playbackId={post.videoPlaybackId}
+                status={post.videoStatus}
+                thumbnailUrl={post.videoThumbnailUrl}
               />
-            ))}
-          </View>
-        ) : null}
-        {imageUrls.length > 1 && imageCaptions.some(Boolean) ? (
-          <View style={styles.imageCaptionList}>
-            {imageCaptions.map((caption, index) =>
-              caption ? (
-                <Text key={`${post.id}:caption:${index}`} style={styles.imageCaption}>
-                  {index + 1}. {caption}
-                </Text>
-              ) : null,
-            )}
-          </View>
-        ) : null}
-
-        {post.type === "clip" ? (
-          <ClipPlayer
-            playbackId={post.videoPlaybackId}
-            status={post.videoStatus}
-            thumbnailUrl={post.videoThumbnailUrl}
-          />
-        ) : null}
-        {post.type === "clip" ? (
-          <Text style={styles.clipMetaText}>
-            {post.videoStatus === "ready"
-              ? "Streaming-only clip. Downloads are disabled for now."
-              : post.videoStatus === "errored"
-                ? "This clip failed to process."
-                : "Mux is still preparing this clip for streaming."}
-          </Text>
-        ) : null}
+            ) : null}
+            {post.type === "clip" ? (
+              <Text style={styles.clipMetaText}>
+                {post.videoStatus === "ready"
+                  ? "Streaming-only clip. Downloads are disabled for now."
+                  : post.videoStatus === "errored"
+                    ? "This clip failed to process."
+                    : "Mux is still preparing this clip for streaming."}
+              </Text>
+            ) : null}
+          </>
+        )}
         {onEdit || onDelete ? (
           <View style={styles.ownerActionRow}>
             {onEdit ? (
@@ -409,7 +421,7 @@ export default function PostCard({
           </View>
         </View>
 
-        <View style={styles.reactionRow}>
+        {!isHiddenForReview ? <View style={styles.reactionRow}>
           {reactionTypes.map((reactionType) => {
             const isSelected = post.viewerReaction === reactionType;
             const isNegative = reactionType === "dislike" || reactionType === "not_helpful";
@@ -454,7 +466,7 @@ export default function PostCard({
               </Pressable>
             );
           })}
-        </View>
+        </View> : null}
 
         {isContentWarningConcealed ? (
           <Pressable onPress={handleRevealSpoiler} style={styles.blurWrap}>
@@ -858,6 +870,24 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   warningBannerText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: 20,
+  },
+  hiddenReviewBanner: {
+    gap: theme.spacing.xs,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.12)",
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    padding: theme.spacing.md,
+  },
+  hiddenReviewTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+  },
+  hiddenReviewText: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSizes.sm,
     lineHeight: 20,

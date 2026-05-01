@@ -94,7 +94,13 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: Math.max(insets.bottom + 128, 144) },
+        ]}
+      >
         <View style={[styles.header, { paddingTop: insets.top + theme.spacing.md }]}>
           <Pressable onPress={() => goBackOrFallback(router, "/(tabs)/profile")} style={styles.backButton}>
             <Text style={styles.backButtonText}>Back</Text>
@@ -179,7 +185,7 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.layout.screenPadding,
     gap: theme.spacing.lg,
-    paddingBottom: 96,
+    paddingBottom: 144,
   },
   header: {
     gap: theme.spacing.sm,

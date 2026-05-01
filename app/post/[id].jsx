@@ -18,15 +18,18 @@ import PostCard from "../../components/PostCard";
 import PostCommentsThread from "../../components/PostCommentsThread";
 import SectionCard from "../../components/SectionCard";
 import { useAuth } from "../../lib/auth";
+import { isStaffRole } from "../../lib/admin";
 import { describeIntegrityError } from "../../lib/integrity";
 import { goBackOrFallback } from "../../lib/navigation";
 import { deletePost, togglePostReaction, useEditablePost } from "../../lib/posts";
+import { useCurrentProfile } from "../../lib/profile";
 import { theme } from "../../lib/theme";
 
 export default function PostDetailScreen() {
   const { id, scrollTo } = useLocalSearchParams();
   const router = useRouter();
   const { session } = useAuth();
+  const { profile: currentProfile } = useCurrentProfile();
   const insets = useSafeAreaInsets();
   const { post, isLoading, error, reload } = useEditablePost(typeof id === "string" ? id : null, true);
   const [reactingPostId, setReactingPostId] = useState(null);
@@ -37,6 +40,10 @@ export default function PostDetailScreen() {
 
   const displayPost = optimisticReaction && post ? { ...post, ...optimisticReaction } : post;
   const shouldScrollToComments = scrollTo === "comments";
+  const canDeletePost = Boolean(
+    post && (session?.user?.id === post.userId || isStaffRole(currentProfile?.account_role)),
+  );
+  const canEditPost = Boolean(post && session?.user?.id === post.userId);
 
   const handleScrollToComments = () => {
     scrollRef.current?.scrollTo({
@@ -149,7 +156,7 @@ export default function PostDetailScreen() {
             onOpenComments={handleScrollToComments}
             onReact={handleReact}
             onDelete={
-              session?.user?.id === post.userId
+              canDeletePost
                 ? async () => {
                     Alert.alert("Delete post", "This will permanently remove the post.", [
                       { text: "Cancel", style: "cancel" },
@@ -166,7 +173,7 @@ export default function PostDetailScreen() {
                 : null
             }
             onEdit={
-              session?.user?.id === post.userId
+              canEditPost
                 ? () => router.push({ pathname: "/create-post", params: { gameId: String(post.gameId), postId: post.id } })
                 : null
             }
