@@ -106,6 +106,18 @@ export default function AdminScreen() {
     () => flags.filter((flag) => flag.origin === "integrity").length,
     [flags]
   );
+  const openFlagCount = useMemo(
+    () => flags.filter((flag) => flag.status === "open").length,
+    [flags]
+  );
+  const manualReportCount = useMemo(
+    () => flags.filter((flag) => flag.origin === "manual").length,
+    [flags]
+  );
+  const openManualReportCount = useMemo(
+    () => flags.filter((flag) => flag.origin === "manual" && flag.status === "open").length,
+    [flags]
+  );
   const filteredFlags = useMemo(
     () =>
       filterFlags(flags, { status: flagStatusFilter, origin: flagOriginFilter, search: flagSearch }).filter(
@@ -578,6 +590,40 @@ export default function AdminScreen() {
       ) : null}
 
       <SectionCard title="Moderation queue" eyebrow="Flagged content">
+        <View style={styles.inlineRow}>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{openFlagCount}</Text>
+            <Text style={styles.statLabel}>Open flags</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{openManualReportCount}</Text>
+            <Text style={styles.statLabel}>Open reports</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{manualReportCount}</Text>
+            <Text style={styles.statLabel}>Manual reports</Text>
+          </View>
+        </View>
+        <View style={styles.inlineRow}>
+          <Pressable
+            onPress={() => {
+              setFlagStatusFilter("open");
+              setFlagOriginFilter("manual");
+            }}
+            style={styles.secondaryButton}
+          >
+            <Text style={styles.secondaryButtonText}>Open reports</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              setFlagStatusFilter("open");
+              setFlagOriginFilter("all");
+            }}
+            style={styles.secondaryButton}
+          >
+            <Text style={styles.secondaryButtonText}>All open</Text>
+          </Pressable>
+        </View>
         <TextInput
           onChangeText={setFlagSearch}
           placeholder="Search flags by author, reason, game, category"
@@ -641,6 +687,12 @@ export default function AdminScreen() {
                 </Text>
                 <Text style={styles.cardMeta}>
                   {flag.gameTitle ? `${flag.gameTitle} • ` : ""}{flag.status} • {new Date(flag.createdAt).toLocaleString()}
+                </Text>
+                <Text style={styles.helperText}>
+                  Origin {flag.origin}{flag.reporter ? " / Reported by " : ""}
+                  {flag.reporter ? (
+                    <Text style={{ color: getProfileNameColor(flag.reporterNameColor) }}>@{flag.reporter}</Text>
+                  ) : null}
                 </Text>
                 <Text style={styles.bodyText}>{flag.reason}</Text>
                 <Text style={styles.helperText}>Media {flag.mediaKind}</Text>
@@ -1068,6 +1120,12 @@ export default function AdminScreen() {
               <Text style={styles.cardMeta}>
                 {selectedFlag.origin} • {selectedFlag.status} • {new Date(selectedFlag.createdAt).toLocaleString()}
               </Text>
+              {selectedFlag.reporter ? (
+                <Text style={styles.helperText}>
+                  Reported by <Text style={{ color: getProfileNameColor(selectedFlag.reporterNameColor) }}>@{selectedFlag.reporter}</Text>
+                </Text>
+              ) : null}
+              {selectedFlag.excerpt ? <Text style={styles.excerptText}>{selectedFlag.excerpt}</Text> : null}
               <Text style={styles.bodyText}>{selectedFlag.reason}</Text>
               <Text style={styles.helperText}>Media kind {selectedFlag.mediaKind}</Text>
               {selectedFlag.mediaUrls?.length > 0 ? (
@@ -1146,6 +1204,19 @@ export default function AdminScreen() {
                   </Pressable>
                 </View>
               ) : null}
+              <View style={styles.inlineRow}>
+                {["reviewed", "dismissed", "actioned"].map((status) => (
+                  <Pressable
+                    key={`selected:${selectedFlag.id}:${status}`}
+                    onPress={() => handleFlagStatus(selectedFlag.id, status)}
+                    style={styles.secondaryButton}
+                  >
+                    <Text style={styles.secondaryButtonText}>
+                      {workingKey === `flag:${selectedFlag.id}:${status}` ? "Saving..." : status}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
           ) : null}
           {selectedIntegrityEvent ? (

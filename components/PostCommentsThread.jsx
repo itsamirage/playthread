@@ -32,6 +32,7 @@ import { formatModerationWarning } from "../lib/moderation";
 import { useCurrentProfile } from "../lib/profile";
 import { getProfileNameColor } from "../lib/profileAppearance";
 import { getProfileTitleOption } from "../lib/titles";
+import { reportContent } from "../lib/reports";
 import {
   createPostComment,
   deletePostComment,
@@ -248,6 +249,43 @@ export default function PostCommentsThread({
     }
   };
 
+  const handleReportComment = (comment) => {
+    Alert.alert("Report comment", "Send this comment to moderators for review.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Abuse",
+        onPress: () => submitCommentReport(comment.id, "abuse", "User reported this comment for abuse."),
+      },
+      {
+        text: "Nudity",
+        onPress: () => submitCommentReport(comment.id, "nudity", "User reported this comment for sexual content."),
+      },
+      {
+        text: "Hate",
+        onPress: () => submitCommentReport(comment.id, "hate", "User reported this comment for hateful content."),
+      },
+    ]);
+  };
+
+  const submitCommentReport = async (commentId, category, reason) => {
+    try {
+      const result = await reportContent({
+        contentType: "comment",
+        contentId: commentId,
+        category,
+        reason,
+      });
+      Alert.alert(
+        result?.alreadyReported ? "Already reported" : "Report sent",
+        result?.alreadyReported
+          ? "Your earlier report is still waiting for moderator review."
+          : "This comment was sent to moderators for review.",
+      );
+    } catch (error) {
+      Alert.alert("Report failed", error instanceof Error ? error.message : "Could not send that report.");
+    }
+  };
+
   const handleSendGift = async ({ amount, note, isAnonymous }) => {
     if (!session?.user?.id || !giftingComment?.userId) {
       return;
@@ -416,6 +454,11 @@ export default function PostCommentsThread({
                         {isSavedComment(comment.id) ? "Saved" : "Save"}
                       </Text>
                     </Pressable>
+                    {!comment.isMine ? (
+                      <Pressable onPress={() => handleReportComment(comment)} style={styles.actionChip}>
+                        <Text style={styles.actionChipText}>Report</Text>
+                      </Pressable>
+                    ) : null}
                     {!comment.isMine ? (
                       <Pressable onPress={() => setGiftingComment(comment)} style={styles.actionChip}>
                         <Text style={styles.actionChipText}>Gift coins</Text>

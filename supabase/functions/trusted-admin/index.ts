@@ -210,7 +210,7 @@ Deno.serve(async (request) => {
 
       const { data, error } = await adminClient
         .from("moderation_flags")
-        .select("id, content_type, content_id, igdb_game_id, game_title, user_id, origin, category, labels, reason, content_excerpt, status, reviewed_at, created_at, evidence_json, profiles(username, display_name, selected_name_color)")
+        .select("id, content_type, content_id, igdb_game_id, game_title, user_id, flagged_by, origin, category, labels, reason, content_excerpt, status, reviewed_at, created_at, evidence_json, profiles(username, display_name, selected_name_color), reporter_profiles:profiles!moderation_flags_flagged_by_fkey(username, display_name, selected_name_color)")
         .order("created_at", { ascending: false })
         .limit(200);
 
@@ -371,13 +371,6 @@ Deno.serve(async (request) => {
         throw new Error(error.message);
       }
 
-      await syncBanSignals(adminClient, {
-        targetUserId,
-        actorUserId: user.id,
-        reason: bannedReason,
-        isBanned,
-      });
-
       const { error: actionError } = await adminClient.from("moderation_actions").insert({
         target_user_id: targetUserId,
         actor_user_id: user.id,
@@ -434,6 +427,13 @@ Deno.serve(async (request) => {
       if (error) {
         throw new Error(error.message);
       }
+
+      await syncBanSignals(adminClient, {
+        targetUserId,
+        actorUserId: user.id,
+        reason: bannedReason,
+        isBanned,
+      });
 
       const { error: actionError } = await adminClient.from("moderation_actions").insert({
         target_user_id: targetUserId,

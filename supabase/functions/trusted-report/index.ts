@@ -108,6 +108,24 @@ Deno.serve(async (request) => {
 
     const requestIpHash = await getRequestIpHash(request);
 
+    const { data: existingReport, error: existingReportError } = await adminClient
+      .from("moderation_flags")
+      .select("id")
+      .eq("content_type", contentType)
+      .eq("content_id", contentId)
+      .eq("origin", "manual")
+      .eq("flagged_by", user.id)
+      .eq("status", "open")
+      .maybeSingle();
+
+    if (existingReportError) {
+      throw new Error(existingReportError.message);
+    }
+
+    if (existingReport) {
+      return jsonResponse({ success: true, alreadyReported: true, autoHidden: false });
+    }
+
     await createModerationFlag(adminClient, {
       contentType,
       contentId,

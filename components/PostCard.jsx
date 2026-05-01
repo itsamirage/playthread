@@ -123,20 +123,33 @@ export default function PostCard({
   const { isSavedPost, toggleSavedPost } = useSavedPostIds();
   const isPostSaved = isSaved || isSavedPost(post.id);
   const handleSavePost = onSave ?? (() => toggleSavedPost(post.id));
+  const submitReport = async ({ category, reason }) => {
+    try {
+      const result = await reportContent({ contentType: "post", contentId: post.id, category, reason });
+      Alert.alert(
+        result?.alreadyReported ? "Already reported" : "Report sent",
+        result?.alreadyReported
+          ? "Your earlier report is still waiting for moderator review."
+          : "This post was sent to moderators for review.",
+      );
+    } catch (error) {
+      Alert.alert("Report failed", error.message);
+    }
+  };
   const handleReportPost = onReport ?? (() => {
     Alert.alert("Report post", "Send this post to moderators for review.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Abuse",
-        onPress: () => reportContent({ contentType: "post", contentId: post.id, category: "abuse", reason: "User reported this post for abuse." }).catch((error) => Alert.alert("Report failed", error.message)),
+        onPress: () => submitReport({ category: "abuse", reason: "User reported this post for abuse." }),
       },
       {
         text: "Nudity",
-        onPress: () => reportContent({ contentType: "post", contentId: post.id, category: "nudity", reason: "User reported this post for sexual content." }).catch((error) => Alert.alert("Report failed", error.message)),
+        onPress: () => submitReport({ category: "nudity", reason: "User reported this post for sexual content." }),
       },
       {
         text: "Hate",
-        onPress: () => reportContent({ contentType: "post", contentId: post.id, category: "hate", reason: "User reported this post for hateful content." }).catch((error) => Alert.alert("Report failed", error.message)),
+        onPress: () => submitReport({ category: "hate", reason: "User reported this post for hateful content." }),
       },
     ]);
   });
@@ -236,7 +249,9 @@ export default function PostCard({
 
         <View style={styles.gameText}>
           <Text style={styles.gameTitle}>{post.gameTitle}</Text>
-          <Text style={styles.postTitle}>{post.title}</Text>
+          <Text style={styles.postTitle}>
+            {isHiddenForReview ? "Post hidden pending moderator review" : post.title}
+          </Text>
         </View>
       </Pressable>
 
