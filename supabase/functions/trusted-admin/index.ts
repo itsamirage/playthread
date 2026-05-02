@@ -210,7 +210,7 @@ Deno.serve(async (request) => {
 
       const { data, error } = await adminClient
         .from("moderation_flags")
-        .select("id, content_type, content_id, igdb_game_id, game_title, user_id, flagged_by, origin, category, labels, reason, content_excerpt, status, reviewed_at, created_at, evidence_json, profiles(username, display_name, selected_name_color)")
+        .select("id, content_type, content_id, igdb_game_id, game_title, user_id, flagged_by, origin, category, labels, reason, content_excerpt, status, reviewed_at, created_at, evidence_json")
         .order("created_at", { ascending: false })
         .limit(200);
 
@@ -218,29 +218,34 @@ Deno.serve(async (request) => {
         throw new Error(error.message);
       }
 
-      const reporterIds = Array.from(
-        new Set((data ?? []).map((flag) => flag.flagged_by).filter(Boolean)),
+      const profileIds = Array.from(
+        new Set(
+          (data ?? [])
+            .flatMap((flag) => [flag.user_id, flag.flagged_by])
+            .filter(Boolean),
+        ),
       );
-      const reporterProfilesById = new Map<string, Record<string, unknown>>();
+      const profilesById = new Map<string, Record<string, unknown>>();
 
-      if (reporterIds.length > 0) {
-        const { data: reporterRows, error: reporterError } = await adminClient
+      if (profileIds.length > 0) {
+        const { data: profileRows, error: profileError } = await adminClient
           .from("profiles")
           .select("id, username, display_name, selected_name_color")
-          .in("id", reporterIds);
+          .in("id", profileIds);
 
-        if (reporterError) {
-          throw new Error(reporterError.message);
+        if (profileError) {
+          throw new Error(profileError.message);
         }
 
-        for (const reporter of reporterRows ?? []) {
-          reporterProfilesById.set(reporter.id, reporter);
+        for (const profile of profileRows ?? []) {
+          profilesById.set(profile.id, profile);
         }
       }
 
       const flags = (data ?? []).map((flag) => ({
         ...flag,
-        reporter_profiles: flag.flagged_by ? (reporterProfilesById.get(flag.flagged_by) ?? null) : null,
+        profiles: profilesById.get(flag.user_id) ?? null,
+        reporter_profiles: flag.flagged_by ? (profilesById.get(flag.flagged_by) ?? null) : null,
       }));
 
       return jsonResponse({ success: true, flags });

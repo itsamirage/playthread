@@ -72,7 +72,9 @@ async function main() {
   });
 
   let reportResult = null;
+  let moderationFlagsResult = null;
   let trustedAdminError = null;
+  let moderationFlagsError = null;
 
   try {
     reportResult = await invokeFunction(client, "trusted-admin", {
@@ -81,6 +83,14 @@ async function main() {
     });
   } catch (error) {
     trustedAdminError = error instanceof Error ? error.message : String(error);
+  }
+
+  try {
+    moderationFlagsResult = await invokeFunction(client, "trusted-admin", {
+      action: "get_moderation_flags",
+    });
+  } catch (error) {
+    moderationFlagsError = error instanceof Error ? error.message : String(error);
   }
 
   console.log(JSON.stringify({
@@ -99,6 +109,11 @@ async function main() {
         : null,
       blockedSummaryRows: Array.isArray(reportResult?.report?.blockedSummary)
         ? reportResult.report.blockedSummary.length
+        : null,
+      moderationFlagsSuccess: Boolean(moderationFlagsResult?.success),
+      moderationFlagsError,
+      moderationFlagRows: Array.isArray(moderationFlagsResult?.flags)
+        ? moderationFlagsResult.flags.length
         : null,
     },
   }, null, 2));
