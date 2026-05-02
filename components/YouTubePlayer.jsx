@@ -5,6 +5,47 @@ import { WebView } from "react-native-webview";
 import { theme } from "../lib/theme";
 import { buildYouTubeEmbedUrl, buildYouTubeWatchUrl } from "../lib/youtube";
 
+const PLAYER_ORIGIN = "https://playthread.app";
+
+function buildNativePlayerHtml(embedUrl, title) {
+  const escapedTitle = String(title || "YouTube video").replace(/"/g, "&quot;");
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+      iframe {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <iframe
+      src="${embedUrl}"
+      title="${escapedTitle}"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      allowfullscreen
+      referrerpolicy="strict-origin-when-cross-origin">
+    </iframe>
+  </body>
+</html>`;
+}
+
 export default function YouTubePlayer({ videoId, title = null, watchUrl = null }) {
   const [hasError, setHasError] = useState(false);
   const embedUrl = useMemo(
@@ -12,9 +53,12 @@ export default function YouTubePlayer({ videoId, title = null, watchUrl = null }
       buildYouTubeEmbedUrl(videoId, {
         playsinline: 1,
         rel: 0,
+        origin: PLAYER_ORIGIN,
+        widget_referrer: PLAYER_ORIGIN,
       }),
     [videoId],
   );
+  const nativeHtml = useMemo(() => (embedUrl ? buildNativePlayerHtml(embedUrl, title) : null), [embedUrl, title]);
   const normalizedWatchUrl = watchUrl || buildYouTubeWatchUrl(videoId);
 
   const openInYouTube = () => {
@@ -44,6 +88,7 @@ export default function YouTubePlayer({ videoId, title = null, watchUrl = null }
           title: title || "YouTube video",
           allow: "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",
           allowFullScreen: true,
+          referrerPolicy: "strict-origin-when-cross-origin",
           style: styles.webFrame,
         })
       ) : (
@@ -55,7 +100,10 @@ export default function YouTubePlayer({ videoId, title = null, watchUrl = null }
           onError={() => setHasError(true)}
           onHttpError={() => setHasError(true)}
           originWhitelist={["https://*", "http://*"]}
-          source={{ uri: embedUrl }}
+          source={{
+            html: nativeHtml,
+            baseUrl: PLAYER_ORIGIN,
+          }}
           style={styles.webView}
         />
       )}
