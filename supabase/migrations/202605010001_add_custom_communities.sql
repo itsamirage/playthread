@@ -39,7 +39,7 @@ create policy "Authenticated users can view active custom communities"
 on public.custom_communities
 for select
 to authenticated
-using (moderation_state = 'active' or creator_user_id = auth.uid() or public.is_staff(auth.uid()));
+using (moderation_state = 'active' or creator_user_id = auth.uid() or public.is_platform_staff(auth.uid()));
 
 drop policy if exists "Service role manages custom communities" on public.custom_communities;
 create policy "Service role manages custom communities"
@@ -60,7 +60,7 @@ using (
     select 1
     from public.custom_communities c
     where c.id = community_id
-      and (c.creator_user_id = auth.uid() or public.is_staff(auth.uid()))
+      and (c.creator_user_id = auth.uid() or public.is_platform_staff(auth.uid()))
   )
 );
 
