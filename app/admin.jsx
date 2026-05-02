@@ -16,6 +16,7 @@ import { useRouter } from "expo-router";
 import SectionCard from "../components/SectionCard";
 import {
   adjustCoins,
+  deleteFlaggedContent,
   formatAccountAge,
   formatCoinCount,
   getAvailableCoins,
@@ -78,7 +79,7 @@ export default function AdminScreen() {
   const [scopeDrafts, setScopeDrafts] = useState({});
   const [developerDrafts, setDeveloperDrafts] = useState({});
   const [integrityDraft, setIntegrityDraft] = useState(null);
-  const [flagStatusFilter, setFlagStatusFilter] = useState("all");
+  const [flagStatusFilter, setFlagStatusFilter] = useState("open");
   const [flagOriginFilter, setFlagOriginFilter] = useState("all");
   const [flagMediaFilter, setFlagMediaFilter] = useState("all");
   const [flagSearch, setFlagSearch] = useState("");
@@ -351,6 +352,49 @@ export default function AdminScreen() {
       await reloadModerationActions();
     } catch (error) {
       Alert.alert("Content update failed", error instanceof Error ? error.message : "Could not update that content.");
+    } finally {
+      setWorkingKey(null);
+    }
+  };
+
+  const handleDeleteFlaggedContent = async (flag) => {
+    if (!flag?.id) {
+      return;
+    }
+
+    try {
+      setWorkingKey(`content:${flag.id}:delete`);
+      await deleteFlaggedContent({
+        flagId: flag.id,
+      });
+      setSelectedFlag((current) => (current?.id === flag.id ? null : current));
+      await reloadFlags();
+      await reloadIntegrityReport();
+      await reloadModerationActions();
+    } catch (error) {
+      Alert.alert("Content removal failed", error instanceof Error ? error.message : "Could not remove that content.");
+    } finally {
+      setWorkingKey(null);
+    }
+  };
+
+  const handleFlagAuthorBanToggle = async (flag, nextIsBanned) => {
+    if (!flag?.userId || !currentProfile?.id) {
+      return;
+    }
+
+    try {
+      setWorkingKey(`flag-ban:${flag.id}`);
+      await setBanState({
+        actorUserId: currentProfile.id,
+        targetUserId: flag.userId,
+        isBanned: nextIsBanned,
+        bannedReason: nextIsBanned ? (bannedReason || `Moderation action for ${flag.contentType} flag ${flag.id}`) : null,
+      });
+      await reloadProfiles();
+      await reloadModerationActions();
+    } catch (error) {
+      Alert.alert("Ban update failed", error instanceof Error ? error.message : "Could not update that account.");
     } finally {
       setWorkingKey(null);
     }
@@ -723,7 +767,25 @@ export default function AdminScreen() {
                           {workingKey === `content:${flag.id}:clean` ? "Saving..." : "Restore content"}
                         </Text>
                       </Pressable>
+                      <Pressable
+                        onPress={() => handleDeleteFlaggedContent(flag)}
+                        style={({ pressed }) => [styles.secondaryButton, styles.banButton, pressed ? styles.buttonPressed : null]}
+                      >
+                        <Text style={styles.primaryButtonText}>
+                          {workingKey === `content:${flag.id}:delete` ? "Removing..." : "Remove content"}
+                        </Text>
+                      </Pressable>
                     </>
+                  ) : null}
+                  {isAdminRole(currentProfile?.accountRole) && flag.userId ? (
+                    <Pressable
+                      onPress={() => handleFlagAuthorBanToggle(flag, true)}
+                      style={({ pressed }) => [styles.secondaryButton, styles.banButton, pressed ? styles.buttonPressed : null]}
+                    >
+                      <Text style={styles.primaryButtonText}>
+                        {workingKey === `flag-ban:${flag.id}` ? "Saving..." : "Ban user"}
+                      </Text>
+                    </Pressable>
                   ) : null}
                   {["reviewed", "dismissed", "actioned"].map((status) => (
                     <Pressable
@@ -737,6 +799,42 @@ export default function AdminScreen() {
                     </Pressable>
                   ))}
                 </View>
+                {selectedFlag?.id === flag.id ? (
+                  <View style={styles.inlineInspect}>
+                    <Text style={styles.cardMeta}>Inspecting this flag</Text>
+                    {flag.mediaUrls?.length > 0 ? (
+                      <View style={styles.flagPreviewGrid}>
+                        {flag.mediaUrls.map((mediaUrl, index) => (
+                          <Pressable
+                            key={`${flag.id}:inline-media:${index}`}
+                            onPress={() => Linking.openURL(mediaUrl)}
+                            style={styles.flagPreviewTile}
+                          >
+                            <Image source={{ uri: mediaUrl }} style={styles.flagPreviewImage} />
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : flag.mediaUrl ? (
+                      <Image source={{ uri: flag.mediaUrl }} style={styles.flagPreviewImage} />
+                    ) : null}
+                    <Text style={styles.excerptText}>{JSON.stringify(flag.evidence)}</Text>
+                    <View style={styles.inlineRow}>
+                      {flag.contentType === "post" && flag.contentId ? (
+                        <Pressable onPress={() => router.push(`/post/${flag.contentId}`)} style={styles.secondaryButton}>
+                          <Text style={styles.secondaryButtonText}>Open post</Text>
+                        </Pressable>
+                      ) : null}
+                      {flag.userId ? (
+                        <Pressable onPress={() => router.push(`/user/${flag.userId}`)} style={styles.secondaryButton}>
+                          <Text style={styles.secondaryButtonText}>Open profile</Text>
+                        </Pressable>
+                      ) : null}
+                      <Pressable onPress={() => setSelectedFlag(null)} style={styles.secondaryButton}>
+                        <Text style={styles.secondaryButtonText}>Close inspect</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : null}
               </View>
             ))}
             <View style={styles.paginationRow}>
@@ -1234,6 +1332,20 @@ export default function AdminScreen() {
                       {workingKey === `content:${selectedFlag.id}:clean` ? "Saving..." : "Restore content"}
                     </Text>
                   </Pressable>
+                  <Pressable onPress={() => handleDeleteFlaggedContent(selectedFlag)} style={[styles.secondaryButton, styles.banButton]}>
+                    <Text style={styles.primaryButtonText}>
+                      {workingKey === `content:${selectedFlag.id}:delete` ? "Removing..." : "Remove content"}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
+              {isAdminRole(currentProfile?.accountRole) && selectedFlag.userId ? (
+                <View style={styles.inlineRow}>
+                  <Pressable onPress={() => handleFlagAuthorBanToggle(selectedFlag, true)} style={[styles.secondaryButton, styles.banButton]}>
+                    <Text style={styles.primaryButtonText}>
+                      {workingKey === `flag-ban:${selectedFlag.id}` ? "Saving..." : "Ban user"}
+                    </Text>
+                  </Pressable>
                 </View>
               ) : null}
               <View style={styles.inlineRow}>
@@ -1467,6 +1579,13 @@ const styles = StyleSheet.create({
   },
   flagPreviewTile: {
     width: "48%",
+  },
+  inlineInspect: {
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+    paddingTop: theme.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
   },
   inlineRow: {
     flexDirection: "row",

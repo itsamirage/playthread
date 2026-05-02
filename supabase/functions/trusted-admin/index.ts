@@ -17,6 +17,7 @@ import {
   sanitizeGameIds,
 } from "../../../lib/adminModerationLogic.js";
 import {
+  processContentRemoval,
   processContentVisibilityUpdate,
   processRetentionPrune,
 } from "../../../lib/trustedAdminService.js";
@@ -29,6 +30,10 @@ type RequestBody =
       action?: "set_flag_status";
       flagId?: string;
       status?: "open" | "reviewed" | "dismissed" | "actioned";
+    }
+  | {
+      action?: "delete_flagged_content";
+      flagId?: string;
     }
   | {
       action?: "update_member_role";
@@ -348,6 +353,48 @@ Deno.serve(async (request) => {
       return jsonResponse({
         success: true,
         visibility: result.visibility,
+        flagStatus: result.flagStatus,
+      });
+    }
+
+    if (action === "delete_flagged_content") {
+      assertStaff(actorProfile);
+
+      const flagId = String(body.flagId ?? "").trim();
+      if (!flagId) {
+        throw new Error("A valid flag id is required.");
+      }
+
+      const { data: flagRow, error: flagError } = await adminClient
+        .from("moderation_flags")
+        .select("id, user_id, status, category, origin, content_type, content_id, igdb_game_id")
+        .eq("id", flagId)
+        .maybeSingle();
+
+      if (flagError) {
+        throw new Error(flagError.message);
+      }
+
+      if (!flagRow) {
+        throw new Error("That flag no longer exists.");
+      }
+
+      if (!flagRow.content_id) {
+        throw new Error("That flagged item no longer has a target record.");
+      }
+
+      assertCanModerateGameScope(actorProfile, flagRow.igdb_game_id ?? null);
+
+      const result = await processContentRemoval({
+        adminClient,
+        actorUserId: user.id,
+        flagId,
+        flagRow,
+      });
+
+      return jsonResponse({
+        success: true,
+        deleted: result.deleted,
         flagStatus: result.flagStatus,
       });
     }
