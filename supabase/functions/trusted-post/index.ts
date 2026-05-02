@@ -37,6 +37,7 @@ const DEFAULT_POSTS_PER_DAY = 20;
 const DEFAULT_POSTS_PER_30_DAYS = 100;
 const DEFAULT_MEDIA_POSTS_PER_DAY = 10;
 const DEFAULT_MEDIA_POSTS_PER_30_DAYS = 40;
+const YOUTUBE_VIDEO_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
 
 type RequestBody = {
   action?: "create" | "update" | "delete";
@@ -70,6 +71,11 @@ type RequestBody = {
   }> | null;
   videoUploadId?: string | null;
   videoUploadToken?: string | null;
+  externalVideoProvider?: string | null;
+  externalVideoId?: string | null;
+  externalVideoUrl?: string | null;
+  externalVideoTitle?: string | null;
+  externalVideoThumbnailUrl?: string | null;
   rating?: number | null;
   spoiler?: boolean;
   spoilerTag?: string | null;
@@ -197,6 +203,43 @@ function normalizeImageCaptions(value: RequestBody["imageCaptions"], imageCount:
     .map((item) => String(item ?? "").trim().slice(0, 160));
 }
 
+function normalizeYouTubeVideoId(value: unknown) {
+  const videoId = String(value ?? "").trim();
+  return YOUTUBE_VIDEO_ID_PATTERN.test(videoId) ? videoId : null;
+}
+
+function buildYouTubeWatchUrl(videoId: string) {
+  return `https://www.youtube.com/watch?v=${videoId}`;
+}
+
+function normalizeExternalVideo(body: RequestBody) {
+  const provider = String(body.externalVideoProvider ?? "").trim().toLowerCase();
+  const rawVideoId = String(body.externalVideoId ?? "").trim();
+  const rawUrl = String(body.externalVideoUrl ?? "").trim();
+
+  if (!provider && !rawVideoId && !rawUrl) {
+    return null;
+  }
+
+  if (provider !== "youtube") {
+    throw new Error("Unsupported external video provider.");
+  }
+
+  const videoId = normalizeYouTubeVideoId(rawVideoId);
+
+  if (!videoId) {
+    throw new Error("A valid YouTube video id is required.");
+  }
+
+  return {
+    provider: "youtube",
+    videoId,
+    url: rawUrl || buildYouTubeWatchUrl(videoId),
+    title: String(body.externalVideoTitle ?? "").trim().slice(0, 160) || null,
+    thumbnailUrl: String(body.externalVideoThumbnailUrl ?? "").trim() || null,
+  };
+}
+
 function readNumberEnv(name: string, fallback: number, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
   const rawValue = Deno.env.get(name);
   const parsedValue = Number(rawValue ?? fallback);
@@ -304,13 +347,13 @@ async function enforcePostCreateLimits({
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
       .gte("created_at", dayStart)
-      .or("image_url.not.is.null,video_upload_id.not.is.null"),
+      .or("image_url.not.is.null,video_upload_id.not.is.null,external_video_provider.not.is.null"),
     adminClient
       .from("posts")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
       .gte("created_at", monthStart)
-      .or("image_url.not.is.null,video_upload_id.not.is.null"),
+      .or("image_url.not.is.null,video_upload_id.not.is.null,external_video_provider.not.is.null"),
   ]);
 
   if (mediaDailyResult.error) {
@@ -494,6 +537,7 @@ Deno.serve(async (request) => {
     const imageCaptions = normalizeImageCaptions(body.imageCaptions, imageUrls.length);
     const videoUploadId = String(body.videoUploadId ?? "").trim() || null;
     const videoUploadToken = String(body.videoUploadToken ?? "").trim() || null;
+    const externalVideo = normalizeExternalVideo(body);
     const gameId = Number(body.gameId);
     const gameTitle = String(body.gameTitle ?? "").trim();
 
@@ -519,11 +563,15 @@ Deno.serve(async (request) => {
       throw new Error("Clip posts require an uploaded video.");
     }
 
+    if (postType === "clip" && externalVideo) {
+      throw new Error("Clip posts cannot attach an external video.");
+    }
+
     await enforcePostCreateLimits({
       adminClient,
       profile,
       userId: user.id,
-      hasMedia: imageUrls.length > 0 || postType === "clip",
+      hasMedia: imageUrls.length > 0 || postType === "clip" || Boolean(externalVideo),
     });
 
     const reactionMode = REACTION_MODE_BY_POST_TYPE[postType] ?? "sentiment";
@@ -557,6 +605,11 @@ Deno.serve(async (request) => {
         video_upload_id: postType === "clip" ? videoUploadId : null,
         video_upload_token: postType === "clip" ? videoUploadToken : null,
         video_status: postType === "clip" ? "uploading" : "none",
+        external_video_provider: externalVideo?.provider ?? null,
+        external_video_id: externalVideo?.videoId ?? null,
+        external_video_url: externalVideo?.url ?? null,
+        external_video_title: externalVideo?.title ?? null,
+        external_video_thumbnail_url: externalVideo?.thumbnailUrl ?? null,
         spoiler: Boolean(body.spoiler),
         spoiler_tag: body.spoiler ? String(body.spoilerTag ?? "").trim() || null : null,
         is_nsfw: Boolean(body.isNsfw),
@@ -608,6 +661,8 @@ Deno.serve(async (request) => {
           media_kind:
             postType === "clip"
               ? "clip"
+              : externalVideo
+                ? "external_video"
                 : imageUrls[0] ?? fallbackImageUrl
                 ? "image"
                 : "text",
@@ -616,6 +671,7 @@ Deno.serve(async (request) => {
           image_metadata: body.imageMetadataList ?? imageMetadata,
           video_upload_id: videoUploadId,
           video_status: postType === "clip" ? "uploading" : "none",
+          external_video: externalVideo,
         },
       });
 
@@ -680,10 +736,13 @@ Deno.serve(async (request) => {
           media_kind:
             postType === "clip"
               ? "clip"
+              : externalVideo
+                ? "external_video"
                 : imageUrls[0] ?? fallbackImageUrl
                 ? "image"
                 : "text",
           video_upload_id: videoUploadId,
+          external_video: externalVideo,
           image_metadata: body.imageMetadataList ?? imageMetadata,
         },
       });

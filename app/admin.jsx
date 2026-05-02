@@ -17,6 +17,8 @@ import SectionCard from "../components/SectionCard";
 import {
   adjustCoins,
   deleteFlaggedContent,
+  disableGameYouTubeSource,
+  ensureYouTubeBot,
   formatAccountAge,
   formatCoinCount,
   getAvailableCoins,
@@ -24,13 +26,17 @@ import {
   isAdminRole,
   isStaffRole,
   pruneIntegrityData,
+  resolveYouTubeChannel,
+  runYouTubeImportNow,
   setContentVisibility,
   setBanState,
   setFlagStatus,
   updateIntegritySettings,
   updateDeveloperGames,
+  upsertGameYouTubeSource,
   updateMemberRole,
   useAdminProfiles,
+  useGameYouTubeSources,
   useIntegrityEvents,
   useIntegrityReport,
   useIntegritySettings,
@@ -73,6 +79,8 @@ export default function AdminScreen() {
     useIntegrityReport(currentProfile, 14);
   const { actions: moderationActions, isLoading: moderationActionsLoading, reload: reloadModerationActions } =
     useModerationActions(currentProfile);
+  const { sources: gameYouTubeSources, isLoading: gameYouTubeSourcesLoading, reload: reloadGameYouTubeSources } =
+    useGameYouTubeSources(currentProfile);
   const [bannedReason, setBannedReason] = useState("");
   const [coinAdjustment, setCoinAdjustment] = useState("");
   const [coinReason, setCoinReason] = useState("");
@@ -97,6 +105,15 @@ export default function AdminScreen() {
     integrityRetentionDays: "90",
     moderationActionRetentionDays: "365",
   });
+  const [youtubeSourceDraft, setYoutubeSourceDraft] = useState({
+    gameId: "",
+    gameTitle: "",
+    gameCoverUrl: "",
+    channelUrl: "",
+    channelId: "",
+    channelTitle: "",
+  });
+  const [youtubeGameSearchQuery, setYoutubeGameSearchQuery] = useState("");
 
   const manageableProfiles = useMemo(
     () => profiles.filter((profile) => profile.id !== currentProfile?.id),
@@ -147,6 +164,10 @@ export default function AdminScreen() {
     query: activeDeveloperMemberId ? developerSearchQuery : "",
     selectedGenre: "All",
   });
+  const { games: youtubeSearchGames, isLoading: youtubeSearchLoading } = useBrowseGames({
+    query: youtubeGameSearchQuery,
+    selectedGenre: "All",
+  });
 
   const appendDeveloperGameId = (memberId, game) => {
     if (!game?.id) {
@@ -173,6 +194,20 @@ export default function AdminScreen() {
         [memberId]: currentIds.filter((value) => value !== Number(gameId)).join(","),
       };
     });
+  };
+
+  const selectYouTubeSourceGame = (game) => {
+    if (!game?.id) {
+      return;
+    }
+
+    setYoutubeSourceDraft((current) => ({
+      ...current,
+      gameId: String(game.id),
+      gameTitle: game.title ?? "",
+      gameCoverUrl: game.coverUrl ?? "",
+    }));
+    setYoutubeGameSearchQuery(game.title ?? "");
   };
 
   useEffect(() => {
@@ -259,6 +294,93 @@ export default function AdminScreen() {
       await reloadModerationActions();
     } catch (error) {
       Alert.alert("Developer assignment failed", error instanceof Error ? error.message : "Could not save developer game assignments.");
+    } finally {
+      setWorkingKey(null);
+    }
+  };
+
+  const handleSaveGameYouTubeSource = async () => {
+    try {
+      setWorkingKey("youtube-source:save");
+      await upsertGameYouTubeSource({
+        gameId: Number(youtubeSourceDraft.gameId),
+        gameTitle: youtubeSourceDraft.gameTitle,
+        gameCoverUrl: youtubeSourceDraft.gameCoverUrl || null,
+        channelUrl: youtubeSourceDraft.channelUrl,
+        channelId: youtubeSourceDraft.channelId,
+        channelTitle: youtubeSourceDraft.channelTitle || null,
+      });
+      await reloadGameYouTubeSources();
+      await reloadModerationActions();
+      Alert.alert("YouTube source saved", "Official channel source is ready for automated imports.");
+    } catch (error) {
+      Alert.alert("YouTube source failed", error instanceof Error ? error.message : "Could not save that YouTube source.");
+    } finally {
+      setWorkingKey(null);
+    }
+  };
+
+  const handleResolveYouTubeChannel = async () => {
+    try {
+      setWorkingKey("youtube-source:resolve");
+      const channel = await resolveYouTubeChannel({
+        channelUrl: youtubeSourceDraft.channelUrl,
+      });
+
+      if (!channel?.channelId) {
+        throw new Error("Could not resolve that channel.");
+      }
+
+      setYoutubeSourceDraft((current) => ({
+        ...current,
+        channelUrl: channel.channelUrl ?? current.channelUrl,
+        channelId: channel.channelId,
+        channelTitle: channel.channelTitle ?? current.channelTitle,
+      }));
+    } catch (error) {
+      Alert.alert("Channel resolution failed", error instanceof Error ? error.message : "Could not resolve that YouTube channel.");
+    } finally {
+      setWorkingKey(null);
+    }
+  };
+
+  const handleEnsureYouTubeBot = async () => {
+    try {
+      setWorkingKey("youtube-bot:ensure");
+      await ensureYouTubeBot();
+      await reloadProfiles();
+      Alert.alert("YouTube Bot ready", "Automated imports can now publish under @youtube_bot.");
+    } catch (error) {
+      Alert.alert("YouTube Bot failed", error instanceof Error ? error.message : "Could not create the YouTube Bot profile.");
+    } finally {
+      setWorkingKey(null);
+    }
+  };
+
+  const handleRunYouTubeImportNow = async () => {
+    try {
+      setWorkingKey("youtube-import:run");
+      const result = await runYouTubeImportNow();
+      await reloadGameYouTubeSources();
+      Alert.alert(
+        "YouTube import complete",
+        `${result?.imported?.length ?? 0} imported, ${result?.skipped?.length ?? 0} skipped, ${result?.failed?.length ?? 0} failed.`
+      );
+    } catch (error) {
+      Alert.alert("YouTube import failed", error instanceof Error ? error.message : "Could not run the YouTube importer.");
+    } finally {
+      setWorkingKey(null);
+    }
+  };
+
+  const handleDisableGameYouTubeSource = async (source) => {
+    try {
+      setWorkingKey(`youtube-source:disable:${source.id}`);
+      await disableGameYouTubeSource({ sourceId: source.id });
+      await reloadGameYouTubeSources();
+      await reloadModerationActions();
+    } catch (error) {
+      Alert.alert("YouTube source failed", error instanceof Error ? error.message : "Could not disable that YouTube source.");
     } finally {
       setWorkingKey(null);
     }
@@ -1070,6 +1192,154 @@ export default function AdminScreen() {
       ) : null}
 
       {isAdminRole(currentProfile?.accountRole) ? (
+        <SectionCard title="Official YouTube sources" eyebrow="Game pages">
+          <Text style={styles.helperText}>
+            Add one official YouTube channel per game. Use Resolve channel ID after pasting a channel URL or handle page.
+          </Text>
+          <Pressable
+            disabled={workingKey === "youtube-bot:ensure"}
+            onPress={handleEnsureYouTubeBot}
+            style={[styles.secondaryButton, workingKey === "youtube-bot:ensure" ? styles.buttonDisabled : null]}
+          >
+            <Text style={styles.secondaryButtonText}>
+              {workingKey === "youtube-bot:ensure" ? "Preparing bot..." : "Ensure YouTube Bot"}
+            </Text>
+          </Pressable>
+          <Pressable
+            disabled={workingKey === "youtube-import:run"}
+            onPress={handleRunYouTubeImportNow}
+            style={[styles.secondaryButton, workingKey === "youtube-import:run" ? styles.buttonDisabled : null]}
+          >
+            <Text style={styles.secondaryButtonText}>
+              {workingKey === "youtube-import:run" ? "Importing..." : "Run import now"}
+            </Text>
+          </Pressable>
+          <TextInput
+            onChangeText={setYoutubeGameSearchQuery}
+            placeholder="Search game for YouTube source"
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.textInput}
+            value={youtubeGameSearchQuery}
+          />
+          {youtubeGameSearchQuery.trim().length >= 2 ? (
+            <View style={styles.searchResultList}>
+              {youtubeSearchLoading ? (
+                <Text style={styles.helperText}>Searching games...</Text>
+              ) : youtubeSearchGames.slice(0, 6).map((game) => (
+                <Pressable
+                  key={`youtube-game:${game.id}`}
+                  onPress={() => selectYouTubeSourceGame(game)}
+                  style={styles.searchResultCard}
+                >
+                  {game.coverUrl ? <Image source={{ uri: game.coverUrl }} style={styles.searchResultCover} /> : null}
+                  <View style={styles.searchResultText}>
+                    <Text style={styles.cardTitle}>{game.title}</Text>
+                    <Text style={styles.cardMeta}>IGDB {game.id}</Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+          <TextInput
+            editable={false}
+            placeholder="Selected game ID"
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.textInput}
+            value={youtubeSourceDraft.gameId}
+          />
+          <TextInput
+            onChangeText={(value) => setYoutubeSourceDraft((current) => ({ ...current, gameTitle: value }))}
+            placeholder="Game title"
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.textInput}
+            value={youtubeSourceDraft.gameTitle}
+          />
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            onChangeText={(value) => setYoutubeSourceDraft((current) => ({ ...current, channelUrl: value }))}
+            placeholder="Channel URL, e.g. https://www.youtube.com/@Halo/videos"
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.textInput}
+            value={youtubeSourceDraft.channelUrl}
+          />
+          <Pressable
+            disabled={workingKey === "youtube-source:resolve" || !youtubeSourceDraft.channelUrl.trim()}
+            onPress={handleResolveYouTubeChannel}
+            style={[
+              styles.secondaryButton,
+              workingKey === "youtube-source:resolve" || !youtubeSourceDraft.channelUrl.trim() ? styles.buttonDisabled : null,
+            ]}
+          >
+            <Text style={styles.secondaryButtonText}>
+              {workingKey === "youtube-source:resolve" ? "Resolving..." : "Resolve channel ID"}
+            </Text>
+          </Pressable>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={(value) => setYoutubeSourceDraft((current) => ({ ...current, channelId: value }))}
+            placeholder="Canonical channel ID, e.g. UC..."
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.textInput}
+            value={youtubeSourceDraft.channelId}
+          />
+          <TextInput
+            onChangeText={(value) => setYoutubeSourceDraft((current) => ({ ...current, channelTitle: value }))}
+            placeholder="Optional channel title"
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.textInput}
+            value={youtubeSourceDraft.channelTitle}
+          />
+          <Pressable
+            disabled={workingKey === "youtube-source:save"}
+            onPress={handleSaveGameYouTubeSource}
+            style={[styles.primaryButton, workingKey === "youtube-source:save" ? styles.buttonDisabled : null]}
+          >
+            <Text style={styles.primaryButtonText}>
+              {workingKey === "youtube-source:save" ? "Saving..." : "Save YouTube source"}
+            </Text>
+          </Pressable>
+
+          {gameYouTubeSourcesLoading ? (
+            <View style={styles.loadingState}>
+              <ActivityIndicator color={theme.colors.accent} />
+              <Text style={styles.helperText}>Loading YouTube sources...</Text>
+            </View>
+          ) : gameYouTubeSources.length > 0 ? (
+            <View style={styles.cardList}>
+              {gameYouTubeSources.map((source) => (
+                <View key={source.id} style={styles.card}>
+                  <Text style={styles.cardTitle}>{source.gameTitle}</Text>
+                  <Text style={styles.cardMeta}>
+                    {source.enabled ? "Enabled" : "Disabled"} / {source.channelTitle || source.channelId}
+                  </Text>
+                  <Text style={styles.excerptText}>{source.channelUrl}</Text>
+                  <Text style={styles.cardMeta}>
+                    Started {new Date(source.autopostStartedAt).toLocaleString()}
+                    {source.lastCheckedAt ? ` / checked ${new Date(source.lastCheckedAt).toLocaleString()}` : ""}
+                  </Text>
+                  {source.enabled ? (
+                    <Pressable
+                      onPress={() => handleDisableGameYouTubeSource(source)}
+                      style={[styles.secondaryButton, styles.banButton]}
+                    >
+                      <Text style={styles.primaryButtonText}>
+                        {workingKey === `youtube-source:disable:${source.id}` ? "Disabling..." : "Disable source"}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.bodyText}>No official YouTube sources configured yet.</Text>
+          )}
+        </SectionCard>
+      ) : null}
+
+      {isAdminRole(currentProfile?.accountRole) ? (
         <SectionCard title="Member controls" eyebrow="Ban, promote, coins">
           <TextInput
             onChangeText={setBannedReason}
@@ -1580,6 +1850,29 @@ const styles = StyleSheet.create({
   flagPreviewTile: {
     width: "48%",
   },
+  searchResultList: {
+    gap: theme.spacing.sm,
+  },
+  searchResultCard: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    flexDirection: "row",
+    gap: theme.spacing.md,
+    padding: theme.spacing.sm,
+  },
+  searchResultCover: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: theme.radius.sm,
+    height: 64,
+    width: 48,
+  },
+  searchResultText: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
   inlineInspect: {
     gap: theme.spacing.sm,
     marginTop: theme.spacing.md,
@@ -1651,5 +1944,8 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     opacity: 0.92,
+  },
+  buttonDisabled: {
+    opacity: 0.55,
   },
 });

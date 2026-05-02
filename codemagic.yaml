@@ -74,6 +74,7 @@ workflows:
           npx --yes supabase functions deploy steam-account
           npx --yes supabase functions deploy mux-video
           npx --yes supabase functions deploy mux-webhook
+          npx --yes supabase functions deploy youtube-import
 
   ios-testflight:
     name: iOS → TestFlight

@@ -17,6 +17,7 @@ import {
 } from "react-native";
 
 import ClipPlayer from "./ClipPlayer";
+import YouTubePlayer from "./YouTubePlayer";
 import { formatModerationWarning } from "../lib/moderation";
 import { getProfileNameColor } from "../lib/profileAppearance";
 import { reportContent } from "../lib/reports";
@@ -310,6 +311,14 @@ export default function PostCard({
                   ) : null,
                 )}
               </View>
+            ) : null}
+
+            {post.externalVideoProvider === "youtube" && post.externalVideoId ? (
+              <YouTubePlayer
+                title={post.externalVideoTitle || post.title}
+                videoId={post.externalVideoId}
+                watchUrl={post.externalVideoUrl}
+              />
             ) : null}
 
             {post.type === "clip" ? (

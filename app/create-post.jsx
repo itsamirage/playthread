@@ -29,6 +29,7 @@ import { clearPostComposerDraft, loadPostComposerDraft, savePostComposerDraft } 
 import { createPost, updatePost, useEditablePost } from "../lib/posts";
 import { useRecentGames } from "../lib/recentGames";
 import { theme } from "../lib/theme";
+import { findYouTubeVideoInText, parseYouTubeVideoUrl } from "../lib/youtube";
 
 const postTypes = ["discussion", "review", "guide", "tip", "screenshot", "clip"];
 const ratingOptions = [
@@ -100,6 +101,7 @@ export default function CreatePostScreen() {
   const [selectedImages, setSelectedImages] = useState([]);
   const [imageCaptions, setImageCaptions] = useState([]);
   const [selectedClip, setSelectedClip] = useState(null);
+  const [youtubeUrl, setYoutubeUrl] = useState("");
   const [gameSearch, setGameSearch] = useState("");
   const [showAlternateGamePicker, setShowAlternateGamePicker] = useState(!launchedFromGamePage);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -170,6 +172,7 @@ export default function CreatePostScreen() {
         setSpoilerTag(draft.spoilerTag ?? "");
         setIsNsfw(Boolean(draft.isNsfw));
         setGameSearch(draft.gameSearch ?? "");
+        setYoutubeUrl(draft.youtubeUrl ?? "");
         setDraftRecoveredAt(draft.updatedAt ?? null);
         setDraftMediaSummary(draft.hadMedia ? draft.mediaSummary || "Media from the previous draft must be reselected." : "");
       }
@@ -200,9 +203,12 @@ export default function CreatePostScreen() {
         spoilerTag,
         isNsfw,
         gameSearch,
-        hadMedia: selectedImages.length > 0 || Boolean(selectedClip),
+        youtubeUrl,
+        hadMedia: selectedImages.length > 0 || Boolean(selectedClip) || Boolean(youtubeUrl.trim()),
         mediaSummary: selectedClip
           ? "Clip from the previous draft must be reselected."
+          : youtubeUrl.trim()
+            ? "YouTube link restored from the previous draft."
           : selectedImages.length > 0
             ? `${selectedImages.length} ${selectedImages.length === 1 ? "image" : "images"} from the previous draft must be reselected.`
             : "",
@@ -212,7 +218,7 @@ export default function CreatePostScreen() {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [body, draftContextKey, gameSearch, hasRestoredDraft, isEditing, isNsfw, isSpoiler, postType, rating, selectedClip, selectedGameId, selectedImages.length, spoilerTag, title]);
+  }, [body, draftContextKey, gameSearch, hasRestoredDraft, isEditing, isNsfw, isSpoiler, postType, rating, selectedClip, selectedGameId, selectedImages.length, spoilerTag, title, youtubeUrl]);
 
   useEffect(() => {
     const handleShow = (event) => {
@@ -322,6 +328,16 @@ export default function CreatePostScreen() {
   const searchHelperText = gameSearch.trim()
     ? "Pick a game from the results below."
     : "Search for a game to attach this post to. Your last 3 visited games appear below.";
+  const explicitYouTubeVideo = useMemo(
+    () => (youtubeUrl.trim() ? parseYouTubeVideoUrl(youtubeUrl) : null),
+    [youtubeUrl],
+  );
+  const detectedYouTubeVideo = useMemo(
+    () => (!youtubeUrl.trim() ? findYouTubeVideoInText(body) : null),
+    [body, youtubeUrl],
+  );
+  const youtubeVideo = explicitYouTubeVideo ?? detectedYouTubeVideo;
+  const hasInvalidYouTubeUrl = Boolean(youtubeUrl.trim() && !explicitYouTubeVideo);
   const validationNotes = useMemo(() => {
     const notes = [];
 
@@ -341,6 +357,14 @@ export default function CreatePostScreen() {
       notes.push("Add a clip before publishing a clip post.");
     }
 
+    if (postType === "clip" && youtubeVideo) {
+      notes.push("YouTube links attach to regular posts, not uploaded clip posts.");
+    }
+
+    if (hasInvalidYouTubeUrl) {
+      notes.push("Use a valid YouTube video link, not a channel or playlist link.");
+    }
+
     if (postType === "screenshot" && selectedImages.length === 0) {
       notes.push("Add images if you want this to publish as a screenshot post.");
     }
@@ -350,7 +374,7 @@ export default function CreatePostScreen() {
     }
 
     return notes;
-  }, [body, isEditing, isSpoiler, postType, rating, selectedClip, selectedGame, selectedImages.length, spoilerTag]);
+  }, [body, hasInvalidYouTubeUrl, isEditing, isSpoiler, postType, rating, selectedClip, selectedGame, selectedImages.length, spoilerTag, youtubeVideo]);
 
   const handleSubmit = async () => {
     Keyboard.dismiss();
@@ -372,6 +396,16 @@ export default function CreatePostScreen() {
 
     if (postType === "clip" && !selectedClip && !isEditing) {
       Alert.alert("Add a clip", "Choose a clip before publishing a clip post.");
+      return;
+    }
+
+    if (hasInvalidYouTubeUrl) {
+      Alert.alert("Check YouTube link", "Use a valid YouTube video link, not a channel or playlist link.");
+      return;
+    }
+
+    if (postType === "clip" && youtubeVideo) {
+      Alert.alert("Choose one video type", "YouTube links attach to regular posts. Clip posts are for uploaded videos.");
       return;
     }
 
@@ -408,6 +442,13 @@ export default function CreatePostScreen() {
             imageAssets: selectedImages,
             imageCaptions,
             clipAsset: selectedClip,
+            externalVideo: youtubeVideo
+              ? {
+                  provider: youtubeVideo.provider,
+                  videoId: youtubeVideo.videoId,
+                  url: youtubeVideo.watchUrl,
+                }
+              : null,
             onProgress: setSubmitProgress,
           });
 
@@ -457,6 +498,7 @@ export default function CreatePostScreen() {
         setSelectedClip(asset);
         setSelectedImages([]);
         setImageCaptions([]);
+        setYoutubeUrl("");
       }
     } catch (error) {
       Alert.alert(
@@ -681,6 +723,7 @@ export default function CreatePostScreen() {
                     setSelectedImages([]);
                     setImageCaptions([]);
                     setSelectedClip(null);
+                    setYoutubeUrl("");
                     setGameSearch("");
                     setDraftRecoveredAt(null);
                     setDraftMediaSummary("");
@@ -794,6 +837,43 @@ export default function CreatePostScreen() {
                 ))}
               </View>
             ) : null}
+          </SectionCard>
+
+          <SectionCard title="YouTube" eyebrow="Optional video">
+            <Text style={styles.helperText}>
+              Paste a YouTube video link here, or include one in the body text and PlayThread will attach the first playable video it finds.
+            </Text>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              onChangeText={(value) => {
+                setYoutubeUrl(value);
+                if (value.trim()) {
+                  setSelectedClip(null);
+                }
+              }}
+              onFocus={scrollToComposer}
+              placeholder="https://www.youtube.com/watch?v=..."
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.input}
+              value={youtubeUrl}
+            />
+            {hasInvalidYouTubeUrl ? (
+              <Text style={styles.validationNote}>
+                That does not look like a playable YouTube video link.
+              </Text>
+            ) : youtubeVideo ? (
+              <View style={styles.clipPreviewCard}>
+                <Text style={styles.clipPreviewTitle}>YouTube video attached</Text>
+                <Text style={styles.helperText}>
+                  Video ID: {youtubeVideo.videoId}
+                  {detectedYouTubeVideo && !explicitYouTubeVideo ? " detected from the post body." : ""}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.helperText}>No YouTube video attached.</Text>
+            )}
           </SectionCard>
 
           <SectionCard title={postType === "clip" ? "Clip" : "Image"} eyebrow="Optional media">
