@@ -38,6 +38,11 @@ Current live state:
 - IGDB live browse/search is fixed again
 - Browse typo tolerance is improved for game search
 - Expo web export passed after the latest local changes
+- Latest pushed commit: `6572136 Add comment links and sharing`
+- Supabase migration `202605022030_add_comment_links.sql` is live
+- `trusted-comment` was deployed after the comment-link changes
+- Web offline banner fix is pushed: browser builds now use `navigator.onLine` / online-offline events instead of the Google `generate_204` probe
+- Cloudflare Pages should rebuild from `main`; if `playthread.app` still shows stale UI, hard-refresh or check the Pages deployment
 - `@player1` is `owner` with `integrity_exempt = true`
 - EAS Update / OTA hotfix support is configured in-repo:
   - `expo-updates` installed
@@ -78,6 +83,16 @@ What is now live beyond the old handoff:
 - Profile title system is implemented:
   - selectable title on profile
   - title renders on profile, posts, and comments
+- YouTube video posts/imports are implemented:
+  - user-posted YouTube links render in-app through `YouTubePlayer`
+  - official admin YouTube sources can be attached to game pages
+  - `youtube-import` can create new YouTube Bot discussion posts for newly published channel videos
+  - YouTube embed referrer fix is pushed in `69626e5 Fix YouTube embed referrer`
+- Comment link/share feature is implemented:
+  - comments support one structured PlayThread link with custom display text
+  - accepted URLs are only `https://playthread.app/post/{postId}` and `https://playthread.app/post/{postId}?comment={commentId}`
+  - long-press on rendered comment links reveals the true URL
+  - posts and comments have Share actions that generate internal PlayThread URLs
   - title catalog is easy to extend in `lib/titles.js`
 - Saved-post collections and filters are implemented on profile:
   - collection chips: General, Guides, Images, Reviews, Discussions
