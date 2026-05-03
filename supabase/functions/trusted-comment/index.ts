@@ -21,6 +21,8 @@ type RequestBody = {
   commentId?: string;
   body?: string;
   imageUrl?: string | null;
+  linkUrl?: string | null;
+  linkLabel?: string | null;
 };
 
 const DEFAULT_COMMENT_CREATE_COOLDOWN_SECONDS = 8;
@@ -28,6 +30,8 @@ const DEFAULT_COMMENTS_PER_DAY = 120;
 const DEFAULT_COMMENTS_PER_30_DAYS = 1500;
 const DEFAULT_MEDIA_COMMENTS_PER_DAY = 20;
 const DEFAULT_MEDIA_COMMENTS_PER_30_DAYS = 150;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PLAYTHREAD_HOSTS = new Set(["playthread.app", "www.playthread.app"]);
 
 function readNumberEnv(name: string, fallback: number, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
   const rawValue = Deno.env.get(name);
@@ -42,6 +46,114 @@ function readNumberEnv(name: string, fallback: number, { min = 0, max = Number.M
 
 function isStaffRole(accountRole: string | null) {
   return ["moderator", "admin", "owner"].includes(accountRole ?? "");
+}
+
+function parseLinkUrl(value: string) {
+  if (!value) {
+    return null;
+  }
+
+  const url = value.startsWith("/")
+    ? new URL(value, "https://playthread.app")
+    : new URL(value);
+
+  if (url.protocol !== "https:" || !PLAYTHREAD_HOSTS.has(url.hostname.toLowerCase())) {
+    throw new Error("Only PlayThread post and comment links can be shared in comments.");
+  }
+
+  const segments = url.pathname.split("/").map((segment) => segment.trim()).filter(Boolean);
+
+  if (segments[0] !== "post" || !UUID_PATTERN.test(segments[1] ?? "") || segments.length !== 2) {
+    throw new Error("Only PlayThread post and comment links can be shared in comments.");
+  }
+
+  const commentId = url.searchParams.get("comment");
+  if (commentId && !UUID_PATTERN.test(commentId)) {
+    throw new Error("That comment link is not valid.");
+  }
+
+  const normalizedUrl = new URL(`https://playthread.app/post/${segments[1]}`);
+  if (commentId) {
+    normalizedUrl.searchParams.set("comment", commentId);
+  }
+
+  return {
+    url: normalizedUrl.toString(),
+    postId: segments[1],
+    commentId: commentId || null,
+  };
+}
+
+function normalizeCommentLink(body: RequestBody) {
+  const rawUrl = String(body.linkUrl ?? "").trim();
+  const label = String(body.linkLabel ?? "").replace(/\s+/g, " ").trim();
+
+  if (!rawUrl && !label) {
+    return { linkUrl: null, linkLabel: null, linkPostId: null, linkCommentId: null };
+  }
+
+  if (!rawUrl || !label) {
+    throw new Error("Add both link text and a PlayThread post or comment URL.");
+  }
+
+  if (rawUrl.length > 500) {
+    throw new Error("Links must be 500 characters or fewer.");
+  }
+
+  if (label.length > 80) {
+    throw new Error("Link text must be 80 characters or fewer.");
+  }
+
+  const parsedLink = parseLinkUrl(rawUrl);
+
+  return {
+    linkUrl: parsedLink?.url ?? null,
+    linkLabel: label,
+    linkPostId: parsedLink?.postId ?? null,
+    linkCommentId: parsedLink?.commentId ?? null,
+  };
+}
+
+async function assertCommentLinkTargetExists(
+  adminClient: ReturnType<typeof getAdminClient>,
+  link: ReturnType<typeof normalizeCommentLink>,
+) {
+  if (!link.linkPostId) {
+    return;
+  }
+
+  const { data: postRow, error: postError } = await adminClient
+    .from("posts")
+    .select("id")
+    .eq("id", link.linkPostId)
+    .maybeSingle();
+
+  if (postError) {
+    throw new Error(postError.message);
+  }
+
+  if (!postRow) {
+    throw new Error("That PlayThread post link no longer exists.");
+  }
+
+  if (!link.linkCommentId) {
+    return;
+  }
+
+  const { data: commentRow, error: commentError } = await adminClient
+    .from("post_comments")
+    .select("id")
+    .eq("id", link.linkCommentId)
+    .eq("post_id", link.linkPostId)
+    .maybeSingle();
+
+  if (commentError) {
+    throw new Error(commentError.message);
+  }
+
+  if (!commentRow) {
+    throw new Error("That PlayThread comment link no longer exists.");
+  }
 }
 
 async function getCustomCommunityForGameId(adminClient: ReturnType<typeof getAdminClient>, gameId: number | null) {
@@ -305,6 +417,7 @@ Deno.serve(async (request) => {
     if (action === "update") {
       const commentId = String(body.commentId ?? "").trim();
       const textBody = String(body.body ?? "").trim();
+      const commentLink = normalizeCommentLink(body);
 
       if (!commentId) {
         throw new Error("Comment id is required.");
@@ -332,11 +445,17 @@ Deno.serve(async (request) => {
         throw new Error("You cannot edit that comment.");
       }
 
-      const moderation = evaluateModerationText(textBody);
+      await assertCommentLinkTargetExists(adminClient, commentLink);
+
+      const moderation = evaluateModerationText(
+        [textBody, commentLink.linkLabel, commentLink.linkUrl].filter(Boolean).join(" "),
+      );
       const { error: updateError } = await adminClient
         .from("post_comments")
         .update({
           body: textBody,
+          link_url: commentLink.linkUrl,
+          link_label: commentLink.linkLabel,
           moderation_state: moderation.moderationState,
           moderation_labels: moderation.labels,
         })
@@ -355,6 +474,7 @@ Deno.serve(async (request) => {
 
     const postId = String(body.postId ?? "").trim();
     const textBody = String(body.body ?? "").trim();
+    const commentLink = normalizeCommentLink(body);
 
     if (!postId) {
       throw new Error("Post id is required.");
@@ -377,6 +497,8 @@ Deno.serve(async (request) => {
     if (!postRow) {
       throw new Error("That post no longer exists.");
     }
+
+    await assertCommentLinkTargetExists(adminClient, commentLink);
 
     await assertCanCommentInCustomCommunity({
       adminClient,
@@ -412,6 +534,8 @@ Deno.serve(async (request) => {
         post_id: postId,
         body: textBody,
         image_url: imageUrl,
+        link_url: commentLink.linkUrl,
+        link_label: commentLink.linkLabel,
       })
       .select("id")
       .single();
@@ -420,7 +544,9 @@ Deno.serve(async (request) => {
       throw new Error(commentError?.message ?? "Could not create comment.");
     }
 
-    const moderation = evaluateModerationText(textBody);
+    const moderation = evaluateModerationText(
+      [textBody, commentLink.linkLabel, commentLink.linkUrl].filter(Boolean).join(" "),
+    );
 
     if (moderation.moderationState === "warning" && moderation.category && moderation.reason) {
       const ipHash = await getRequestIpHash(request);
@@ -440,7 +566,7 @@ Deno.serve(async (request) => {
         category: moderation.category,
         labels: moderation.labels,
         reason: moderation.reason,
-        contentExcerpt: textBody,
+        contentExcerpt: [textBody, commentLink.linkLabel, commentLink.linkUrl].filter(Boolean).join(" ").slice(0, 280),
         igdbGameId: postRow.igdb_game_id ?? null,
         gameTitle: postRow.game_title ?? null,
         evidence: {

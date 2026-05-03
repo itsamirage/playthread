@@ -6,6 +6,7 @@ import {
   Alert,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -23,6 +24,10 @@ import {
   injectCommentGameLink,
   stripCommentGameLinkTokens,
 } from "../lib/commentGameLinks";
+import {
+  normalizeCommentLink,
+  parsePlayThreadCommentLink,
+} from "../lib/commentLinks";
 import { useBrowseGames } from "../lib/games";
 import { pickPostImage } from "../lib/postMedia";
 import { describeIntegrityError } from "../lib/integrity";
@@ -67,6 +72,8 @@ export default function PostCommentsThread({
   const [linkedGame, setLinkedGame] = useState(null);
   const [showLinkPicker, setShowLinkPicker] = useState(false);
   const [gameLinkQuery, setGameLinkQuery] = useState("");
+  const [commentLinkDraft, setCommentLinkDraft] = useState({ url: "", label: "" });
+  const [showCommentLinkTool, setShowCommentLinkTool] = useState(false);
   const commentCount = post?.comments ?? comments.length;
   const { filteredGames: linkedGameResults } = useBrowseGames({
     query: showLinkPicker ? gameLinkQuery : "",
@@ -105,17 +112,22 @@ export default function PostCommentsThread({
     }
 
     try {
+      const normalizedCommentLink = normalizeCommentLink(commentLinkDraft);
       setIsSubmitting(true);
       const { error: commentError, moderation } = editingCommentId
         ? await updatePostComment({
             commentId: editingCommentId,
             body: injectCommentGameLink(cleanBody, linkedGame),
+            linkUrl: normalizedCommentLink?.url ?? null,
+            linkLabel: normalizedCommentLink?.label ?? null,
           })
         : await createPostComment({
             userId: session.user.id,
             postId: post.id,
             body: injectCommentGameLink(cleanBody, linkedGame),
             imageAsset: draftImage,
+            linkUrl: normalizedCommentLink?.url ?? null,
+            linkLabel: normalizedCommentLink?.label ?? null,
           });
 
       if (commentError) {
@@ -129,6 +141,8 @@ export default function PostCommentsThread({
       setLinkedGame(null);
       setShowLinkPicker(false);
       setGameLinkQuery("");
+      setCommentLinkDraft({ url: "", label: "" });
+      setShowCommentLinkTool(false);
       await reload();
       await onCommentCountChange?.();
 
@@ -172,6 +186,12 @@ export default function PostCommentsThread({
     setReplyingToComment(null);
     setDraft(stripCommentGameLinkTokens(comment.body ?? ""));
     setLinkedGame(extractCommentGameLink(comment.body ?? ""));
+    setDraftImage(null);
+    setCommentLinkDraft({
+      url: comment.linkUrl ?? "",
+      label: comment.linkLabel ?? "",
+    });
+    setShowCommentLinkTool(Boolean(comment.linkUrl || comment.linkLabel));
   };
 
   const handleStartReply = (comment) => {
@@ -194,6 +214,8 @@ export default function PostCommentsThread({
     setLinkedGame(null);
     setShowLinkPicker(false);
     setGameLinkQuery("");
+    setCommentLinkDraft({ url: "", label: "" });
+    setShowCommentLinkTool(false);
   };
 
   const handlePickImage = async () => {
@@ -246,6 +268,45 @@ export default function PostCommentsThread({
       Alert.alert(errorCopy.title, errorCopy.detail);
     } finally {
       setReactingCommentId(null);
+    }
+  };
+
+  const handleOpenCommentLink = (comment) => {
+    const parsedLink = parsePlayThreadCommentLink(comment.linkUrl);
+
+    if (!parsedLink) {
+      Alert.alert("Link unavailable", "That PlayThread link is no longer valid.");
+      return;
+    }
+
+    router.push({
+      pathname: "/post/[id]",
+      params: {
+        id: parsedLink.postId,
+        ...(parsedLink.commentId ? { scrollTo: "comments", comment: parsedLink.commentId } : {}),
+      },
+    });
+  };
+
+  const handleRevealCommentLink = (comment) => {
+    const url = comment.linkUrl ?? "";
+
+    Alert.alert("Link URL", url, [
+      { text: "Close", style: "cancel" },
+      { text: "Open", onPress: () => handleOpenCommentLink(comment) },
+    ]);
+  };
+
+  const handleShareComment = async (comment) => {
+    const url = `https://playthread.app/post/${comment.postId}?comment=${comment.id}`;
+
+    try {
+      await Share.share({
+        message: `${comment.author}: ${stripCommentGameLinkTokens(comment.body ?? "").slice(0, 120)}\n${url}`,
+        url,
+      });
+    } catch {
+      Alert.alert("Share unavailable", url);
     }
   };
 
@@ -413,6 +474,19 @@ export default function PostCommentsThread({
                       {comment.imageUrl ? (
                         <Image source={{ uri: comment.imageUrl }} style={styles.commentImage} contentFit="cover" />
                       ) : null}
+                      {comment.linkUrl && comment.linkLabel ? (
+                        <Pressable
+                          onLongPress={() => handleRevealCommentLink(comment)}
+                          onPress={() => handleOpenCommentLink(comment)}
+                          style={({ pressed }) => [
+                            styles.commentStructuredLink,
+                            pressed ? styles.buttonPressed : null,
+                          ]}
+                        >
+                          <FontAwesome color={theme.colors.accent} name="link" size={14} />
+                          <Text style={styles.commentStructuredLinkText}>{comment.linkLabel}</Text>
+                        </Pressable>
+                      ) : null}
                       {comment.isEdited ? (
                         <Text style={styles.commentEditedText}>
                           Last edited {new Date(comment.updatedAt).toLocaleString()}
@@ -453,6 +527,9 @@ export default function PostCommentsThread({
                       >
                         {isSavedComment(comment.id) ? "Saved" : "Save"}
                       </Text>
+                    </Pressable>
+                    <Pressable onPress={() => handleShareComment(comment)} style={styles.actionChip}>
+                      <Text style={styles.actionChipText}>Share</Text>
                     </Pressable>
                     {!comment.isMine ? (
                       <Pressable onPress={() => handleReportComment(comment)} style={styles.actionChip}>
@@ -521,6 +598,19 @@ export default function PostCommentsThread({
             </Pressable>
           </View>
         ) : null}
+        {commentLinkDraft.url || commentLinkDraft.label ? (
+          <View style={styles.linkedGameBanner}>
+            <Text style={styles.linkedGameLabel}>Linked thread: {commentLinkDraft.label || "Untitled link"}</Text>
+            <Pressable
+              onPress={() => {
+                setCommentLinkDraft({ url: "", label: "" });
+                setShowCommentLinkTool(false);
+              }}
+            >
+              <Text style={styles.linkedGameRemove}>Remove</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {showLinkPicker ? (
           <View style={styles.linkPicker}>
             <TextInput
@@ -550,10 +640,43 @@ export default function PostCommentsThread({
             </View>
           </View>
         ) : null}
+        {showCommentLinkTool ? (
+          <View style={styles.linkPicker}>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!isSubmitting}
+              onChangeText={(value) =>
+                setCommentLinkDraft((current) => ({ ...current, url: value }))
+              }
+              placeholder="Paste a PlayThread post or comment link"
+              placeholderTextColor={theme.colors.textMuted}
+              style={[styles.input, styles.linkInput]}
+              value={commentLinkDraft.url}
+            />
+            <TextInput
+              editable={!isSubmitting}
+              maxLength={80}
+              onChangeText={(value) =>
+                setCommentLinkDraft((current) => ({ ...current, label: value }))
+              }
+              placeholder="Link text"
+              placeholderTextColor={theme.colors.textMuted}
+              style={[styles.input, styles.linkInput]}
+              value={commentLinkDraft.label}
+            />
+          </View>
+        ) : null}
         <View style={styles.composerFooter}>
           <Text style={styles.counterText}>{draft.trim().length}/600</Text>
           <Pressable onPress={() => setShowLinkPicker((current) => !current)} style={styles.actionChip}>
-            <Text style={styles.actionChipText}>{showLinkPicker ? "Close link" : "Link game"}</Text>
+            <Text style={styles.actionChipText}>{showLinkPicker ? "Close game" : "Link game"}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setShowCommentLinkTool((current) => !current)}
+            style={styles.actionChip}
+          >
+            <Text style={styles.actionChipText}>{showCommentLinkTool ? "Close thread" : "Link thread"}</Text>
           </Pressable>
           {!editingCommentId ? (
             <Pressable
@@ -687,6 +810,25 @@ const styles = StyleSheet.create({
   },
   commentLinkText: {
     color: theme.colors.accent,
+    fontWeight: theme.fontWeights.bold,
+  },
+  commentStructuredLink: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+    backgroundColor: "rgba(0,229,255,0.08)",
+    borderColor: "rgba(0,229,255,0.28)",
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borders.width,
+    maxWidth: "100%",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  commentStructuredLinkText: {
+    color: theme.colors.accent,
+    flexShrink: 1,
+    fontSize: theme.fontSizes.sm,
     fontWeight: theme.fontWeights.bold,
   },
   commentActions: {
@@ -872,6 +1014,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.md,
     textAlignVertical: "top",
+  },
+  linkInput: {
+    minHeight: 44,
+    paddingVertical: theme.spacing.sm,
   },
   composerFooter: {
     flexDirection: "row",

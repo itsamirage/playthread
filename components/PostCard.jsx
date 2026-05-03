@@ -10,6 +10,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -124,6 +125,18 @@ export default function PostCard({
   const { isSavedPost, toggleSavedPost } = useSavedPostIds();
   const isPostSaved = isSaved || isSavedPost(post.id);
   const handleSavePost = onSave ?? (() => toggleSavedPost(post.id));
+  const handleSharePost = async () => {
+    const url = `https://playthread.app/post/${post.id}`;
+
+    try {
+      await Share.share({
+        message: `${post.title}\n${url}`,
+        url,
+      });
+    } catch {
+      Alert.alert("Share unavailable", url);
+    }
+  };
   const submitReport = async ({ category, reason }) => {
     try {
       const result = await reportContent({ contentType: "post", contentId: post.id, category, reason });
@@ -419,6 +432,16 @@ export default function PostCard({
                 </Text>
               </Pressable>
             ) : null}
+            <Pressable
+              onPress={(event) => {
+                event.stopPropagation?.();
+                handleSharePost();
+              }}
+              style={({ pressed }) => [styles.footerIconAction, pressed ? styles.cardPressed : null]}
+            >
+              <FontAwesome color={theme.colors.accent} name="share-alt" size={13} />
+              <Text style={[styles.footerText, styles.commentButtonText]}>Share</Text>
+            </Pressable>
             {handleReportPost ? (
               <Pressable
                 onPress={(event) => {

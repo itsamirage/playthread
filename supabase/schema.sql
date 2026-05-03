@@ -124,8 +124,13 @@ create table if not exists public.post_comments (
   user_id uuid not null references public.profiles (id) on delete cascade,
   post_id uuid not null references public.posts (id) on delete cascade,
   body text not null,
+  link_url text,
+  link_label text,
   created_at timestamptz not null default timezone('utc', now()),
-  constraint post_comments_body_length check (char_length(btrim(body)) between 1 and 600)
+  constraint post_comments_body_length check (char_length(btrim(body)) between 1 and 600),
+  constraint post_comments_link_url_length check (link_url is null or char_length(link_url) <= 500),
+  constraint post_comments_link_label_length check (link_label is null or char_length(btrim(link_label)) between 1 and 80),
+  constraint post_comments_link_pair_valid check ((link_url is null and link_label is null) or (link_url is not null and link_label is not null))
 );
 
 create table if not exists public.game_cache (
